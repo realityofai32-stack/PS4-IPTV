@@ -2,9 +2,11 @@
 //
 // libcross2d's c2d::Text iterates bytes, so any non-ASCII character (Turkish, German, Cyrillic channel
 // names...) renders as garbage. Label decodes UTF-8 to code points and builds glyph quads with the
-// same libcross2d Font atlas and renderer draw call c2d::Text uses. It also adds what TV lists need:
-// ellipsis truncation, word wrap with a line limit, alignment in a box, and cached geometry
-// (rebuilt only when the text/style changes or the shared glyph atlas grows).
+// same libcross2d Font atlas and renderer draw call c2d::Text uses. Glyphs come through ui::GlyphCache,
+// which uploads new glyph pixels to the GPU before every draw (see glyph_cache.h for the PS4 failure that
+// made this explicit). It also adds what TV lists need: ellipsis truncation, word wrap with a line limit,
+// alignment in a box, and cached geometry (rebuilt only when the text/style changes or the shared glyph
+// atlas page grows).
 
 #ifndef PS4IPTV_UI_TEXT_H
 #define PS4IPTV_UI_TEXT_H
@@ -30,6 +32,17 @@ namespace ui {
     bool loadFonts(const std::string &fontDir);
 
     c2d::Font *font(Weight weight);
+
+    // glyph atlas counters, shown by the text rendering test screen
+    struct TextStats {
+        int pages = 0;      // atlas pages (font weight x pixel size)
+        int glyphs = 0;     // glyphs rasterised
+        int uploads = 0;    // page uploads to the GPU
+        int resizes = 0;    // page texture growths
+        int unplaced = 0;   // glyph quads skipped because their page was full (should stay 0)
+    };
+
+    TextStats textStats();
 
     class Label : public c2d::Transformable {
 
@@ -78,6 +91,9 @@ namespace ui {
 
         void rebuild();
 
+        // the glyph page this label uses grew since its geometry was built
+        bool atlasMoved() const;
+
         std::string utf8Text;
         unsigned charSize;
         Weight weight;
@@ -88,7 +104,7 @@ namespace ui {
         float boxWidth = 0;
 
         c2d::VertexArray vertices;
-        c2d::Vector2f atlasSize;
+        unsigned atlasGeneration = 0;
         float layoutWidth = 0;
         float layoutHeight = 0;
         bool dirty = true;

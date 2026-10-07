@@ -34,7 +34,7 @@ $s = "$RepoRoot\src"
 $h = "$RepoRoot\tests\host"
 Invoke-TestBuild 'app_tests' @(
     "$h\test_main.cpp", "$h\test_core.cpp", "$h\test_iptv.cpp", "$h\test_storage.cpp", "$h\test_jobs.cpp",
-    "$h\test_live.cpp",
+    "$h\test_live.cpp", "$h\test_text.cpp",
     "$s\core\utf8.cpp", "$s\core\json.cpp", "$s\core\url.cpp", "$s\iptv\xtream.cpp", "$s\iptv\catalog.cpp",
     "$s\storage\library_store.cpp", "$s\storage\catalog_cache.cpp",
     "$s\platform\fs.cpp", "$s\platform\redact.cpp", "$s\platform\log.cpp", "$s\network\jobs.cpp",

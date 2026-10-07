@@ -40,6 +40,9 @@ namespace screens {
 
     Screen *makeAbout(App &app);
 
+    // deterministic text rendering check; atStartup: Cross continues to App::firstScreen()
+    Screen *makeTextTest(App &app, bool atStartup);
+
     // modal text entry; onDone(text) only when confirmed with OK
     Screen *makeKeyboard(App &app, const std::string &title, const std::string &initial, bool password,
                          std::function<void(const std::string &)> onDone);

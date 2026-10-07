@@ -95,14 +95,21 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     toastBox->setVisibility(Visibility::Hidden);
 
     // first screen
-    if (profileStore.profiles().empty()) {
-        push(screens::makeOnboarding(*this));
-    } else if (profileStore.active() != nullptr) {
-        push(screens::makeConnect(*this, *profileStore.active()));
-    } else {
-        push(screens::makeProfiles(*this));
-    }
+#if PS4IPTV_TEXT_TEST_AT_START
+    push(screens::makeTextTest(*this, true));
+#else
+    push(firstScreen());
+#endif
     applyNavigation();
+}
+
+Screen *App::firstScreen() {
+    if (profileStore.profiles().empty()) {
+        return screens::makeOnboarding(*this);
+    } else if (profileStore.active() != nullptr) {
+        return screens::makeConnect(*this, *profileStore.active());
+    }
+    return screens::makeProfiles(*this);
 }
 
 App::~App() {

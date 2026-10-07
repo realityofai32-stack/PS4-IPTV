@@ -89,8 +89,15 @@ try {
     $missing = @($allowed | Where-Object { $_ -notin $files })
     $entries = & $PkgTool pkg_listentries $pkg.FullName
     $sfoOk = [bool]($entries | Select-String 'PARAM_SFO') -and [bool]($entries | Select-String 'ICON0_PNG')
-    Report '6 PKG contents allow-list' ($unexpected.Count -eq 0 -and $missing.Count -eq 0 -and $sfoOk) `
-        ("files: " + ($files -join ', ') + $(if ($unexpected) { " | UNEXPECTED: " + ($unexpected -join ', ') } else { '' }) +
+    # the UI fonts must be byte-identical to third_party/inter (text renders from them)
+    $fontsOk = $true
+    foreach ($font in 'Inter-Regular.ttf', 'Inter-SemiBold.ttf') {
+        $packed = Join-Path $uroot "assets\fonts\$font"
+        $fontsOk = $fontsOk -and (Test-Path $packed) -and
+                ((Get-FileHash $packed).Hash -eq (Get-FileHash (Join-Path $RepoRoot "third_party\inter\$font")).Hash)
+    }
+    Report '6 PKG contents allow-list' ($unexpected.Count -eq 0 -and $missing.Count -eq 0 -and $sfoOk -and $fontsOk) `
+        ("fonts identical=$fontsOk | files: " + ($files -join ', ') + $(if ($unexpected) { " | UNEXPECTED: " + ($unexpected -join ', ') } else { '' }) +
          $(if ($missing) { " | MISSING: " + ($missing -join ', ') } else { '' }))
 
     # 7

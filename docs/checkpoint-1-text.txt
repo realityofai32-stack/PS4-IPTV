@@ -1,0 +1,47 @@
+PS4 IPTV - HARDWARE CHECKPOINT 1-TEXT  (v0.1.0, title IPTV00002) - TEXT RENDERING ONLY
+=====================================================================================
+
+Why this build: at Checkpoint 1 the UI text was missing or garbled on the PS4 (ASCII too).
+
+Root cause: libcross2d's font atlas (c2d::Font on the PS4 GLES2 backend) writes each new glyph only into
+the CPU copy of its atlas texture. The GPU copy is updated only by Texture::unlock() or when the atlas page
+grows. libcross2d's own c2d::Text calls unlock(); the app's UTF-8 ui::Label did not. So only glyphs loaded
+before a page's last growth were visible, and the rest were drawn from stale or uninitialised GPU memory.
+Fix: ui::GlyphCache clears each new atlas page, tracks every new glyph and uploads the changed pages
+right before each draw. Nothing else changed: playback, network, Xtream, profiles and controller code are
+untouched.
+
+0. INSTALL  IV0001-IPTV00002_00-IPTV000020001000.pkg  (replaces the previous "PS4 IPTV" build; your saved
+   profile, if any, is kept). It contains no credentials.
+
+1. TEXT RENDERING TEST - opens automatically at launch                        PHOTO 1 (whole screen)
+   Title "Text rendering test". Check the subtitle line: "Build <id>" must match the build ID given with
+   this PKG.
+   Left column, every line must be complete and sharp:
+     - "Add Xtream Profile" (large)
+     - Ç ç  Ğ ğ  İ i  I ı  Ö ö  Ş ş  Ü ü
+     - ABCDEFGHIJKLMNOPQRSTUVWXYZ / abcdefghijklmnopqrstuvwxyz / 0123456789 :/._-@?=&%#+!
+       (twice: regular, then semibold)
+     - http://example.com:8080 / Username required / Password required /
+       Fill in the fields, then use Test Connection.
+     - the Turkish sentence in lower and upper case, two small alphabet lines, the punctuation line,
+       the accented-letter line, and "Username required" three times
+   Right column:
+     - four buttons: Test Connection (focused), Save, Cancel (focused), Delete (dimmed/disabled)
+     - Server = http://example.com:8080 (focused row), Username = required
+     - two small panels: a line cut off with "…", and a sentence wrapped onto two lines
+     - two lines that type themselves, one character every 0.25 s (letters loaded AFTER the first frame -
+       exactly the case that failed before). Wait until both are complete.     PHOTO 2 (right column)
+     - the "Atlas:" line at the bottom right: write down the five numbers. "skipped" must be 0.
+   Triangle restarts the self-typing lines.
+
+   PASS = every letter on the whole screen is complete and sharp, no gaps, no boxes, no fragments.
+   FAIL = any missing, partial or garbled letter: STOP, send PHOTO 1 + 2 and the log, do not continue.
+
+2. ONLY IF STEP 1 PASSES - X "Continue to the app"
+   - Welcome / Add Xtream Profile screens: text complete?                    PHOTO 3
+   - Settings -> "Text rendering test" opens the same screen again (Circle closes it).
+   - Then continue with docs/checkpoint-1.txt from step 1 (profile, Test Connection, Live TV, playback).
+
+LOG  /data/PS4IPTV/logs/log.txt (GoldHEN FTP, port 2121): leaving the test screen writes
+     "text test closed: N pages, N glyphs, N uploads, N grown, N skipped".

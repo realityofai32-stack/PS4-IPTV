@@ -64,6 +64,9 @@ public:
 
     Screen *top() const { return stack.empty() ? nullptr : stack.back(); }
 
+    // onboarding, connect to the active profile, or the profile list
+    Screen *firstScreen();
+
     // drawing
     void requestRedraw() { dirty = true; }
 

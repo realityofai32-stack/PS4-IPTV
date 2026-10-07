@@ -51,6 +51,7 @@ namespace {
                     {"Clear image cache", nullptr, [this] { app.toast("Image cache is empty"); }},
                     {"Clear metadata cache", nullptr, [this] { app.toast("Metadata cache is empty"); }},
                     {"Clear watch history", nullptr, [this] { app.toast("Watch history is empty"); }},
+                    {"Text rendering test", nullptr, [this] { app.push(screens::makeTextTest(app, false)); }},
                     {"About PS4 IPTV", nullptr, [this] { app.push(screens::makeAbout(app)); }},
             };
             list = new ui::ListView(FloatRect(theme::SAFE_X, 200, 1300, 780), 84, 12, this);

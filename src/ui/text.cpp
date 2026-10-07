@@ -1,6 +1,8 @@
 #include <cmath>
+#include <cstring>
 #include <vector>
 
+#include "glyph_cache.h"
 #include "text.h"
 #include "../core/utf8.h"
 #include "../platform/log.h"
@@ -15,33 +17,77 @@ namespace ui {
         const float LINE_HEIGHT = 1.25f;
         const char32_t ELLIPSIS = 0x2026;
 
+        int g_unplaced = 0;
+
+        // GlyphCache backend over the two c2d::Font objects (index = Weight)
+        struct C2dGlyphBackend {
+            using Glyph = c2d::Glyph;
+
+            void preparePage(int font, unsigned size) {
+                // creates the page: a 128x128 GLTexture whose CPU pixels are uninitialised malloc memory
+                c2d::Texture *tex = g_fonts[font]->getTexture(size);
+                void *pixels = nullptr;
+                int pitch = 0;
+                if (tex != nullptr && tex->lock(nullptr, &pixels, &pitch) == 0 && pixels != nullptr && pitch > 0) {
+                    memset(pixels, 0, (size_t) pitch * (size_t) tex->getTextureRect().height);
+                }
+            }
+
+            Glyph load(int font, unsigned size, char32_t cp) {
+                return g_fonts[font]->getGlyph(cp, size, false);
+            }
+
+            void upload(int font, unsigned size) {
+                c2d::Texture *tex = g_fonts[font]->getTexture(size);
+                if (tex != nullptr) {
+                    tex->unlock();  // GLTexture: glTexSubImage2D of the whole page from its CPU copy
+                }
+                g_fonts[font]->setDirtyTex(false);
+            }
+
+            std::pair<int, int> pageSize(int font, unsigned size) {
+                c2d::Texture *tex = g_fonts[font]->getTexture(size);
+                if (tex == nullptr) {
+                    return {0, 0};
+                }
+                return {tex->getTextureRect().width, tex->getTextureRect().height};
+            }
+        };
+
+        C2dGlyphBackend g_backend;
+        GlyphCache<C2dGlyphBackend> g_glyphs(g_backend);
+
+        int fontIndex(Weight w) {
+            return w == Weight::SemiBold ? 1 : 0;
+        }
+
         struct Line {
             std::u32string text;
             float width = 0;
         };
 
-        float advanceOf(c2d::Font *font, unsigned size, char32_t prev, char32_t cp) {
+        float advanceOf(c2d::Font *font, int fi, unsigned size, char32_t prev, char32_t cp) {
             float kern = prev ? font->getKerning(prev, cp, size) : 0.0f;
-            return kern + (float) font->getGlyph(cp, size, false).advance;
+            return kern + g_glyphs.get(fi, size, cp).advance;
         }
 
-        float measure(c2d::Font *font, unsigned size, const std::u32string &s) {
+        float measure(c2d::Font *font, int fi, unsigned size, const std::u32string &s) {
             float w = 0;
             char32_t prev = 0;
             for (char32_t cp: s) {
-                w += advanceOf(font, size, prev, cp);
+                w += advanceOf(font, fi, size, prev, cp);
                 prev = cp;
             }
             return w;
         }
 
         // shortens s until s + "…" fits
-        std::u32string ellipsize(c2d::Font *font, unsigned size, std::u32string s, float maxWidth) {
-            if (measure(font, size, s) <= maxWidth) {
+        std::u32string ellipsize(c2d::Font *font, int fi, unsigned size, std::u32string s, float maxWidth) {
+            if (measure(font, fi, size, s) <= maxWidth) {
                 return s;
             }
-            float ellipsis = advanceOf(font, size, 0, ELLIPSIS);
-            while (!s.empty() && measure(font, size, s) + ellipsis > maxWidth) {
+            float ellipsis = advanceOf(font, fi, size, 0, ELLIPSIS);
+            while (!s.empty() && measure(font, fi, size, s) + ellipsis > maxWidth) {
                 s.pop_back();
             }
             while (!s.empty() && s.back() == ' ') {
@@ -67,7 +113,18 @@ namespace ui {
     }
 
     c2d::Font *font(Weight w) {
-        return g_fonts[w == Weight::SemiBold ? 1 : 0];
+        return g_fonts[fontIndex(w)];
+    }
+
+    TextStats textStats() {
+        auto s = g_glyphs.getStats();
+        TextStats t;
+        t.pages = s.pages;
+        t.glyphs = s.glyphs;
+        t.uploads = s.uploads;
+        t.resizes = s.resizes;
+        t.unplaced = g_unplaced;
+        return t;
     }
 
     Label::Label(const std::string &text, unsigned size, Weight w, c2d::Color c)
@@ -155,6 +212,7 @@ namespace ui {
         layoutWidth = 0;
         layoutHeight = 0;
         c2d::Font *f = font(weight);
+        int fi = fontIndex(weight);
         if (f == nullptr || utf8Text.empty()) {
             vertices.update();
             return;
@@ -178,7 +236,7 @@ namespace ui {
                 }
                 std::u32string word = para.substr(i, next - i);
                 std::u32string candidate = current.empty() ? word : current + U' ' + word;
-                if (!current.empty() && measure(f, charSize, candidate) > maxWidth) {
+                if (!current.empty() && measure(f, fi, charSize, candidate) > maxWidth) {
                     lines.push_back({current, 0});
                     current = word;
                 } else {
@@ -205,19 +263,16 @@ namespace ui {
         }
         for (auto &line: lines) {
             if (maxWidth > 0) {
-                line.text = ellipsize(f, charSize, line.text, maxWidth);
+                line.text = ellipsize(f, fi, charSize, line.text, maxWidth);
             }
         }
 
-        // 2. make sure every glyph is in the atlas before reading its size (the atlas can grow)
-        for (const auto &line: lines) {
-            for (char32_t cp: line.text) {
-                f->getGlyph(cp, charSize, false);
-            }
-            const_cast<Line &>(line).width = measure(f, charSize, line.text);
+        // 2. measuring loads every glyph into the page before its size is read (the page can grow)
+        for (auto &line: lines) {
+            line.width = measure(f, fi, charSize, line.text);
         }
-        c2d::Texture *atlas = f->getTexture(charSize);
-        atlasSize = atlas->getSize();
+        atlasGeneration = g_glyphs.generation(fi, charSize);
+        c2d::Vector2f atlasSize = f->getTexture(charSize)->getSize();
         if (atlasSize.x <= 0 || atlasSize.y <= 0) {
             vertices.update();
             return;
@@ -240,7 +295,7 @@ namespace ui {
                 if (prev) {
                     x += f->getKerning(prev, cp, charSize);
                 }
-                const c2d::Glyph &g = f->getGlyph(cp, charSize, false);
+                const c2d::Glyph &g = g_glyphs.get(fi, charSize, cp);
                 float left = std::round(x) + g.bounds.left;
                 float top = y + g.bounds.top;
                 float right = left + g.bounds.width;
@@ -249,7 +304,11 @@ namespace ui {
                 float v1 = (float) g.textureRect.top / atlasSize.y;
                 float u2 = (float) (g.textureRect.left + g.textureRect.width) / atlasSize.x;
                 float v2 = (float) (g.textureRect.top + g.textureRect.height) / atlasSize.y;
-                if (g.bounds.width > 0 && g.bounds.height > 0) {
+                bool visible = g.bounds.width > 0 && g.bounds.height > 0;
+                bool placed = g.textureRect.width > 0 && g.textureRect.height > 0;
+                if (visible && !placed) {
+                    g_unplaced++;  // its page reached libcross2d's 1024x1024 limit: skip, don't draw a box
+                } else if (visible) {
                     vertices.append(c2d::Vertex({left, top}, color, {u1, v1}));
                     vertices.append(c2d::Vertex({right, top}, color, {u2, v1}));
                     vertices.append(c2d::Vertex({left, bottom}, color, {u1, v2}));
@@ -266,10 +325,13 @@ namespace ui {
         vertices.update();
     }
 
+    bool Label::atlasMoved() const {
+        return !utf8Text.empty() && g_glyphs.generation(fontIndex(weight), charSize) != atlasGeneration;
+    }
+
     void Label::onUpdate() {
-        c2d::Font *f = font(weight);
-        if (!dirty && f != nullptr && !utf8Text.empty() && f->getTexture(charSize)->getSize() != atlasSize) {
-            dirty = true;  // another label grew the shared glyph atlas: texture coordinates moved
+        if (atlasMoved()) {
+            dirty = true;  // another label grew the shared glyph page: texture coordinates moved
         }
         if (dirty) {
             rebuild();
@@ -278,10 +340,17 @@ namespace ui {
     }
 
     void Label::onDraw(c2d::Transform &transform, bool draw) {
-        if (draw && vertices.getVertexCount() > 0) {
-            c2d::Font *f = font(weight);
-            c2d::Transform combined = transform * getTransform();
-            c2d_renderer->draw(&vertices, combined, f->getTexture(charSize));
+        if (draw) {
+            // a label updated after this one in the same frame may have grown the page
+            if (dirty || atlasMoved()) {
+                rebuild();
+            }
+            // new glyph pixels exist only in the CPU copy of their page until uploaded
+            g_glyphs.flush();
+            if (vertices.getVertexCount() > 0) {
+                c2d::Transform combined = transform * getTransform();
+                c2d_renderer->draw(&vertices, combined, font(weight)->getTexture(charSize));
+            }
         }
         C2DObject::onDraw(transform, draw);
     }

@@ -57,6 +57,11 @@ target_include_directories(${PROJECT_NAME} PRIVATE
         "${PPLAY_DIR}/src"
         ${MPV_INCLUDE_DIRS} ${ASS_INCLUDE_DIRS} ${FFMPEG_INCLUDE_DIRS} ${BZIP2_INCLUDE_DIR})
 target_compile_options(${PROJECT_NAME} PRIVATE -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)
+# hardware text-rendering checkpoint: open the text test screen before the normal first screen
+option(PS4IPTV_TEXT_TEST_AT_START "Show the text rendering test screen at launch" ON)
+if (PS4IPTV_TEXT_TEST_AT_START)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE PS4IPTV_TEXT_TEST_AT_START=1)
+endif ()
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(${PROJECT_NAME} PRIVATE PS4IPTV_DEBUG=1)
 endif ()
