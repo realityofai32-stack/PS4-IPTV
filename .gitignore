@@ -13,6 +13,9 @@ eboot.bin
 
 # Local configuration - may contain IPTV credentials / authenticated URLs. NEVER commit.
 /config/test_stream.txt
+/config/test_streams.txt
+test_streams.txt
+!/config/test_streams.example.txt
 /config/*.local.*
 profiles.json
 favorites.json

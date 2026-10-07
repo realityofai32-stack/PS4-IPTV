@@ -1,0 +1,15 @@
+# PS4 IPTV playback test - stream configuration (EXAMPLE, safe to commit)
+#
+# Copy this file to config\test_streams.txt (git-ignored), fill in your two URLs, and let
+# scripts\stage-hardware-test.ps1 copy it to the USB stick root as test_streams.txt.
+# The PS4 app reads it from /mnt/usbN/test_streams.txt (or /data/PS4IPTVTest/test_streams.txt).
+# Delete it from the USB stick after testing: it contains your credentials in clear text.
+#
+# Required:
+TS=<authenticated TS URL, e.g. http://host:port/live/USERNAME/PASSWORD/STREAMID.ts>
+HLS=<authenticated HLS URL, e.g. http://host:port/live/USERNAME/PASSWORD/STREAMID.m3u8>
+#
+# Optional (leave commented out for the first test, they deviate from pPlay's defaults):
+# LOCAL=/mnt/usb0/some-other-file.mkv
+# USER_AGENT=VLC/3.0.20 LibVLC/3.0.20
+# MPV_OPT=network-timeout=30
