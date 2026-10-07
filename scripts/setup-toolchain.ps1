@@ -186,6 +186,7 @@ $PacBrewPackages = @(
     @{ File = 'ps4-openorbis-orbis-lib-gen-1.3-2-any.pkg.tar.xz';    Sha256 = '5ea71a7137a1a98eac09e33c4ed36806ecdf1412a4233e1eb0745e497899ec52' }
     @{ File = 'ps4-openorbis-vars-1.1-3-any.pkg.tar.xz';             Sha256 = 'ad2353896b1a63e72e52ce52ff490f90682a0e3c24f1a98229881f685ac3fbcf' }
     # portlibs used by pPlay / libcross2d / pscrap
+    @{ File = 'ps4-openorbis-glm-0.9.9.8-2-any.pkg.tar.xz';          Sha256 = '63d797098ce710364067e7c0d1ab965fd578930fffd2a293bc545807e3a37e62' }
     @{ File = 'ps4-openorbis-zlib-1.3.1-2-any.pkg.tar.xz';           Sha256 = '2b082d25f34d923e2fd35e0b5f29b19e142e263da4380665bb0e80f0a6378700' }
     @{ File = 'ps4-openorbis-bzip2-1.0.6-3-any.pkg.tar.xz';          Sha256 = 'de5e4b3441326b47c9e57693d7e86bc837070c6af4581d60ccdbdb6230f3ffcb' }
     @{ File = 'ps4-openorbis-libpng-1.6.37-3-any.pkg.tar.xz';        Sha256 = 'abf49d48a24397c6a2f163fd60344458b662c9411eec215830c4b3d464d0cbb2' }
