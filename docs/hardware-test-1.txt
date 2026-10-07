@@ -1,0 +1,64 @@
+PS4 IPTV - HARDWARE TEST SESSION 1
+==================================
+
+Goal: in ONE session, verify that the pPlay playback stack (libmpv 0.34.1 / FFmpeg 5.0 / SDL2 2.0.18,
+built natively on Windows) plays video AND audio on this PS4, for a local file, the Xtream TS stream
+and the Xtream HLS stream, and survives repeated stop/open.
+
+USB STICK ROOT (exFAT or FAT32) - prepared by scripts\stage-hardware-test.ps1
+  IV0001-PPLA00001_00-PPLA000013080000.pkg   untouched pPlay 3.8   (title "pplay @ cpasjuste", PPLA00001)
+  IV0001-IPTT00001_00-IPTT000010100000.pkg   PS4 IPTV Playback Test (title IPTT00001)
+  test.mp4                                   your test video (H.264 + AAC .mp4, 720p/1080p)
+  test_streams.txt                           TS= and HLS= lines (contains credentials!)
+
+0. INSTALL (USB plugged in)
+   - Install both PKGs with your usual package installer (Debug Settings > Package Installer, or GoldHEN).
+   - Note: PPLA00001 replaces any pPlay you installed before. IPTT00001 does not touch IPTV00001.
+   - Keep the USB stick plugged in for the whole session.
+
+A. UNTOUCHED pPLAY
+   A1  Launch "pplay @ cpasjuste". The file browser opens in /data/pplay.
+   A2  Press Circle until the path is "/", then X on "mnt", X on "usb0", X on "test.mp4".
+       (D-pad up/down selects; X opens/plays; Circle goes up one folder.)
+   A3  Watch ~30 s.                                  RECORD: video yes/no, audio yes/no
+   A4  Stop: press Right -> video menu -> select "Stop" with X.
+       (Circle only shrinks the player into a window in pPlay; it does not stop.)
+   A5  Left -> main menu -> "Exit" with X.
+
+B. PS4 IPTV PLAYBACK TEST  (X = run, Circle = stop/back, Options = diagnostics, Triangle = hide overlay)
+   B0  Launch "PS4 IPTV Playback Test". Check the right-hand panel:
+         Log file: OK    mpv: OK    Local file: /mnt/usbN/test.mp4    Config: /mnt/usbN/test_streams.txt
+       PHOTO 1 (menu screen)
+   B1  NETWORK TS TEST -> X. Wait for "PLAYING" (or an error / WATCHDOG line). Watch ~30 s.
+       RECORD video yes/no, audio yes/no. PHOTO 2 (overlay). Press Circle -> back to the menu.
+   B2  NETWORK HLS TEST -> same.                     PHOTO 3, Circle.
+   B3  LOCAL FILE TEST  -> same.                     PHOTO 4, Circle.
+   B4  NETWORK TS TEST again (reopen after a full cycle) -> ~15 s, Circle.
+   B5  NETWORK HLS TEST again -> ~15 s, Circle.
+   B6  Options -> diagnostics page.                  PHOTO 5 (it shows every result line). Circle.
+   B7  EXIT -> X.
+
+   If a test hangs: wait ~20 s (watchdog text appears), press Circle. If it says "mpv has not confirmed
+   stop", press Circle again. If the whole app freezes or closes, note the step.
+
+C. AFTER THE TEST
+   - The app copies its log to the USB root as PS4IPTVTest-log.txt (every return to the menu and on EXIT).
+     Copy that file to the PC (credentials are redacted in it, but glance at it before sharing).
+     The PS4 copy stays at /data/PS4IPTVTest/log.txt (previous session: log.prev.txt).
+   - DELETE test_streams.txt from the USB stick.
+
+REPORT BACK
+   A: video/audio yes/no, anything odd.     B1-B5: video/audio yes/no each, which message if failed.
+   Photos 1-5 and PS4IPTVTest-log.txt.
+
+WHAT THE RESULTS MEAN
+   pPlay (A) has no video/audio .............. problem with the build/toolchain or this PS4 environment,
+                                               not with IPTV; B's log shows which init step failed.
+   A ok, B3 local ok, B1/B2 "NETWORK OPEN FAILED" ... network path: the log has the HTTP status /
+                                               ffmpeg error (DNS, HTTP 4xx, https unsupported, user-agent).
+   Streams open but "RENDERER: precompiled mpv shader missing" ... the stream's pixel format needs a GPU
+                                               shader pPlay's PS4 table lacks (renderer work, not network).
+   "VIDEO ONLY - NO AUDIO OUTPUT" ............ audio path: see "AUDIO INIT FAILED" / audio codec in the log.
+   "AUDIO ONLY - NO VIDEO FRAME" / stalls ..... decoding/rendering: stats show fps and dropped frames.
+   B1/B2 ok but B4/B5 fail .................... cleanup/resource problem after stop (log "cleanup" lines).
+   TS ok, HLS fails ........................... HLS-specific (playlist redirect, segment host, https).
