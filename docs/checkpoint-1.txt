@@ -1,0 +1,60 @@
+PS4 IPTV - HARDWARE CHECKPOINT 1  (v0.1.0, title IPTV00002)
+===========================================================
+
+Goal: verify the production app foundation on the physical PS4 - new UI (text, input, redraw), Xtream sign-in
+over libcurl, Live TV lists, and Live playback through the proven pPlay player.
+
+This PKG contains NO credentials (the build fails if it would). You type your provider login on the PS4.
+  Server URL: the part of your test stream URL before "/live/" (e.g. http://host:8080)
+  Username / Password: the two path parts after "/live/" (or as given by your provider)
+
+0. INSTALL  IV0001-IPTV00002_00-IPTV000020001000.pkg  ->  "PS4 IPTV" (new title, does not replace anything)
+
+1. FIRST RUN                                                              PHOTO 1 (welcome screen)
+   - "Welcome" screen, crisp text, controller hints at the bottom.
+   - X "Add Xtream Profile" -> fill Name (optional), Server URL, Username, Password with the on-screen keyboard.
+     Keyboard: X type, Square backspace, Triangle space, L2 shift, R2 done, Circle cancel.
+     The password must show as dots.                                       PHOTO 2 (filled form)
+   - "Test Connection" -> right panel: Connected, status, expiry date, connections.   PHOTO 3
+   - "Save & Connect" -> steps Account / Live TV / Movies / Series get check marks -> Home.
+
+2. HOME                                                                   PHOTO 4
+   - Top right: your profile name with a green dot, and the clock: is it your LOCAL time? (yes/no)
+   - Left/Right moves across the six tiles; Live TV shows the channel count.
+
+3. LIVE TV
+   - Categories on the left, channels in the middle, details on the right.            PHOTO 5
+   - Turkish characters (ş ğ İ ı ç ö ü) in channel names: correct? (yes/no)
+   - Hold Down in "All channels" for ~5 s: does scrolling stay smooth and speed up? (yes/no)
+   - L1/R1 changes category, L2/R2 pages, Right/Left switch columns.
+   - Square on a channel: star appears; "Favorites" category lists it.
+
+4. PLAYBACK
+   - X on a channel: Opening... then picture + sound.          RECORD video yes/no, audio yes/no
+   - Triangle: stream information panel (expect ~1280x720, H.264, AAC 48000 Hz stereo).  PHOTO 6
+   - X hides/shows the overlay; it also hides by itself after 5 s.
+   - Down: next channel (switches after a short pause).
+     NOTE: your provider refuses a new stream for ~30-60 s after the previous one closed. The app should show
+     "Provider temporarily refused the stream (HTTP 403)." with an automatic retry countdown, then play.
+     RECORD: did it recover by itself? (yes/no, roughly how long)
+   - Circle: back to the channel list at the same position.
+
+5. SEARCH
+   - Home -> Search (or Triangle in Live TV): type e.g. "trt" -> results with a TV badge -> X plays.
+
+6. PERSISTENCE
+   - Home -> Circle -> Exit. Launch PS4 IPTV again: it signs in automatically and opens Home.
+   - Your favorite is still marked.                                       RECORD yes/no
+
+IF SOMETHING GOES WRONG
+   - Note the step and take a photo. The app log is /data/PS4IPTV/logs/log.txt (GoldHEN FTP, port 2121);
+     passwords and stream URLs are redacted in it.
+   - Screen flickers or freezes while idle (but reacts to buttons): create an empty file
+     /data/PS4IPTV/force_redraw via FTP and relaunch - this switches to continuous redraw. Tell me if needed.
+
+WHAT THE RESULTS MEAN
+   Text garbled / missing characters ......... UTF-8 text renderer or font loading (log: "ui").
+   Test Connection fails, PC works ............ libcurl/mbedTLS on PS4 (log: "http" / "xtream" lines with curl code).
+   Lists load but scrolling is slow ........... list virtualization / redraw (log + photo).
+   Playback fails, playback test app worked ... production player adapter (log: "player" / "mpv" lines).
+   Clock wrong by whole hours ................. console time zone setting (log: "clock" line).
