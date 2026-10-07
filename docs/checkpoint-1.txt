@@ -16,7 +16,8 @@ This PKG contains NO credentials (the build fails if it would). You type your pr
      Keyboard: X type, Square backspace, Triangle space, L2 shift, R2 done, Circle cancel.
      The password must show as dots.                                       PHOTO 2 (filled form)
    - "Test Connection" -> right panel: Connected, status, expiry date, connections.   PHOTO 3
-   - "Save & Connect" -> steps Account / Live TV / Movies / Series get check marks -> Home.
+   - "Save & Connect" -> steps Account / Live TV get check marks -> Home.
+     (Movies and Series are not loaded in this build; their tiles show "Unavailable".)
 
 2. HOME                                                                   PHOTO 4
    - Top right: your profile name with a green dot, and the clock: is it your LOCAL time? (yes/no)

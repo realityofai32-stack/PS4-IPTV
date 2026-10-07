@@ -1,4 +1,5 @@
-// Sign-in and initial loading: account, then Live / Movies / Series categories.
+// Sign-in and initial loading: account, then Live categories + streams. Movies and Series are not fetched here
+// (Milestones C and D).
 
 #include "common.h"
 #include "../iptv/xtream.h"
@@ -20,9 +21,9 @@ namespace {
             auto *h = ui::label(this, screens::hostOf(p.server), theme::BODY, 0, 300, ui::Weight::Regular,
                                 theme::textDim());
             h->setAlign(ui::Align::Center, theme::SCREEN_W);
-            const char *names[] = {"Account", "Live TV", "Movies", "Series"};
+            const char *names[] = {"Account", "Live TV"};
             float x = (theme::SCREEN_W - 760) / 2;
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < STEPS; i++) {
                 Step &s = steps[i];
                 float y = 400 + (float) i * 92;
                 s.bg = ui::box(this, FloatRect(x, y, 760, 76), theme::surface(), theme::RADIUS_SMALL);
@@ -140,7 +141,7 @@ namespace {
                 b->setVisibility(Visibility::Hidden);
             }
             hints->setHints({{ui::Glyph::Circle, "Cancel"}});
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < STEPS; i++) {
                 setStep(i, State::Pending, "");
             }
             app.session() = Session();
@@ -194,33 +195,10 @@ namespace {
                 } else {
                     setStep(1, State::Failed, o.message);
                 }
-                loadCategories(1);
-            });
-        }
-
-        void loadCategories(int index) {
-            if (index >= 3) {
-                Session &s = app.session();
                 s.connected = true;
-                LOG_I("connect", "ready: live %d categories / %d channels, movie %d, series %d categories",
-                      (int) s.categories[0].size(), (int) s.live.channels().size(), (int) s.categories[1].size(),
-                      (int) s.categories[2].size());
+                LOG_I("connect", "ready: live %d categories / %d channels", (int) s.categories[0].size(),
+                      (int) s.live.channels().size());
                 app.replaceAll(screens::makeHome(app));
-                return;
-            }
-            setStep(index + 1, State::Running, "Loading" "\xE2\x80\xA6");
-            token = app.xtream().loadCategories(profile, (ContentType) index,
-                                                [this, index](const XtreamService::CategoriesOutcome &o) {
-                Session &s = app.session();
-                if (o.ok) {
-                    s.categories[index] = o.categories;
-                    s.categoriesLoaded[index] = true;
-                    setStep(index + 1, State::Done, std::to_string(o.categories.size()) + " categories");
-                } else {
-                    // not fatal: the section shows the error and can retry later
-                    setStep(index + 1, State::Failed, o.message);
-                }
-                loadCategories(index + 1);
             });
         }
 
@@ -235,8 +213,10 @@ namespace {
             hints->setHints({{ui::Glyph::Cross, "Select"}, {ui::Glyph::Circle, "Profiles"}});
         }
 
+        static constexpr int STEPS = 2;
+
         Profile profile;
-        Step steps[4];
+        Step steps[STEPS];
         ui::Label *message;
         ui::Button *buttons[3];
         ui::HintBar *hints;
