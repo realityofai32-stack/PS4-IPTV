@@ -5,14 +5,19 @@
 
 #include <string>
 
+#include "../player/stability.h"
+
+// Live stream format (see stability::planFormats)
 enum class StreamFormat {
-    Auto,   // TS first, HLS fallback
-    Ts,
-    Hls
+    Auto,   // TS first (or what worked last this session), the other format once
+    Ts,     // Prefer TS: TS first, HLS once if TS cannot be opened
+    Hls     // Prefer HLS: HLS first, TS once if HLS cannot be opened
 };
 
 struct Settings {
     StreamFormat streamFormat = StreamFormat::Auto;
+    StabilityPreset stability = StabilityPreset::Balanced;
+    bool retryOnStall = true;
     bool resumeVod = true;
     bool autoPlayNextEpisode = false;
     bool showTechnicalInfo = false;
@@ -39,6 +44,8 @@ public:
     bool deserialize(const std::string &text, std::string *error);
 
     static const char *formatName(StreamFormat f);
+
+    static const char *stabilityKey(StabilityPreset p);
 
 private:
 

@@ -19,10 +19,23 @@ const char *SettingsStore::formatName(StreamFormat f) {
     }
 }
 
+const char *SettingsStore::stabilityKey(StabilityPreset p) {
+    switch (p) {
+        case StabilityPreset::Fast:
+            return "fast";
+        case StabilityPreset::MaxStability:
+            return "max";
+        default:
+            return "balanced";
+    }
+}
+
 std::string SettingsStore::serialize() const {
     json::Value root = json::Value::makeObject();
     root.set("version", json::Value::makeInt(FORMAT_VERSION));
     root.set("streamFormat", json::Value::makeString(formatName(settings.streamFormat)));
+    root.set("playbackStability", json::Value::makeString(stabilityKey(settings.stability)));
+    root.set("retryOnStall", json::Value::makeBool(settings.retryOnStall));
     root.set("resumeVod", json::Value::makeBool(settings.resumeVod));
     root.set("autoPlayNextEpisode", json::Value::makeBool(settings.autoPlayNextEpisode));
     root.set("showTechnicalInfo", json::Value::makeBool(settings.showTechnicalInfo));
@@ -43,6 +56,10 @@ bool SettingsStore::deserialize(const std::string &text, std::string *error) {
     Settings s;  // unknown/missing keys keep defaults
     std::string fmt = root["streamFormat"].asString("auto");
     s.streamFormat = fmt == "ts" ? StreamFormat::Ts : fmt == "hls" ? StreamFormat::Hls : StreamFormat::Auto;
+    std::string stab = root["playbackStability"].asString("balanced");
+    s.stability = stab == "fast" ? StabilityPreset::Fast : stab == "max" ? StabilityPreset::MaxStability
+                                                                          : StabilityPreset::Balanced;
+    s.retryOnStall = root["retryOnStall"].asBool(s.retryOnStall);
     s.resumeVod = root["resumeVod"].asBool(s.resumeVod);
     s.autoPlayNextEpisode = root["autoPlayNextEpisode"].asBool(s.autoPlayNextEpisode);
     s.showTechnicalInfo = root["showTechnicalInfo"].asBool(s.showTechnicalInfo);
