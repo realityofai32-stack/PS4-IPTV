@@ -77,8 +77,8 @@ CancelToken XtreamService::loadLive(const Profile &profile, const std::string &d
             streamBody = std::move(streams.body);
             int64_t now = clockx::unixNow();
             std::string cacheErr;
-            if (!cache.save(p.id, "live_categories", catBody, now, &cacheErr)
-                || !cache.save(p.id, "live_streams", streamBody, now, &cacheErr)) {
+            if (!cache.save(p.id, "live_streams", streamBody, now, (int) out->channels.size(), &cacheErr)
+                || !cache.save(p.id, "live_categories", catBody, now, -1, &cacheErr)) {
                 LOG_W("xtream", "live cache not saved: %s", cacheErr.c_str());
             }
             LOG_I("xtream", "live: %d categories, %d channels (%zu KiB, %.1fs)", (int) out->categories.size(),
@@ -147,7 +147,7 @@ namespace {
     CancelToken loadCatalog(JobSystem &jobs, const Profile &profile, const std::string &dataDir,
                             XtreamService::Source source, const char *what, const char *catAction,
                             const char *listAction, const char *catCache, const char *listCache,
-                            bool (*parseList)(const std::string &, std::vector<Item> &, std::string &),
+                            bool (*parseList)(const std::string &, std::vector<Item> &, std::string &, ParseStats *),
                             std::function<void(XtreamService::CatalogOutcome<Catalog> &)> callback) {
         auto out = std::make_shared<XtreamService::CatalogOutcome<Catalog>>();
         Profile p = profile;
@@ -159,14 +159,24 @@ namespace {
             std::string catBody, listBody, err;
             std::vector<Category> categories;
             std::vector<Item> items;
+            ParseStats stats;
+            CatalogCache::Meta listMeta;
             double seconds = 0;
             if (fromCache) {
-                int64_t savedCats = 0;
-                if (!cache.load(p.id, catCache, catBody, savedCats)
-                    || !cache.load(p.id, listCache, listBody, out->savedAt)) {
+                CatalogCache::Meta catMeta;
+                if (!cache.load(p.id, catCache, catBody, catMeta) || !cache.load(p.id, listCache, listBody, listMeta)) {
                     out->message = "no saved copy";
                     return;
                 }
+                if (catMeta.savedAt != listMeta.savedAt) {
+                    // the two files come from different refreshes (interrupted save): never mix them
+                    LOG_W("xtream", "%s cache: categories and list saved apart, discarded", what);
+                    cache.remove(p.id, catCache);
+                    cache.remove(p.id, listCache);
+                    out->message = "no saved copy";
+                    return;
+                }
+                out->savedAt = listMeta.savedAt;
             } else {
                 http::Request req;
                 req.cancel = token.shared();
@@ -195,18 +205,39 @@ namespace {
                 out->savedAt = clockx::unixNow();
                 seconds = cats.seconds + list.seconds;
             }
-            if (!xtream::parseCategories(catBody, categories, err) || !parseList(listBody, items, err)) {
+            double t0 = clockx::monotonic();
+            if (!xtream::parseCategories(catBody, categories, err) || !parseList(listBody, items, err, &stats)) {
                 out->message = std::string("Could not read the ") + what + " list";
                 LOG_W("xtream", "%s%s: parse failed: %s", what, fromCache ? " cache" : "", err.c_str());
                 if (fromCache) {
-                    cache.remove(p.id, listCache);   // corrupt saved copy: never read it again
+                    cache.remove(p.id, catCache);   // corrupt saved copy: never read it again
+                    cache.remove(p.id, listCache);
                 }
                 return;
             }
+            double parseMs = (clockx::monotonic() - t0) * 1000;
+            if (fromCache && listMeta.items >= 0 && listMeta.items != (int) items.size()) {
+                // the saved copy does not give back the identity set it was saved with
+                LOG_W("xtream", "%s cache: %d items parsed, %d saved: discarded", what, (int) items.size(),
+                      listMeta.items);
+                cache.remove(p.id, catCache);
+                cache.remove(p.id, listCache);
+                out->message = "saved copy damaged";
+                return;
+            }
+            if (!fromCache && stats.raw == 0) {
+                // validation: an empty provider answer never replaces a list (or the saved copy)
+                out->message = std::string("The provider returned an empty ") + what + " list";
+                LOG_W("xtream", "%s: provider returned an empty list, kept the current one", what);
+                return;
+            }
+            int cachedItems = fromCache ? (int) items.size() : -1;
             if (!fromCache) {
                 std::string cacheErr;
-                if (!cache.save(p.id, catCache, catBody, out->savedAt, &cacheErr)
-                    || !cache.save(p.id, listCache, listBody, out->savedAt, &cacheErr)) {
+                if (cache.save(p.id, listCache, listBody, out->savedAt, (int) items.size(), &cacheErr)
+                    && cache.save(p.id, catCache, catBody, out->savedAt, -1, &cacheErr)) {
+                    cachedItems = (int) items.size();
+                } else {
                     LOG_W("xtream", "%s cache not saved: %s", what, cacheErr.c_str());
                 }
             }
@@ -214,14 +245,33 @@ namespace {
             catBody.clear();
             listBody.clear();
             listBody.shrink_to_fit();
-            out->catalog = std::make_shared<Catalog>();
-            out->catalog->assign(std::move(categories), std::move(items));
-            out->catalog->savedAt = out->savedAt;
-            out->catalog->fromCache = fromCache;
+            auto catalog = std::make_shared<Catalog>();
+            catalog->assign(std::move(categories), std::move(items));
+            double t1 = clockx::monotonic();
+            catalog->buildSearch();
+            double t2 = clockx::monotonic();
+            catalog->buildSortKeys();
+            double t3 = clockx::monotonic();
+            catalog->savedAt = out->savedAt;
+            catalog->fromCache = fromCache;
+            CatalogDiagnostics &d = catalog->diagnostics();
+            d.parse = stats;
+            d.cached = cachedItems;
+            d.fromCache = fromCache;
+            d.parseMs = parseMs;
+            d.indexMs = (t2 - t1) * 1000;
+            d.sortMs = (t3 - t2) * 1000;
+            out->catalog = catalog;
             out->ok = true;
             LOG_I("xtream", "%s%s: %d categories, %d items (%zu KiB, %.1fs)", what, fromCache ? " from cache" : "",
-                  (int) out->catalog->categories().size(), (int) out->catalog->size(), (bytes + 1023) / 1024,
-                  seconds);
+                  (int) catalog->categories().size(), (int) catalog->size(), (bytes + 1023) / 1024, seconds);
+            LOG_I("xtream", "%s audit: provider %d, parsed %d, cached %d, visible %d, indexed %d, uncategorized %d, "
+                            "dropped %d (no id %d, duplicate id %d, not object %d); missing name %d, category %d, "
+                            "poster %d, extension %d; parse %.0f ms, index %.0f ms (%zu KiB), sort keys %.0f ms",
+                  what, stats.raw, stats.parsed, d.cached, d.visible, d.indexed, d.uncategorized, d.dropped(),
+                  stats.rejectedMissingId, stats.rejectedDuplicateId, stats.rejectedNotObject, stats.missingName,
+                  stats.missingCategory, stats.missingPoster, stats.missingExtension, d.parseMs, d.indexMs,
+                  d.indexBytes / 1024, d.sortMs);
         }, [out, callback]() {
             callback(*out);
         });

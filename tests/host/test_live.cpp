@@ -96,8 +96,8 @@ TEST(live_catalog_indices_and_search) {
     CHECK(cat.find("4") && cat.find("4")->name == "Bein Sports 1");
     std::vector<int> r = cat.search("trt");
     CHECK_EQ(r.size(), (size_t) 3);
-    CHECK(r[0] == 1);   // prefix "TRT Spor"
-    CHECK(r[1] == 0);   // word start "TR: TRT 1 HD"
+    CHECK(r[0] == 0);   // "TR: TRT 1 HD" starts with TRT once the provider prefix is set aside
+    CHECK(r[1] == 1);   // "TRT Spor"
     CHECK(r[2] == 5);   // substring "XTRTX"
     CHECK(cat.search("sehir").size() == 1);            // ASCII keyboard input finds Şehir
     CHECK(cat.search("\xC5\x9F" "ehir").size() == 1);  // şehir too
@@ -162,7 +162,8 @@ TEST(library_favorites_and_history) {
         e.watchedAt = i;
         s.addHistory(e);
     }
-    CHECK_EQ(s.history().size(), LibraryStore::HISTORY_LIMIT);
+    // Live TV keeps at most LIVE_HISTORY_LIMIT entries (zapping never pushes movies/episodes out)
+    CHECK_EQ(s.history().size(), LibraryStore::LIVE_HISTORY_LIMIT);
     CHECK(s.history()[0].id == "19" && s.history()[0].watchedAt == limit + 29);  // latest first, deduplicated
     s.setProfile("p2");
     CHECK(s.history().empty());
@@ -176,7 +177,7 @@ TEST(library_favorites_and_history) {
     CHECK(t.isFavorite(ContentType::Live, "1"));
     CHECK(t.isFavorite(ContentType::Movie, "m9"));
     CHECK(!t.toggleFavorite(ContentType::Live, "1"));
-    CHECK(t.history().size() == LibraryStore::HISTORY_LIMIT && t.history()[0].id == "19");
+    CHECK(t.history().size() == LibraryStore::LIVE_HISTORY_LIMIT && t.history()[0].id == "19");
     t.removeProfile("p1");
     CHECK(t.history().empty());
 }

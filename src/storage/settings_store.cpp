@@ -34,6 +34,25 @@ namespace {
 
 SettingsStore::SettingsStore(std::string dataDir) : dir(std::move(dataDir)) {}
 
+namespace {
+    std::string sortSlot(const std::string &profileId, iptv::ContentType type) {
+        return profileId + (type == iptv::ContentType::Series ? "/series" : "/movies");
+    }
+}
+
+iptv::SortMode SettingsStore::sortMode(const std::string &profileId, iptv::ContentType type) const {
+    auto it = settings.sortOrders.find(sortSlot(profileId, type));
+    return it == settings.sortOrders.end() ? iptv::SortMode::Provider : iptv::sortModeFromKey(it->second);
+}
+
+void SettingsStore::setSortMode(const std::string &profileId, iptv::ContentType type, iptv::SortMode mode) {
+    if (mode == iptv::SortMode::Provider) {
+        settings.sortOrders.erase(sortSlot(profileId, type));
+    } else {
+        settings.sortOrders[sortSlot(profileId, type)] = iptv::sortModeKey(mode);
+    }
+}
+
 const char *SettingsStore::formatName(StreamFormat f) {
     switch (f) {
         case StreamFormat::Ts:
@@ -74,6 +93,11 @@ std::string SettingsStore::serialize() const {
     root.set("showTechnicalInfo", json::Value::makeBool(settings.showTechnicalInfo));
     root.set("loadImages", json::Value::makeBool(settings.loadImages));
     root.set("language", json::Value::makeString(settings.language));
+    json::Value orders = json::Value::makeObject();
+    for (const auto &o: settings.sortOrders) {
+        orders.set(o.first, json::Value::makeString(o.second));
+    }
+    root.set("sortOrders", std::move(orders));
     return json::write(root);
 }
 
@@ -104,6 +128,12 @@ bool SettingsStore::deserialize(const std::string &text, std::string *error) {
     s.showTechnicalInfo = root["showTechnicalInfo"].asBool(s.showTechnicalInfo);
     s.loadImages = root["loadImages"].asBool(s.loadImages);
     s.language = root["language"].asString(s.language);
+    for (const auto &o: root["sortOrders"].members()) {
+        std::string key = o.second.asString();
+        if (o.first.size() <= 80 && iptv::sortModeFromKey(key) != iptv::SortMode::Provider) {
+            s.sortOrders[o.first] = key;
+        }
+    }
     settings = s;
     return true;
 }

@@ -95,6 +95,9 @@ void VodLibrary::refresh(const Profile &profile, bool movies) {
         }
         SectionStatus &s = movies ? movieState : seriesState;
         s.refreshing = false;
+        s.refreshes++;
+        s.lastRefreshOk = ok;
+        s.lastRefreshError = ok ? "" : message;
         bool hasList = movies ? !movieCatalog->empty() : !seriesCatalog->empty();
         if (ok) {
             s.status = CatalogStatus::Ready;

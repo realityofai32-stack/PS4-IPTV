@@ -3,7 +3,8 @@
     Builds and runs the host-side unit tests with MSVC (/W4 /WX):
       - production app: core (utf8/json/url), iptv (Xtream), storage, keyboard model, redaction,
         DS4 key repeat / stick filter, scroll math, logo pipeline (stb_image from libcross2d), stability
-        presets and the reconnect state machine
+        presets and the reconnect state machine, catalog audit / cache round trip, search index, sorting,
+        exact resume, Continue Watching, Series plan, HUD timing, performance at real catalog scale
       - playback test app: redaction and test_streams.txt parsing, plus config_check.exe
 #>
 $ErrorActionPreference = 'Stop'
@@ -21,7 +22,8 @@ if (-not (Test-Path "${env:ProgramFiles(x86)}\Windows Kits\10\Include")) {
 # the x64-hosted toolset may not be installed; vcvarsall x86_amd64 (x86-hosted, x64 target) always is
 $vcvars = "`"$(Join-Path $vs 'VC\Auxiliary\Build\vcvarsall.bat')`" x86_amd64"
 $env_prefix = "set `"PATH=${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;%PATH%`" && $vcvars >nul"
-$cl = 'cl /nologo /std:c++17 /EHsc /W4 /WX /utf-8 /D_CRT_SECURE_NO_WARNINGS'
+# /O2: the performance tests (search index, sorting, parsing at real catalog scale) measure optimized code
+$cl = 'cl /nologo /std:c++17 /EHsc /W4 /WX /O2 /utf-8 /D_CRT_SECURE_NO_WARNINGS'
 # stb_image.h / stb_image_write.h: the copies libcross2d compiles into the PS4 build
 $cl += " /I`"$RepoRoot\external\pplay-reference\libcross2d\include`""
 
@@ -39,8 +41,10 @@ $h = "$RepoRoot\tests\host"
 Invoke-TestBuild 'app_tests' @(
     "$h\test_main.cpp", "$h\test_core.cpp", "$h\test_iptv.cpp", "$h\test_storage.cpp", "$h\test_jobs.cpp",
     "$h\test_live.cpp", "$h\test_text.cpp", "$h\test_input.cpp", "$h\test_images.cpp", "$h\test_playback.cpp", "$h\test_vod.cpp", "$h\test_tracks.cpp",
+    "$h\test_search.cpp", "$h\test_progress.cpp", "$h\test_catalog.cpp",
     "$h\stb_impl.cpp",
     "$s\core\utf8.cpp", "$s\core\json.cpp", "$s\core\url.cpp", "$s\iptv\xtream.cpp", "$s\iptv\catalog.cpp",
+    "$s\iptv\search_index.cpp", "$s\app\vod_progress.cpp", "$s\app\series_plan.cpp",
     "$s\storage\library_store.cpp", "$s\storage\catalog_cache.cpp",
     "$s\platform\fs.cpp", "$s\platform\redact.cpp", "$s\platform\log.cpp", "$s\network\jobs.cpp",
     "$s\storage\profile_store.cpp", "$s\storage\settings_store.cpp", "$s\ui\keyboard_model.cpp",

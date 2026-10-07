@@ -3,8 +3,10 @@
 #ifndef PS4IPTV_STORAGE_SETTINGS_STORE_H
 #define PS4IPTV_STORAGE_SETTINGS_STORE_H
 
+#include <map>
 #include <string>
 
+#include "../iptv/sorting.h"
 #include "../player/stability.h"
 #include "../player/tracks.h"
 
@@ -31,6 +33,8 @@ struct Settings {
     int subtitlePosition = 0;                     // 0 bottom, 1 raised
     bool subtitleShadow = false;
     std::string language = "en";
+    // Movies / Series grid order, per profile: "<profileId>/movies" -> sort key ("az", "added_desc"...)
+    std::map<std::string, std::string> sortOrders;
 };
 
 class SettingsStore {
@@ -50,6 +54,11 @@ public:
     std::string serialize() const;
 
     bool deserialize(const std::string &text, std::string *error);
+
+    // grid order of Movies (ContentType::Movie) or Series for a profile (Provider order when never chosen)
+    iptv::SortMode sortMode(const std::string &profileId, iptv::ContentType type) const;
+
+    void setSortMode(const std::string &profileId, iptv::ContentType type, iptv::SortMode mode);
 
     static const char *formatName(StreamFormat f);
 

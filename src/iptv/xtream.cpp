@@ -2,6 +2,7 @@
 #include <cctype>
 #include <cstdio>
 #include <map>
+#include <unordered_set>
 
 #include "xtream.h"
 #include "../core/json.h"
@@ -170,30 +171,67 @@ namespace xtream {
         return true;
     }
 
-    bool parseLiveStreams(const std::string &body, std::vector<LiveChannel> &out, std::string &error) {
+    namespace {
+        // bookkeeping shared by the list parsers: rejected entries by reason, duplicate ids
+        struct ListAudit {
+            ParseStats stats;
+            std::unordered_set<std::string> ids;
+
+            // false: the entry is rejected (and counted)
+            bool accept(const std::string &id) {
+                if (id.empty()) {
+                    stats.rejectedMissingId++;
+                    return false;
+                }
+                if (!ids.insert(id).second) {
+                    stats.rejectedDuplicateId++;
+                    return false;
+                }
+                return true;
+            }
+
+            void finish(size_t elements, size_t kept, ParseStats *out) {
+                stats.raw = (int) elements;
+                stats.parsed = (int) kept;
+                stats.rejectedNotObject = stats.raw - stats.parsed - stats.rejectedMissingId - stats.rejectedDuplicateId;
+                if (out) {
+                    *out = stats;
+                }
+            }
+        };
+    }
+
+    bool parseLiveStreams(const std::string &body, std::vector<LiveChannel> &out, std::string &error,
+                          ParseStats *stats) {
         out.clear();
-        bool ok = json::forEachObject(body, [&out](const json::FlatObject &o) {
+        ListAudit audit;
+        size_t elements = 0;
+        bool ok = json::forEachObject(body, [&out, &audit](const json::FlatObject &o) {
             LiveChannel c;
-            c.streamId = o.get("stream_id");
-            if (c.streamId.empty()) {
+            c.streamId = url::trim(o.get("stream_id"));
+            if (!audit.accept(c.streamId)) {
                 return true;  // malformed entry: skip
             }
             c.name = url::trim(o.get("name"));
             if (c.name.empty()) {
+                audit.stats.missingName++;
                 c.name = "Channel " + c.streamId;
             }
-            c.categoryId = o.get("category_id");
+            c.categoryId = url::trim(o.get("category_id"));
+            audit.stats.missingCategory += c.categoryId.empty();
             c.icon = url::trim(o.get("stream_icon"));
+            audit.stats.missingPoster += c.icon.empty();
             c.epgId = o.get("epg_channel_id");
             c.added = o.getInt("added", 0);
             c.num = (int) o.getInt("num", 0);
             c.archive = o.getBool("tv_archive", false);
             out.push_back(std::move(c));
             return true;
-        }, &error);
+        }, &error, &elements);
         if (!ok) {
             error = "response is not a channel list: " + error;
         }
+        audit.finish(elements, out.size(), stats);
         return ok;
     }
 
@@ -287,6 +325,31 @@ namespace xtream {
                 s.year = fromName;
             }
         }
+    }
+
+    std::string channelNameWithoutPrefix(const std::string &name) {
+        std::string n = url::trim(name);
+        size_t i = 0;
+        bool bars = !n.empty() && n[0] == '|';
+        if (bars) {
+            i = 1;
+        }
+        size_t start = i;
+        while (i < n.size() && i - start < 5 && isalnum((unsigned char) n[i])) {
+            i++;
+        }
+        size_t len = i - start;
+        if (len < 1 || len > 4 || i >= n.size()) {
+            return "";
+        }
+        if (bars ? n[i] != '|' : (n[i] != ':' && n[i] != '|')) {
+            return "";
+        }
+        std::string rest = url::trim(n.substr(i + 1));
+        while (!rest.empty() && (rest[0] == ':' || rest[0] == '|' || rest[0] == '-')) {
+            rest = url::trim(rest.substr(1));
+        }
+        return rest;
     }
 
     std::string cleanText(const std::string &s) {
@@ -404,44 +467,57 @@ namespace xtream {
         return t;
     }
 
-    bool parseVodStreams(const std::string &body, std::vector<Movie> &out, std::string &error) {
+    bool parseVodStreams(const std::string &body, std::vector<Movie> &out, std::string &error, ParseStats *stats) {
         out.clear();
-        bool ok = json::forEachObject(body, [&out](const json::FlatObject &o) {
+        ListAudit audit;
+        size_t elements = 0;
+        bool ok = json::forEachObject(body, [&out, &audit](const json::FlatObject &o) {
             Movie m;
-            m.streamId = o.get("stream_id");
-            if (m.streamId.empty()) {
-                return true;  // malformed entry: skip
+            m.streamId = url::trim(o.get("stream_id"));
+            if (!audit.accept(m.streamId)) {
+                return true;  // no identity: cannot be played or remembered
             }
             m.name = url::trim(o.get("name"));
             if (m.name.empty()) {
+                audit.stats.missingName++;
                 m.name = "Movie " + m.streamId;
             }
             splitTitleYear(m.name, m.title, m.year);
-            m.categoryId = o.get("category_id");
+            audit.stats.titleYearAliases += m.year > 0;
+            m.categoryId = url::trim(o.get("category_id"));
+            audit.stats.missingCategory += m.categoryId.empty();
             m.icon = url::trim(o.get("stream_icon"));
+            audit.stats.missingPoster += m.icon.empty();
             m.extension = url::trim(o.get("container_extension"));
+            audit.stats.missingExtension += m.extension.empty();
             m.rating = clampRating(o.getDouble("rating", 0));
             m.added = o.getInt("added", 0);
             out.push_back(std::move(m));
             return true;
-        }, &error);
+        }, &error, &elements);
         if (!ok) {
             error = "response is not a movie list: " + error;
         }
+        audit.finish(elements, out.size(), stats);
         return ok;
     }
 
-    bool parseSeriesList(const std::string &body, std::vector<Series> &out, std::string &error) {
+    bool parseSeriesList(const std::string &body, std::vector<Series> &out, std::string &error, ParseStats *stats) {
         out.clear();
-        bool ok = json::forEachObject(body, [&out](const json::FlatObject &o) {
+        ListAudit audit;
+        size_t elements = 0;
+        bool ok = json::forEachObject(body, [&out, &audit](const json::FlatObject &o) {
             Series s;
-            s.seriesId = o.get("series_id");
-            if (s.seriesId.empty()) {
+            s.seriesId = url::trim(o.get("series_id"));
+            if (!audit.accept(s.seriesId)) {
                 return true;
             }
             s.name = url::trim(o.get("name"));
-            s.categoryId = o.get("category_id");
+            audit.stats.missingName += s.name.empty();
+            s.categoryId = url::trim(o.get("category_id"));
+            audit.stats.missingCategory += s.categoryId.empty();
             s.cover = url::trim(o.get("cover"));
+            audit.stats.missingPoster += s.cover.empty();
             s.plot = cleanText(o.get("plot"));
             s.cast = cleanText(o.get("cast"));
             s.director = cleanText(o.get("director"));
@@ -451,12 +527,14 @@ namespace xtream {
             s.runtimeMinutes = (int) o.getInt("episode_run_time", 0);
             s.lastModified = o.getInt("last_modified", 0);
             finishSeries(s);
+            audit.stats.titleYearAliases += s.title != s.name;
             out.push_back(std::move(s));
             return true;
-        }, &error);
+        }, &error, &elements);
         if (!ok) {
             error = "response is not a series list: " + error;
         }
+        audit.finish(elements, out.size(), stats);
         return ok;
     }
 

@@ -213,7 +213,7 @@ namespace json {
 
         std::string error;
 
-        bool streamObjects(const std::function<bool(const FlatObject &)> &fn) {
+        bool streamObjects(const std::function<bool(const FlatObject &)> &fn, size_t &elements) {
             if (end - p >= 3 && (unsigned char) p[0] == 0xEF && (unsigned char) p[1] == 0xBB
                 && (unsigned char) p[2] == 0xBF) {
                 p += 3;
@@ -234,6 +234,7 @@ namespace json {
                 if (p >= end) {
                     return fail("unterminated array");
                 }
+                elements++;
                 if (*p == '{') {
                     obj.fields.clear();
                     if (!parseFlatObject(obj)) {
@@ -581,9 +582,13 @@ namespace json {
     }
 
     bool forEachObject(const std::string &text, const std::function<bool(const FlatObject &)> &fn,
-                       std::string *error) {
+                       std::string *error, size_t *elements) {
         Parser parser(text.data(), text.size());
-        bool ok = parser.streamObjects(fn);
+        size_t seen = 0;
+        bool ok = parser.streamObjects(fn, seen);
+        if (elements) {
+            *elements = seen;
+        }
         if (!ok && error) {
             *error = parser.error;
         }

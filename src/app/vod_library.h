@@ -32,6 +32,10 @@ struct SectionStatus {
     bool fromCache = false;    // the list shown is the saved copy
     int64_t savedAt = 0;
     std::string message;       // user-facing problem ("" when fine)
+    // provider refreshes finished so far and how the last one ended (the browser toasts the outcome)
+    unsigned refreshes = 0;
+    bool lastRefreshOk = false;
+    std::string lastRefreshError;
 };
 
 class VodLibrary {

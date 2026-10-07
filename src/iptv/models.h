@@ -74,6 +74,43 @@ namespace iptv {
         int64_t lastModified = 0;
     };
 
+    // What a list parser saw (get_vod_streams / get_series / get_live_streams). Items are kept whenever they
+    // have an identity (stream_id / series_id); missing optional metadata is only counted.
+    struct ParseStats {
+        int raw = 0;                // top-level array elements in the response
+        int parsed = 0;             // items kept
+        // rejected (parsed + rejected == raw)
+        int rejectedNotObject = 0;
+        int rejectedMissingId = 0;
+        int rejectedDuplicateId = 0;   // same id as an earlier entry: the first one is kept
+        // kept, with defaults
+        int missingName = 0;        // shown as "Movie <id>" / "Series <id>"
+        int missingCategory = 0;    // no category_id: listed under Uncategorized
+        int missingPoster = 0;
+        int missingExtension = 0;   // container_extension missing: the player falls back to "mkv"
+        int titleYearAliases = 0;   // movies whose name ends with a year (searchable with and without it)
+
+        int rejected() const { return rejectedNotObject + rejectedMissingId + rejectedDuplicateId; }
+    };
+
+    // Counts shown in Movies / Series > Options > Catalog info and logged after every load. Never contains
+    // credentials or URLs.
+    struct CatalogDiagnostics {
+        ParseStats parse;
+        int cached = -1;            // items in the saved copy (-1: not saved / unknown)
+        int visible = 0;            // items reachable from "All"
+        int indexed = 0;            // search index entries
+        int uncategorized = 0;      // items whose category is missing or not in the category list
+        int categories = 0;         // categories with items (+ Uncategorized when used)
+        bool fromCache = false;
+        double parseMs = 0;
+        double indexMs = 0;
+        double sortMs = 0;
+        size_t indexBytes = 0;
+
+        int dropped() const { return parse.raw - visible; }
+    };
+
     // ffprobe-style stream summary the panel stores per movie/episode (may be empty)
     struct MediaSummary {
         int width = 0;

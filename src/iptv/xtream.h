@@ -29,13 +29,19 @@ namespace xtream {
     // get_live_categories / get_vod_categories / get_series_categories
     bool parseCategories(const std::string &body, std::vector<iptv::Category> &out, std::string &error);
 
-    // get_live_streams (streamed: large lists never build a DOM). Malformed entries are skipped.
-    bool parseLiveStreams(const std::string &body, std::vector<iptv::LiveChannel> &out, std::string &error);
+    // get_live_streams (streamed: large lists never build a DOM). Entries without a stream_id, and repeats of
+    // an id already seen, are skipped; everything else is kept, whatever optional metadata is missing.
+    // stats (optional) receives the audit counts (raw / kept / rejected by reason / missing fields).
+    bool parseLiveStreams(const std::string &body, std::vector<iptv::LiveChannel> &out, std::string &error,
+                          iptv::ParseStats *stats = nullptr);
 
-    // get_vod_streams / get_series (streamed). Malformed entries are skipped.
-    bool parseVodStreams(const std::string &body, std::vector<iptv::Movie> &out, std::string &error);
+    // get_vod_streams / get_series (streamed). Identity is stream_id / series_id, never the title: entries
+    // with the same name and different ids are all kept.
+    bool parseVodStreams(const std::string &body, std::vector<iptv::Movie> &out, std::string &error,
+                         iptv::ParseStats *stats = nullptr);
 
-    bool parseSeriesList(const std::string &body, std::vector<iptv::Series> &out, std::string &error);
+    bool parseSeriesList(const std::string &body, std::vector<iptv::Series> &out, std::string &error,
+                         iptv::ParseStats *stats = nullptr);
 
     // get_vod_info / get_series_info (small DOM responses). Missing fields stay empty.
     bool parseVodInfo(const std::string &body, iptv::MovieInfo &out, std::string &error);
@@ -45,6 +51,10 @@ namespace xtream {
     // "Orumcek Adam 7 2026" -> ("Orumcek Adam 7", 2026); "(2019)" / "- 2019" suffixes too. A name that is
     // only a year keeps it as the title.
     void splitTitleYear(const std::string &name, std::string &title, int &year);
+
+    // channel name without a provider prefix: "TR: TRT 1" -> "TRT 1", "|DE| ZDF" -> "ZDF" (search alias;
+    // the displayed name keeps the prefix). Returns "" when there is no such prefix.
+    std::string channelNameWithoutPrefix(const std::string &name);
 
     // provider placeholder values ("-", "N/A", "null") become ""
     std::string cleanText(const std::string &s);

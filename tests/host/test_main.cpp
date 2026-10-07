@@ -1,6 +1,7 @@
 #include "check.h"
 
 int main() {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);   // a crash still shows the test it happened in
     auto &r = check::Registry::get();
     for (auto &t: r.tests) {
         int before = r.failures;

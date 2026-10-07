@@ -124,8 +124,9 @@ namespace json {
     // Streams through a top-level array of objects without building a DOM (Xtream lists can hold tens of
     // thousands of entries). fn returns false to stop early. Non-object elements are skipped.
     // Returns false (with error) when the text is not a JSON array or is malformed.
+    // elements (optional): number of top-level array elements seen, objects or not (catalog audits).
     bool forEachObject(const std::string &text, const std::function<bool(const FlatObject &)> &fn,
-                       std::string *error = nullptr);
+                       std::string *error = nullptr, size_t *elements = nullptr);
 
     std::string write(const Value &value, bool pretty = true);
 }
