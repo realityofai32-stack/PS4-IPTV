@@ -28,6 +28,14 @@ namespace screens {
 
     Screen *makeSection(App &app, const std::string &title, const std::string &message);
 
+    // Live TV browser; startOnFavorites opens the Favorites category
+    Screen *makeLive(App &app, bool startOnFavorites = false);
+
+    // full-screen live playback; channels = indices into the live catalog used for zapping
+    Screen *makeLivePlayer(App &app, const std::vector<int> &channels, int index);
+
+    Screen *makeSearch(App &app);
+
     Screen *makeSettings(App &app);
 
     Screen *makeAbout(App &app);

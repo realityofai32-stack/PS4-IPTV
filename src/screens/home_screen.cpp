@@ -53,7 +53,8 @@ namespace {
                 return s.categoriesLoaded[i] ? std::to_string(s.categories[i].size()) + " categories"
                                              : std::string("Unavailable");
             };
-            TileDef defs[] = {{"Live TV", count(0)},
+            std::string liveSub = s.liveLoaded ? std::to_string(s.live.channels().size()) + " channels" : count(0);
+            TileDef defs[] = {{"Live TV", liveSub},
                               {"Movies", count(1)},
                               {"Series", count(2)},
                               {"Favorites", "Your saved picks"},
@@ -150,8 +151,7 @@ namespace {
         void open(int index) {
             switch (index) {
                 case 0:
-                    app.push(screens::makeSection(app, "Live TV", "Live TV channels arrive in the next milestone of "
-                                                                  "this build."));
+                    app.push(screens::makeLive(app));
                     break;
                 case 1:
                     app.push(screens::makeSection(app, "Movies", "Movies arrive in a later milestone."));
@@ -160,10 +160,10 @@ namespace {
                     app.push(screens::makeSection(app, "Series", "Series arrive in a later milestone."));
                     break;
                 case 3:
-                    app.push(screens::makeSection(app, "Favorites", "Favorites arrive with Live TV."));
+                    app.push(screens::makeLive(app, true));  // Live favorites (movies/series join in later milestones)
                     break;
                 case 4:
-                    app.push(screens::makeSection(app, "Search", "Search arrives with Live TV."));
+                    app.push(screens::makeSearch(app));
                     break;
                 default:
                     app.push(screens::makeSettings(app));

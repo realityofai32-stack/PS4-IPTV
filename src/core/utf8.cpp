@@ -95,21 +95,53 @@ namespace utf8 {
         return n;
     }
 
+    namespace {
+        // Latin-1 Supplement U+00C0..U+00FF -> ASCII base letter (0 = keep)
+        const char LATIN1[64] = {
+                'a', 'a', 'a', 'a', 'a', 'a', 'a', 'c', 'e', 'e', 'e', 'e', 'i', 'i', 'i', 'i',   // C0
+                'd', 'n', 'o', 'o', 'o', 'o', 'o', 0, 'o', 'u', 'u', 'u', 'u', 'y', 't', 's',     // D0 (D7 ×)
+                'a', 'a', 'a', 'a', 'a', 'a', 'a', 'c', 'e', 'e', 'e', 'e', 'i', 'i', 'i', 'i',   // E0
+                'd', 'n', 'o', 'o', 'o', 'o', 'o', 0, 'o', 'u', 'u', 'u', 'u', 'y', 't', 'y'};    // F0 (F7 ÷)
+
+        // Latin Extended-A U+0100..U+017F as [first, last] ranges -> ASCII base letter
+        struct Range {
+            char32_t first;
+            char32_t last;
+            char base;
+        };
+        const Range LATIN_EXT_A[] = {
+                {0x100, 0x105, 'a'}, {0x106, 0x10D, 'c'}, {0x10E, 0x111, 'd'}, {0x112, 0x11B, 'e'},
+                {0x11C, 0x123, 'g'}, {0x124, 0x127, 'h'}, {0x128, 0x133, 'i'}, {0x134, 0x135, 'j'},
+                {0x136, 0x138, 'k'}, {0x139, 0x142, 'l'}, {0x143, 0x14B, 'n'}, {0x14C, 0x153, 'o'},
+                {0x154, 0x159, 'r'}, {0x15A, 0x161, 's'}, {0x162, 0x167, 't'}, {0x168, 0x173, 'u'},
+                {0x174, 0x175, 'w'}, {0x176, 0x178, 'y'}, {0x179, 0x17E, 'z'}, {0x17F, 0x17F, 's'}};
+    }
+
     std::u32string foldForSearch(const std::string &text) {
+        // case-insensitive and accent-insensitive: the on-screen keyboard is ASCII, so "sehir" must find
+        // "Şehir" and "istanbul" must find "İstanbul"
         std::u32string s = decode(text);
         for (auto &c: s) {
             if (c >= 'A' && c <= 'Z') {
                 c += 32;
-            } else if (c >= 0xC0 && c <= 0xDE && c != 0xD7) {
-                c += 32;  // Latin-1 upper -> lower
-            } else if (c == 0x130 || c == 0x131) {
-                c = 'i';  // Turkish İ / ı
-            } else if (((c >= 0x100 && c <= 0x137) || (c >= 0x14A && c <= 0x177)) && (c % 2) == 0) {
-                c += 1;   // Latin Extended-A pairs with even upper case (Ğ/ğ, Ş/ş, Č/č, ...)
-            } else if (((c >= 0x139 && c <= 0x148) || (c >= 0x179 && c <= 0x17E)) && (c % 2) == 1) {
-                c += 1;   // pairs with odd upper case (Ł/ł, Ń/ń, Ž/ž, ...)
-            } else if (c == 0x178) {
-                c = 0xFF; // Ÿ
+            } else if (c >= 0xC0 && c <= 0xFF) {
+                char b = LATIN1[c - 0xC0];
+                if (b) {
+                    c = (char32_t) b;
+                }
+            } else if (c >= 0x100 && c <= 0x17F) {
+                for (const auto &r: LATIN_EXT_A) {
+                    if (c >= r.first && c <= r.last) {
+                        c = (char32_t) r.base;
+                        break;
+                    }
+                }
+            } else if (c >= 0x410 && c <= 0x42F) {
+                c += 0x20;  // Cyrillic upper -> lower
+            } else if (c >= 0x400 && c <= 0x40F) {
+                c += 0x50;
+            } else if (c >= 0x391 && c <= 0x3A9 && c != 0x3A2) {
+                c += 0x20;  // Greek upper -> lower
             }
         }
         return s;

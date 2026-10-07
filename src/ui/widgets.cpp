@@ -2,6 +2,7 @@
 #include <cmath>
 
 #include "widgets.h"
+#include "../core/utf8.h"
 
 using namespace c2d;
 
@@ -183,6 +184,70 @@ namespace ui {
             setOutlineThickness(0);
             caption->setColor(theme::text());
         }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    Monogram::Monogram(float size, unsigned fontSize) : RectangleShape(FloatRect(0, 0, size, size)) {
+        setCornersRadius(size * 0.18f);
+        setCornerPointCount(8);
+        letters = new Label("", fontSize, Weight::SemiBold, Color::White);
+        letters->setAlign(Align::Center, size);
+        letters->setPosition(0, Label::centerOffset(fontSize, size));
+        add(letters);
+        setFillColor(theme::surfaceRaised());
+    }
+
+    std::string Monogram::initials(const std::string &name) {
+        std::u32string s = utf8::decode(name);
+        std::vector<std::u32string> words;
+        std::u32string w;
+        for (char32_t c: s) {
+            bool sep = c == U' ' || c == U'|' || c == U'-' || c == U'_' || c == U'.' || c == U'(' || c == U')'
+                       || c == U'[' || c == U']';
+            if (sep) {
+                if (!w.empty()) {
+                    words.push_back(w);
+                }
+                w.clear();
+            } else {
+                w.push_back(c);
+            }
+        }
+        if (!w.empty()) {
+            words.push_back(w);
+        }
+        // drop a country/provider prefix such as "TR:" or "UK:"
+        if (words.size() > 1 && words[0].size() <= 4 && words[0].back() == U':') {
+            words.erase(words.begin());
+        }
+        std::string out;
+        for (size_t i = 0; i < words.size() && i < 2; i++) {
+            char32_t c = words[i][0];
+            if (c == U':') {
+                continue;
+            }
+            if (c >= 'a' && c <= 'z') {
+                c -= 32;
+            }
+            out += utf8::encode(c);
+        }
+        return out.empty() ? "?" : out;
+    }
+
+    void Monogram::setName(const std::string &name) {
+        if (name == current) {
+            return;
+        }
+        current = name;
+        letters->setText(initials(name));
+        static const Color palette[] = {{58, 92, 160}, {120, 72, 150}, {40, 128, 120}, {160, 92, 52},
+                                        {150, 60, 84}, {70, 110, 60}, {96, 96, 140}, {44, 110, 160}};
+        uint32_t h = 2166136261u;
+        for (unsigned char c: name) {
+            h = (h ^ c) * 16777619u;
+        }
+        setFillColor(palette[h % 8]);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////

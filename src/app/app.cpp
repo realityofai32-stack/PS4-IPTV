@@ -34,7 +34,8 @@ void Screen::redraw() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
-             profileStore(APP_DATA_DIR), settingsStore(APP_DATA_DIR), xtreamService(jobSystem) {
+             profileStore(APP_DATA_DIR), settingsStore(APP_DATA_DIR), xtreamService(jobSystem),
+             libraryStore(APP_DATA_DIR) {
     LOG_I("app", "renderer: %s", available ? "OK (SDL2 + OpenGL ES 2 / Piglet)" : "FAILED");
     romfsPath = getIo()->getRomFsPath();
     setClearColor(theme::bgTop());
@@ -63,6 +64,18 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     }
     LOG_I("storage", "%d profile(s), active '%s'", (int) profileStore.profiles().size(),
           profileStore.activeId().c_str());
+    warning.clear();
+    libraryStore.load(&warning);
+    if (!warning.empty()) {
+        LOG_W("storage", "%s", warning.c_str());
+    }
+
+    // the proven pPlay playback backend; created once, like pPlay's Player (needs the GL context)
+    std::string mpvDir = std::string(APP_DATA_DIR) + "mpv";
+    fs::ensureDir(mpvDir);
+    if (!player.init(mpvDir)) {
+        LOG_E("app", "%s", player.initError().c_str());
+    }
     forceContinuousRedraw = fs::exists(std::string(APP_DATA_DIR) + "force_redraw");
     if (forceContinuousRedraw) {
         LOG_W("app", "force_redraw present: drawing every frame");
@@ -94,12 +107,22 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
 
 App::~App() {
     LOG_I("app", "shutting down");
+    player.stop();
+    player.shutdown();
     jobSystem.stop();
     for (auto *s: graveyard) {
         delete s;
     }
     graveyard.clear();
     http::globalShutdown();
+}
+
+void App::saveLibrary() {
+    std::string err;
+    if (!libraryStore.save(&err)) {
+        LOG_E("storage", "library save failed: %s", err.c_str());
+        toast("Could not save favorites/history", ToastKind::Error);
+    }
 }
 
 double App::now() const {
@@ -234,6 +257,7 @@ void App::logic() {
     if (jobSystem.pump() > 0) {
         requestRedraw();
     }
+    player.update(t);  // mpv events are drained every frame, whichever screen is on top
     if (top()) {
         top()->tick(t);
     }

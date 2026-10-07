@@ -21,7 +21,7 @@ $vcvars = "`"$(Join-Path $vs 'VC\Auxiliary\Build\vcvarsall.bat')`" x86_amd64"
 $env_prefix = "set `"PATH=${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;%PATH%`" && $vcvars >nul"
 $cl = 'cl /nologo /std:c++17 /EHsc /W4 /WX /utf-8 /D_CRT_SECURE_NO_WARNINGS'
 
-function Build-Exe([string] $name, [string[]] $sources) {
+function Invoke-TestBuild([string] $name, [string[]] $sources) {
     $obj = Join-Path $Out "obj-$name"
     New-Item -ItemType Directory -Force $obj | Out-Null
     $src = ($sources | ForEach-Object { "`"$_`"" }) -join ' '
@@ -32,17 +32,21 @@ function Build-Exe([string] $name, [string[]] $sources) {
 # production app
 $s = "$RepoRoot\src"
 $h = "$RepoRoot\tests\host"
-Build-Exe 'app_tests' @(
+Invoke-TestBuild 'app_tests' @(
     "$h\test_main.cpp", "$h\test_core.cpp", "$h\test_iptv.cpp", "$h\test_storage.cpp", "$h\test_jobs.cpp",
-    "$s\core\utf8.cpp", "$s\core\json.cpp", "$s\core\url.cpp", "$s\iptv\xtream.cpp",
+    "$h\test_live.cpp",
+    "$s\core\utf8.cpp", "$s\core\json.cpp", "$s\core\url.cpp", "$s\iptv\xtream.cpp", "$s\iptv\catalog.cpp",
+    "$s\storage\library_store.cpp", "$s\storage\catalog_cache.cpp",
     "$s\platform\fs.cpp", "$s\platform\redact.cpp", "$s\platform\log.cpp", "$s\network\jobs.cpp",
     "$s\storage\profile_store.cpp", "$s\storage\settings_store.cpp", "$s\ui\keyboard_model.cpp")
 
 # playback test app
 $t = "$RepoRoot\tests\playback-test"
-Build-Exe 'host_tests' @("$t\host-tests\host_tests.cpp", "$t\src\redact.cpp", "$t\src\stream_config.cpp")
-Build-Exe 'config_check' @("$t\host-tests\config_check.cpp", "$t\src\redact.cpp", "$t\src\stream_config.cpp")
+Invoke-TestBuild 'host_tests' @("$t\host-tests\host_tests.cpp", "$t\src\redact.cpp", "$t\src\stream_config.cpp")
+Invoke-TestBuild 'config_check' @("$t\host-tests\config_check.cpp", "$t\src\redact.cpp", "$t\src\stream_config.cpp")
 
+$samples = Join-Path $RepoRoot 'build\xtream-samples'   # optional, from scripts/fetch-xtream-samples.py
+if (Test-Path $samples) { $env:PS4IPTV_SAMPLES = $samples } else { Remove-Item Env:\PS4IPTV_SAMPLES -ErrorAction SilentlyContinue }
 $env:PS4IPTV_TEST_TMP = Join-Path $Out 'tmp'
 New-Item -ItemType Directory -Force $env:PS4IPTV_TEST_TMP | Out-Null
 & "$Out\app_tests.exe"

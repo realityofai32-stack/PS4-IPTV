@@ -29,6 +29,9 @@ namespace xtream {
     // get_live_categories / get_vod_categories / get_series_categories
     bool parseCategories(const std::string &body, std::vector<iptv::Category> &out, std::string &error);
 
+    // get_live_streams (streamed: large lists never build a DOM). Malformed entries are skipped.
+    bool parseLiveStreams(const std::string &body, std::vector<iptv::LiveChannel> &out, std::string &error);
+
     // User-facing text for an auth status.
     std::string authStatusText(iptv::AuthStatus status);
 }

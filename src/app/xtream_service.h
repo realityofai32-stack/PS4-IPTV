@@ -36,6 +36,21 @@ public:
 
     CancelToken loadCategories(const iptv::Profile &profile, iptv::ContentType type, CategoriesCallback callback);
 
+    struct LiveOutcome {
+        bool ok = false;
+        bool fromCache = false;
+        int64_t savedAt = 0;
+        std::vector<iptv::Category> categories;
+        std::vector<iptv::LiveChannel> channels;
+        std::string message;       // user-facing error (or cache notice)
+    };
+
+    using LiveCallback = std::function<void(LiveOutcome &)>;
+
+    // get_live_categories + get_live_streams, parsed on the worker. On network failure the cached copy
+    // (dataDir/cache/<profile>/) is used and fromCache is set. Successful responses refresh the cache.
+    CancelToken loadLive(const iptv::Profile &profile, const std::string &dataDir, LiveCallback callback);
+
 private:
 
     JobSystem &jobs;

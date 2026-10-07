@@ -165,6 +165,33 @@ namespace xtream {
         return true;
     }
 
+    bool parseLiveStreams(const std::string &body, std::vector<LiveChannel> &out, std::string &error) {
+        out.clear();
+        bool ok = json::forEachObject(body, [&out](const json::FlatObject &o) {
+            LiveChannel c;
+            c.streamId = o.get("stream_id");
+            if (c.streamId.empty()) {
+                return true;  // malformed entry: skip
+            }
+            c.name = url::trim(o.get("name"));
+            if (c.name.empty()) {
+                c.name = "Channel " + c.streamId;
+            }
+            c.categoryId = o.get("category_id");
+            c.icon = url::trim(o.get("stream_icon"));
+            c.epgId = o.get("epg_channel_id");
+            c.added = o.getInt("added", 0);
+            c.num = (int) o.getInt("num", 0);
+            c.archive = o.getBool("tv_archive", false);
+            out.push_back(std::move(c));
+            return true;
+        }, &error);
+        if (!ok) {
+            error = "response is not a channel list: " + error;
+        }
+        return ok;
+    }
+
     std::string authStatusText(AuthStatus status) {
         switch (status) {
             case AuthStatus::Ok:

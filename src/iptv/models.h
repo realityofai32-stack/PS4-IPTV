@@ -32,6 +32,17 @@ namespace iptv {
         std::string parentId;
     };
 
+    struct LiveChannel {
+        std::string streamId;
+        std::string name;
+        std::string categoryId;
+        std::string icon;
+        std::string epgId;
+        int64_t added = 0;
+        int num = 0;
+        bool archive = false;
+    };
+
     enum class AuthStatus {
         Ok,
         InvalidCredentials,

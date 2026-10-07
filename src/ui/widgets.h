@@ -74,6 +74,20 @@ namespace ui {
         bool primary;
     };
 
+    // initials tile used where a logo/poster is missing or still loading
+    class Monogram : public c2d::RectangleShape {
+    public:
+        Monogram(float size, unsigned fontSize);
+
+        void setName(const std::string &name);
+
+        static std::string initials(const std::string &name);
+
+    private:
+        Label *letters;
+        std::string current;
+    };
+
     // three pulsing dots; call tick() each frame while visible
     class Spinner : public c2d::RectangleShape {
     public:

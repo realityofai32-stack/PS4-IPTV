@@ -1,0 +1,348 @@
+//
+// Created by cpasjuste on 02/04/19.
+//
+// PS4 IPTV: copy (via the hardware-validated playback test, tests/playback-test/src/pplay) of of pPlay src/player/mpv.cpp (Cpasjuste/pplay @ 0399546, GPL-3.0).
+// Changes are diagnostics only: return codes are logged (pPlay ignores or printf()s them, and printed
+// the wrong code for mpv_render_context_create), and the media path is no longer printf()ed in clear
+// text. mpv options, their order and the render context setup are unchanged.
+//
+
+#include <SDL_video.h>
+#include "mpv.h"
+#include "../../platform/log.h"
+
+#ifdef __PS4__
+extern "C" int ps4_mpv_use_precompiled_shaders;
+extern "C" int ps4_mpv_dump_shaders;
+#endif
+
+static void *get_proc_address_mpv(void *unused, const char *name) {
+    return SDL_GL_GetProcAddress(name);
+}
+
+// mpv_set_option_string + log the result
+static int set_option(mpv_handle *handle, const char *name, const char *value) {
+    int res = mpv_set_option_string(handle, name, value);
+    if (res < 0) {
+        LOG_E("mpv", "mpv_set_option_string(%s=%s) failed: %d (%s)", name, value, res, mpv_error_string(res));
+    } else {
+        LOG_V("mpv", "option %s=%s", name, value);
+    }
+    return res;
+}
+
+Mpv::Mpv(const std::string &configPath, bool initRender) {
+#ifdef __PS4__
+    ps4_mpv_use_precompiled_shaders = 1;
+    ps4_mpv_dump_shaders = 0;
+#endif
+
+    handle = mpv_create();
+    if (!handle) {
+        LOG_E("mpv", "mpv_create() returned NULL");
+        initErrorStep = "mpv_create";
+        initError = MPV_ERROR_NOMEM;
+        return;
+    }
+
+    set_option(handle, "config", "yes");
+    set_option(handle, "config-dir", configPath.c_str());
+    set_option(handle, "osd-scale", "0.5");
+#ifndef NDEBUG
+    set_option(handle, "terminal", "yes");
+    set_option(handle, "msg-level", "all=v");
+#endif
+
+#ifdef __SWITCH__
+    set_option(handle, "vd-lavc-threads", "4");
+    // TODO: test this
+    set_option(handle, "fbo-format", "rgba8");
+    set_option(handle, "opengl-pbo", "yes");
+#else
+    set_option(handle, "vd-lavc-threads", "6");
+    set_option(handle, "video-sync", "audio");
+#endif
+    set_option(handle, "audio-channels", "stereo");
+#ifdef __PS4__
+    set_option(handle, "ignore-path-in-watch-later-config", "yes");
+#endif
+
+#ifdef FULL_TEXTURE_TEST
+    set_option(handle, "video-unscaled", "yes");
+#endif
+    //TODO: should add this as option (big quality loss)
+    //mpv_set_option_string(handle, "vd-lavc-skiploopfilter", "all");
+    //mpv_set_option_string(handle, "vd-lavc-fast", "yes");
+
+#if defined(__LINUX__) && defined(NDEBUG)
+    set_option(handle, "hwdec", "auto-safe");
+#endif
+
+    if (!initRender) {
+        set_option(handle, "vid", "no");
+        set_option(handle, "aid", "no");
+        set_option(handle, "sid", "no");
+        set_option(handle, "vo", "null");
+        set_option(handle, "ao", "null");
+    }
+
+    int res = mpv_initialize(handle);
+    if (res) {
+        LOG_E("mpv", "mpv_initialize failed: %d (%s)", res, mpv_error_string(res));
+        initErrorStep = "mpv_initialize";
+        initError = res;
+        mpv_terminate_destroy(handle);
+        handle = nullptr;
+        return;
+    }
+
+    if (initRender) {
+        mpv_opengl_init_params gl_init_params{get_proc_address_mpv,
+                                              nullptr,
+                                              nullptr};
+        mpv_render_param params[]{
+                {MPV_RENDER_PARAM_API_TYPE,           (void *) MPV_RENDER_API_TYPE_OPENGL},
+                {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init_params},
+                {MPV_RENDER_PARAM_INVALID,            nullptr}
+        };
+
+        res = mpv_render_context_create(&context, handle, params);
+        if (res < 0) {
+            LOG_E("mpv", "mpv_render_context_create failed: %d (%s)", res, mpv_error_string(res));
+            initErrorStep = "mpv_render_context_create";
+            initError = res;
+            mpv_terminate_destroy(handle);
+            handle = nullptr;
+        }
+    }
+}
+
+Mpv::~Mpv() {
+    if (context) {
+        mpv_render_context_free(context);
+    }
+    if (handle) {
+        mpv_terminate_destroy(handle);
+    }
+}
+
+int Mpv::load(const std::string &file, LoadType loadType, const std::string &options) {
+    LOG_I("mpv", "Mpv::load(%s) options: %s", file.c_str(), options.c_str());
+    if (handle) {
+        stop();
+        std::string type = "replace";
+        if (loadType == LoadType::Append) {
+            type = "append";
+        } else if (loadType == LoadType::AppendPlay) {
+            type = "append-play";
+        }
+        const char *cmd[] = {"loadfile", file.c_str(), type.c_str(), options.c_str(), nullptr};
+        return mpv_command(handle, cmd);
+    }
+
+    return -1;
+}
+
+int Mpv::save() {
+    return mpv_command_string(handle, "write-watch-later-config");
+}
+
+int Mpv::pause() {
+    return mpv_command_string(handle, "set pause yes");
+}
+
+int Mpv::resume() {
+    return mpv_command_string(handle, "set pause no");
+}
+
+int Mpv::stop() {
+    int res = save();
+    LOG_V("mpv", "write-watch-later-config: %d (%s)", res, mpv_error_string(res));
+    res = mpv_command_string(handle, "stop");
+    LOG_I("mpv", "stop command: %d (%s)", res, mpv_error_string(res));
+    return res;
+}
+
+int Mpv::seek(double position) {
+    std::string cmd = "no-osd seek " + std::to_string(position);
+    return mpv_command_string(handle, cmd.c_str());
+}
+
+int Mpv::setSpeed(double speed) {
+    std::string cmd = "set speed " + std::to_string(speed);
+    return mpv_command_string(handle, cmd.c_str());
+}
+
+double Mpv::getSpeed() {
+    double res = -1;
+    mpv_get_property(handle, "speed", MPV_FORMAT_DOUBLE, &res);
+    return res;
+}
+
+int Mpv::setVid(int id) {
+    std::string cmd = "no-osd set vid ";
+    cmd += id < 0 ? "no" : std::to_string(id);
+    return mpv_command_string(handle, cmd.c_str());
+}
+
+int Mpv::setAid(int id) {
+    std::string cmd = "no-osd set aid ";
+    cmd += id < 0 ? "no" : std::to_string(id);
+    return mpv_command_string(handle, cmd.c_str());
+}
+
+int Mpv::setSid(int id) {
+    std::string cmd = "no-osd set sid ";
+    cmd += id < 0 ? "no" : std::to_string(id);
+    return mpv_command_string(handle, cmd.c_str());
+}
+
+int Mpv::getVid() {
+    int64_t vid = -1;
+    mpv_get_property(handle, "vid", MPV_FORMAT_INT64, &vid);
+    return (int) vid;
+}
+
+int Mpv::getAid() {
+    int64_t aid = -1;
+    mpv_get_property(handle, "aid", MPV_FORMAT_INT64, &aid);
+    return (int) aid;
+}
+
+int Mpv::getSid() {
+    int64_t sid = -1;
+    mpv_get_property(handle, "sid", MPV_FORMAT_INT64, &sid);
+    return (int) sid;
+}
+
+int Mpv::getVideoBitrate() {
+    double bitrate = 0;
+    mpv_get_property(handle, "video-bitrate", MPV_FORMAT_DOUBLE, &bitrate);
+    return (int) bitrate;
+}
+
+int Mpv::getAudioBitrate() {
+    double bitrate = 0;
+    mpv_get_property(handle, "audio-bitrate", MPV_FORMAT_INT64, &bitrate);
+    return (int) bitrate;
+}
+
+long Mpv::getDuration() {
+    long duration = 0;
+    mpv_get_property(handle, "duration", MPV_FORMAT_INT64, &duration);
+    return duration;
+}
+
+long Mpv::getPosition() {
+    long position = 0;
+    mpv_get_property(handle, "playback-time", MPV_FORMAT_INT64, &position);
+    return position;
+}
+
+bool Mpv::isAvailable() {
+    return handle != nullptr;
+}
+
+bool Mpv::isStopped() {
+    int res = 1;
+    mpv_get_property(handle, "playback-abort", MPV_FORMAT_FLAG, &res);
+    return res == 1;
+}
+
+bool Mpv::isPaused() {
+    int res = -1;
+    mpv_get_property(handle, "pause", MPV_FORMAT_FLAG, &res);
+    return res == 1;
+}
+
+mpv_event *Mpv::getEvent() {
+    return mpv_wait_event(handle, 0);
+}
+
+mpv_handle *Mpv::getHandle() {
+    return handle;
+}
+
+mpv_render_context *Mpv::getContext() {
+    return context;
+}
+
+MediaInfo Mpv::getMediaInfo(const c2d::Io::File &file) {
+    MediaInfo mediaInfo(file);
+    std::vector<MediaInfo::Track> streams;
+
+    if (!isAvailable() || isStopped()) {
+        return mediaInfo;
+    }
+
+    // load track list
+    mpv_node node;
+    mpv_get_property(handle, "track-list", MPV_FORMAT_NODE, &node);
+    if (node.format == MPV_FORMAT_NODE_ARRAY) {
+        for (int i = 0; i < node.u.list->num; i++) {
+            if (node.u.list->values[i].format == MPV_FORMAT_NODE_MAP) {
+                MediaInfo::Track stream{};
+                for (int n = 0; n < node.u.list->values[i].u.list->num; n++) {
+                    std::string key = node.u.list->values[i].u.list->keys[n];
+                    if (key == "type") {
+                        if (node.u.list->values[i].u.list->values[n].format == MPV_FORMAT_STRING) {
+                            stream.type = node.u.list->values[i].u.list->values[n].u.string;
+                        }
+                    } else if (key == "id") {
+                        if (node.u.list->values[i].u.list->values[n].format == MPV_FORMAT_INT64) {
+                            stream.id = (int) node.u.list->values[i].u.list->values[n].u.int64;
+                        }
+                    } else if (key == "title") {
+                        if (node.u.list->values[i].u.list->values[n].format == MPV_FORMAT_STRING) {
+                            stream.title = node.u.list->values[i].u.list->values[n].u.string;
+                        }
+                    } else if (key == "lang") {
+                        if (node.u.list->values[i].u.list->values[n].format == MPV_FORMAT_STRING) {
+                            stream.language = node.u.list->values[i].u.list->values[n].u.string;
+                        }
+                    } else if (key == "codec") {
+                        if (node.u.list->values[i].u.list->values[n].format == MPV_FORMAT_STRING) {
+                            stream.codec = node.u.list->values[i].u.list->values[n].u.string;
+                        }
+                    } else if (key == "demux-w") {
+                        if (node.u.list->values[i].u.list->values[n].format == MPV_FORMAT_INT64) {
+                            stream.width = (int) node.u.list->values[i].u.list->values[n].u.int64;
+                        }
+                    } else if (key == "demux-h") {
+                        if (node.u.list->values[i].u.list->values[n].format == MPV_FORMAT_INT64) {
+                            stream.height = (int) node.u.list->values[i].u.list->values[n].u.int64;
+                        }
+                    } else if (key == "demux-samplerate") {
+                        if (node.u.list->values[i].u.list->values[n].format == MPV_FORMAT_INT64) {
+                            stream.sample_rate = (int) node.u.list->values[i].u.list->values[n].u.int64;
+                        }
+                    } else if (key == "demux-channel-count") {
+                        if (node.u.list->values[i].u.list->values[n].format == MPV_FORMAT_INT64) {
+                            stream.channels = (int) node.u.list->values[i].u.list->values[n].u.int64;
+                        }
+                    }
+                }
+                streams.push_back(stream);
+            }
+        }
+    }
+
+    // set media info tracks
+    mediaInfo.videos.clear();
+    mediaInfo.audios.clear();
+    mediaInfo.subtitles.clear();
+    for (auto &stream: streams) {
+        if (stream.type == "video") {
+            mediaInfo.videos.push_back(stream);
+        } else if (stream.type == "audio") {
+            mediaInfo.audios.push_back(stream);
+        } else if (stream.type == "sub") {
+            mediaInfo.subtitles.push_back(stream);
+        }
+    }
+
+    // set duration
+    mediaInfo.duration = getDuration();
+
+    return mediaInfo;
+}

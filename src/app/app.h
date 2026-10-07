@@ -9,9 +9,12 @@
 #include "cross2d/c2d.h"
 #include "screen.h"
 #include "xtream_service.h"
+#include "../iptv/catalog.h"
 #include "../iptv/models.h"
 #include "../network/jobs.h"
 #include "../platform/input.h"
+#include "../player/playback.h"
+#include "../storage/library_store.h"
 #include "../storage/profile_store.h"
 #include "../storage/settings_store.h"
 
@@ -29,6 +32,9 @@ struct Session {
     bool httpsWarning = false;
     std::vector<iptv::Category> categories[3];   // indexed by iptv::ContentType
     bool categoriesLoaded[3] = {false, false, false};
+    iptv::LiveCatalog live;
+    bool liveLoaded = false;
+    std::string liveNotice;                      // e.g. "showing the saved list"
 };
 
 enum class ToastKind {
@@ -76,6 +82,13 @@ public:
 
     Session &session() { return currentSession; }
 
+    LibraryStore &library() { return libraryStore; }
+
+    Playback &playback() { return player; }
+
+    // persists favorites/history; logs and toasts on failure
+    void saveLibrary();
+
     double now() const;
 
     const std::string &romfs() const { return romfsPath; }
@@ -102,6 +115,8 @@ private:
     ProfileStore profileStore;
     SettingsStore settingsStore;
     XtreamService xtreamService;
+    LibraryStore libraryStore;
+    Playback player;
     Session currentSession;
     InputManager input;
     void *ownPad = nullptr;          // pad opened by us when libcross2d had none at startup

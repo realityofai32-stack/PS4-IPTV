@@ -46,11 +46,15 @@ endif ()
 configure_file(src/build_info.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/build_info.h" @ONLY)
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS src/*.cpp)
+# unmodified pPlay sources needed by the pPlay Mpv wrapper (src/player/pplay)
+set(PPLAY_UNMODIFIED_SOURCES "${PPLAY_DIR}/src/media_info.cpp" "${PPLAY_DIR}/src/utility.cpp")
 
-add_executable(${PROJECT_NAME} ${APP_SOURCES})
+add_executable(${PROJECT_NAME} ${APP_SOURCES} ${PPLAY_UNMODIFIED_SOURCES})
+set_source_files_properties(${PPLAY_UNMODIFIED_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wno-extra")
 target_include_directories(${PROJECT_NAME} PRIVATE
         src
         "${CMAKE_CURRENT_BINARY_DIR}/generated"
+        "${PPLAY_DIR}/src"
         ${MPV_INCLUDE_DIRS} ${ASS_INCLUDE_DIRS} ${FFMPEG_INCLUDE_DIRS} ${BZIP2_INCLUDE_DIR})
 target_compile_options(${PROJECT_NAME} PRIVATE -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")

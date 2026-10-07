@@ -170,17 +170,41 @@ namespace {
             s.profile = profile;
             s.account = o.result.account;
             s.httpsWarning = o.httpsWarning;
+            app.library().setProfile(profile.id);
             setStep(0, State::Done, o.result.account.expiresAt > 0
                                     ? "Active until " + clockx::localDate(o.result.account.expiresAt) : "Active");
-            loadCategories(0);
+            loadLive();
+        }
+
+        void loadLive() {
+            setStep(1, State::Running, "Loading channels" "\xE2\x80\xA6");
+            token = app.xtream().loadLive(profile, APP_DATA_DIR, [this](XtreamService::LiveOutcome &o) {
+                Session &s = app.session();
+                if (o.ok) {
+                    s.categories[0] = o.categories;
+                    s.categoriesLoaded[0] = true;
+                    s.live.assign(std::move(o.categories), std::move(o.channels));
+                    s.live.fromCache = o.fromCache;
+                    s.live.loadedAt = o.fromCache ? o.savedAt : clockx::unixNow();
+                    s.liveLoaded = true;
+                    s.liveNotice = o.fromCache ? o.message : "";
+                    std::string detail = std::to_string(s.live.categories().size()) + " categories  \xE2\x80\xA2  "
+                                         + std::to_string(s.live.channels().size()) + " channels";
+                    setStep(1, State::Done, o.fromCache ? detail + " (saved list)" : detail);
+                } else {
+                    setStep(1, State::Failed, o.message);
+                }
+                loadCategories(1);
+            });
         }
 
         void loadCategories(int index) {
             if (index >= 3) {
                 Session &s = app.session();
                 s.connected = true;
-                LOG_I("connect", "ready: live %d, movie %d, series %d categories", (int) s.categories[0].size(),
-                      (int) s.categories[1].size(), (int) s.categories[2].size());
+                LOG_I("connect", "ready: live %d categories / %d channels, movie %d, series %d categories",
+                      (int) s.categories[0].size(), (int) s.live.channels().size(), (int) s.categories[1].size(),
+                      (int) s.categories[2].size());
                 app.replaceAll(screens::makeHome(app));
                 return;
             }

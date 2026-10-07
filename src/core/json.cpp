@@ -213,7 +213,118 @@ namespace json {
 
         std::string error;
 
+        bool streamObjects(const std::function<bool(const FlatObject &)> &fn) {
+            if (end - p >= 3 && (unsigned char) p[0] == 0xEF && (unsigned char) p[1] == 0xBB
+                && (unsigned char) p[2] == 0xBF) {
+                p += 3;
+            }
+            skipWs();
+            if (p >= end || *p != '[') {
+                return fail("expected a JSON array");
+            }
+            p++;
+            skipWs();
+            if (p < end && *p == ']') {
+                p++;
+                return true;
+            }
+            FlatObject obj;
+            while (true) {
+                skipWs();
+                if (p >= end) {
+                    return fail("unterminated array");
+                }
+                if (*p == '{') {
+                    obj.fields.clear();
+                    if (!parseFlatObject(obj)) {
+                        return false;
+                    }
+                    if (!fn(obj)) {
+                        return true;
+                    }
+                } else {
+                    Value skipped;
+                    if (!parseValue(skipped, 1)) {
+                        return false;
+                    }
+                }
+                skipWs();
+                if (p >= end) {
+                    return fail("unterminated array");
+                }
+                if (*p == ',') {
+                    p++;
+                    continue;
+                }
+                if (*p == ']') {
+                    p++;
+                    return true;
+                }
+                return fail("expected , or ]");
+            }
+        }
+
     private:
+
+        bool parseFlatObject(FlatObject &obj) {
+            p++;  // {
+            skipWs();
+            if (p < end && *p == '}') {
+                p++;
+                return true;
+            }
+            while (true) {
+                skipWs();
+                if (p >= end || *p != '"') {
+                    return fail("expected key");
+                }
+                FlatObject::Field f;
+                if (!parseString(f.key)) {
+                    return false;
+                }
+                skipWs();
+                if (p >= end || *p != ':') {
+                    return fail("expected :");
+                }
+                p++;
+                skipWs();
+                if (p >= end) {
+                    return fail("unexpected end");
+                }
+                if (*p == '{' || *p == '[') {
+                    Value nested;  // rare in Xtream lists (category_ids): parsed and dropped
+                    if (!parseValue(nested, 2)) {
+                        return false;
+                    }
+                    f.type = nested.type();
+                } else {
+                    Value scalar;
+                    if (!parseValue(scalar, 2)) {
+                        return false;
+                    }
+                    f.type = scalar.type();
+                    if (f.type == Type::Bool) {
+                        f.value = scalar.asBool() ? "true" : "false";
+                    } else if (f.type != Type::Null) {
+                        f.value = std::move(scalar.str);
+                    }
+                }
+                obj.fields.push_back(std::move(f));
+                skipWs();
+                if (p >= end) {
+                    return fail("unterminated object");
+                }
+                if (*p == ',') {
+                    p++;
+                    continue;
+                }
+                if (*p == '}') {
+                    p++;
+                    return true;
+                }
+                return fail("expected , or }");
+            }
+        }
 
         const char *p;
         const char *begin;
@@ -467,6 +578,63 @@ namespace json {
             }
         }
         return ok;
+    }
+
+    bool forEachObject(const std::string &text, const std::function<bool(const FlatObject &)> &fn,
+                       std::string *error) {
+        Parser parser(text.data(), text.size());
+        bool ok = parser.streamObjects(fn);
+        if (!ok && error) {
+            *error = parser.error;
+        }
+        return ok;
+    }
+
+    namespace {
+        const std::string EMPTY;
+
+        const FlatObject::Field *findField(const FlatObject &o, const char *key) {
+            for (const auto &f: o.fields) {
+                if (f.key == key) {
+                    return &f;
+                }
+            }
+            return nullptr;
+        }
+    }
+
+    const std::string &FlatObject::get(const char *key) const {
+        const Field *f = findField(*this, key);
+        return f && (f->type == Type::String || f->type == Type::Number || f->type == Type::Bool) ? f->value : EMPTY;
+    }
+
+    bool FlatObject::has(const char *key) const {
+        return findField(*this, key) != nullptr;
+    }
+
+    int64_t FlatObject::getInt(const char *key, int64_t def) const {
+        const Field *f = findField(*this, key);
+        if (f == nullptr || f->type == Type::Null || f->value.empty()) {
+            return def;
+        }
+        Value v = f->type == Type::Bool ? Value::makeBool(f->value == "true") : Value::makeString(f->value);
+        return v.asInt(def);
+    }
+
+    double FlatObject::getDouble(const char *key, double def) const {
+        const Field *f = findField(*this, key);
+        if (f == nullptr || f->type == Type::Null || f->value.empty()) {
+            return def;
+        }
+        return Value::makeString(f->value).asDouble(def);
+    }
+
+    bool FlatObject::getBool(const char *key, bool def) const {
+        const Field *f = findField(*this, key);
+        if (f == nullptr || f->type == Type::Null) {
+            return def;
+        }
+        return Value::makeString(f->value).asBool(def);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////

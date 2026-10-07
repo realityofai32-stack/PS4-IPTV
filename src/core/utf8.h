@@ -17,7 +17,8 @@ namespace utf8 {
 
     size_t length(const std::string &text);
 
-    // Lower-cases ASCII and the common Latin-1/Latin Extended-A letters (incl. Turkish) for searching.
+    // Search key: lower case, Latin letters with diacritics reduced to their ASCII base (ş->s, İ->i, ü->u),
+    // Cyrillic/Greek lower-cased.
     std::u32string foldForSearch(const std::string &text);
 }
 

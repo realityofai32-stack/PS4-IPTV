@@ -5,6 +5,7 @@
 #include "../network/http.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
+#include "../storage/catalog_cache.h"
 
 using namespace iptv;
 
@@ -41,6 +42,68 @@ CancelToken XtreamService::authenticate(const Profile &profile, AuthCallback cal
               resp.status, resp.seconds, out->message.c_str(), out->result.detail.c_str(),
               out->result.account.maxConnections, out->result.account.activeConnections,
               out->httpsWarning ? ", streams need HTTPS" : "");
+    }, [out, callback]() {
+        callback(*out);
+    });
+}
+
+CancelToken XtreamService::loadLive(const Profile &profile, const std::string &dataDir, LiveCallback callback) {
+    auto out = std::make_shared<LiveOutcome>();
+    Profile p = profile;
+    return jobs.submit(JobPriority::High, "live", [p, out, dataDir](const CancelToken &token) {
+        CatalogCache cache(dataDir);
+        std::string catBody, streamBody, err;
+
+        http::Request req;
+        req.cancel = token.shared();
+        req.maxBytes = 8u * 1024 * 1024;
+        req.url = xtream::apiUrl(p, "get_live_categories");
+        http::Response cats = http::get(req);
+        http::Response streams;
+        if (cats.ok()) {
+            req.url = xtream::apiUrl(p, "get_live_streams");
+            req.maxBytes = 96u * 1024 * 1024;
+            req.totalTimeoutMs = 120000;
+            streams = http::get(req);
+        }
+        if (token.canceled()) {
+            return;
+        }
+        if (cats.ok() && streams.ok() && xtream::parseCategories(cats.body, out->categories, err)
+            && xtream::parseLiveStreams(streams.body, out->channels, err)) {
+            out->ok = true;
+            catBody = std::move(cats.body);
+            streamBody = std::move(streams.body);
+            int64_t now = clockx::unixNow();
+            std::string cacheErr;
+            if (!cache.save(p.id, "live_categories", catBody, now, &cacheErr)
+                || !cache.save(p.id, "live_streams", streamBody, now, &cacheErr)) {
+                LOG_W("xtream", "live cache not saved: %s", cacheErr.c_str());
+            }
+            LOG_I("xtream", "live: %d categories, %d channels (%zu KiB, %.1fs)", (int) out->categories.size(),
+                  (int) out->channels.size(), (streamBody.size() + 1023) / 1024, cats.seconds + streams.seconds);
+        } else {
+            const http::Response &bad = !cats.ok() ? cats : streams;
+            std::string why = bad.ok() ? "Could not read the channel list" : http::describe(bad);
+            LOG_W("xtream", "live list from network failed: %s (%s%s)", why.c_str(), bad.detail.c_str(),
+                  err.empty() ? "" : (", " + err).c_str());
+            int64_t savedCats = 0, savedStreams = 0;
+            out->categories.clear();
+            out->channels.clear();
+            if (cache.load(p.id, "live_categories", catBody, savedCats)
+                && cache.load(p.id, "live_streams", streamBody, savedStreams)
+                && xtream::parseCategories(catBody, out->categories, err)
+                && xtream::parseLiveStreams(streamBody, out->channels, err)) {
+                out->ok = true;
+                out->fromCache = true;
+                out->savedAt = savedStreams;
+                out->message = why + " - showing the saved list";
+                LOG_I("xtream", "live: using cache from %lld (%d channels)", (long long) savedStreams,
+                      (int) out->channels.size());
+            } else {
+                out->message = why;
+            }
+        }
     }, [out, callback]() {
         callback(*out);
     });
