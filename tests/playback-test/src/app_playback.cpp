@@ -143,28 +143,64 @@ namespace {
         }
     }
 
-    // Turns an mpv error-level log line into a visible, labelled message.
-    std::string classify(const std::string &prefix, const std::string &text, bool network) {
+    bool contains(const std::string &haystack, const char *needle) {
+        return haystack.find(needle) != std::string::npos;
+    }
+
+    // Labels an mpv/FFmpeg log line that indicates a failure. Message texts and levels were checked
+    // against the sources of the exact versions linked (mpv 0.34.1, FFmpeg 5.0):
+    //   ffmpeg (URLContext): tcp.c "Failed to resolve hostname %s: %s" (error),
+    //                        network.c "Connection to %s failed: %s" (error), http.c "HTTP error %d %s" (WARNING)
+    //   stream:              stream.c "Failed to open %s." (error)
+    //   cplayer:             loadfile.c "Failed to recognize file format." (error),
+    //                        audio.c "Could not open/initialize audio device -> no sound." (error),
+    //                        video.c "Could not initialize video chain." (fatal)
+    //   ao/*:                ao.c "Failed to initialize audio driver '%s'", ao_sdl.c "could not open audio: %s"
+    //   vd:                  vd_lavc.c "Could not open codec." (error)
+    // Returns "" when the line is not a failure.
+    std::string classify(const std::string &prefix, const std::string &text, bool isError) {
         const std::string p = lower(prefix);
-        const std::string t = lower(text);
-        std::string label;
-        if (startsWith(p, "ao") || t.find("audio device") != std::string::npos
-            || t.find("audio output") != std::string::npos) {
-            label = "AUDIO INIT FAILED";
-        } else if (startsWith(p, "vd") || p == "ffmpeg/video") {
-            label = "VIDEO DECODER FAILED";
-        } else if (startsWith(p, "ad") || p == "ffmpeg/audio") {
-            label = "AUDIO DECODER FAILED";
-        } else if (startsWith(p, "vo") || startsWith(p, "libmpv") || startsWith(p, "ra")
-                   || p.find("opengl") != std::string::npos || t.find("shader") != std::string::npos) {
-            label = "RENDERER FAILED";
-        } else if (startsWith(p, "stream") || startsWith(p, "ffmpeg") || startsWith(p, "demux")
-                   || startsWith(p, "lavf") || startsWith(p, "file") || startsWith(p, "http")) {
-            label = network ? "NETWORK OPEN FAILED" : "OPEN FAILED";
-        } else {
-            label = "MPV ERROR";
+        if (p == "ffmpeg") {
+            if (contains(text, "HTTP error")) {
+                std::string label = "NETWORK OPEN FAILED: " + text;
+                if (contains(text, "HTTP error 403")) {
+                    label += "  (provider refused: if the previous stream closed <60 s ago, the account's "
+                             "connection slot may still be busy - wait and retry)";
+                }
+                return label;
+            }
+            if (contains(text, "Failed to resolve hostname")) {
+                return "NETWORK OPEN FAILED (DNS): " + text;
+            }
+            if (contains(text, "Connection to") || contains(text, "Connection refused")
+                || contains(text, "timed out") || contains(text, "Protocol not found")) {
+                return "NETWORK OPEN FAILED: " + text;
+            }
+            return isError ? "NETWORK/IO ERROR: [ffmpeg] " + text : "";
         }
-        return label + ": [" + prefix + "] " + text;
+        if (startsWith(p, "stream")) {
+            return isError ? "NETWORK OPEN FAILED: [" + prefix + "] " + text : "";
+        }
+        if (contains(text, "Failed to recognize file format")) {
+            return "DEMUX FAILED: " + text;
+        }
+        if (startsWith(p, "lavf") || startsWith(p, "demux")) {
+            return isError ? "DEMUX FAILED: [" + prefix + "] " + text : "";
+        }
+        if (startsWith(p, "ao") || contains(text, "audio device") || contains(text, "audio driver")) {
+            return isError ? "AUDIO INIT FAILED: [" + prefix + "] " + text : "";
+        }
+        if (startsWith(p, "vd") || contains(text, "video chain")) {
+            return isError ? "VIDEO DECODER FAILED: [" + prefix + "] " + text : "";
+        }
+        if (startsWith(p, "ad")) {
+            return isError ? "AUDIO DECODER FAILED: [" + prefix + "] " + text : "";
+        }
+        if (startsWith(p, "vo") || startsWith(p, "libmpv") || startsWith(p, "ra") || contains(p, "opengl")
+            || contains(text, "shader")) {
+            return isError ? "RENDERER FAILED: [" + prefix + "] " + text : "";
+        }
+        return isError ? "MPV ERROR: [" + prefix + "] " + text : "";
     }
 }
 
@@ -194,7 +230,7 @@ const char *App::stateName(PlayState s) {
         case PlayState::Ended:
             return "ENDED";
         default:
-            return "FAILED";
+            return "ERROR";
     }
 }
 
@@ -337,6 +373,9 @@ void App::finishRun(const std::string &reason) {
     }
     run.endReason = reason;
     run.tEnded = runTime();
+    if (run.source != Source::Local && run.tStartFile >= 0) {
+        lastStreamClosedUptime = diag::uptime();
+    }
     std::string summary = resultSummary();
     results.push_back(summary);
     while (results.size() > MAX_RESULTS) {
@@ -349,6 +388,8 @@ void App::finishRun(const std::string &reason) {
     for (const auto &w: run.watchdogFired) {
         LOG_I("RESULT", "  watchdog: %s", w.c_str());
     }
+    LOG_I("RESULT", "  hls segment/playlist failures %d, [vd] frame decode errors %d", run.hlsSegmentFailures,
+          run.decodeFrameErrors);
     LOG_I("RESULT", "  ffmpeg error lines: video %d, audio %d, other %d%s%s", run.ffmpegVideoErrors,
           run.ffmpegAudioErrors, run.ffmpegOtherErrors, run.lastFfmpegError.empty() ? "" : ", last: ",
           run.lastFfmpegError.c_str());
@@ -473,6 +514,11 @@ void App::onLogMessage(const mpv_event_log_message *msg) {
     std::string text = trimNewline(msg->text ? msg->text : "");
     diag::write(level, "mpv/" + prefix, text);
 
+    // the PS4 mpv patch logs "compile_attach_shader: type: <t>, sha: <hash>" before the lookup
+    if (text.find("compile_attach_shader: type:") != std::string::npos) {
+        lastShaderInfo = text.substr(text.find("type:"));
+    }
+
     bool active = state == PlayState::Opening || state == PlayState::Buffering || state == PlayState::Playing
                   || state == PlayState::Stopping;
     if (!active) {
@@ -480,19 +526,47 @@ void App::onLogMessage(const mpv_event_log_message *msg) {
     }
     if (!run.shaderMissing && text.find("precompiled shader not found") != std::string::npos) {
         run.shaderMissing = true;
-        addError("RENDERER: pPlay's precompiled mpv shader table has no shader for this video "
-                 "(log: compile_attach_shader ... not found)");
+        addError(diag::format("RENDERER SHADER MISSING: %s is not in pPlay's precompiled shader table "
+                              "(video %s %dx%d) - mpv cannot compile shaders at runtime on retail firmware",
+                              lastShaderInfo.empty() ? "a shader" : lastShaderInfo.c_str(),
+                              run.pixelFormat.empty() ? "?" : run.pixelFormat.c_str(), run.width, run.height));
+        return;
     }
-    if (level == diag::Level::Error && startsWith(prefix, "ffmpeg/")) {
-        // libavcodec/libavformat error lines ("non-existing PPS", "no frame!", "PES packet size
-        // mismatch", ...) are routine when joining a live MPEG-TS mid-stream: count them, don't
-        // present them as failures. mpv's own [vd]/[ad]/[cplayer] errors are the real failures.
-        int &count = startsWith(prefix, "ffmpeg/video") ? run.ffmpegVideoErrors
-                     : startsWith(prefix, "ffmpeg/audio") ? run.ffmpegAudioErrors : run.ffmpegOtherErrors;
-        count++;
-        run.lastFfmpegError = redact::apply("[" + prefix + "] " + text);
-    } else if (level == diag::Level::Error) {
-        addError(classify(prefix, text, run.source != Source::Local));
+
+    const bool isError = level == diag::Level::Error;
+    if (prefix == "ffmpeg/demuxer" && (text.find("Failed to open segment") != std::string::npos
+                                       || text.find("Failed to reload playlist") != std::string::npos)) {
+        if (++run.hlsSegmentFailures == 1) {
+            addError("HLS SEGMENT/PLAYLIST OPEN FAILED: " + text + " (see log for the HTTP status)");
+        }
+        return;
+    }
+    if (startsWith(prefix, "ffmpeg/")) {
+        // error lines from libavcodec/libavformat ("non-existing PPS", "no frame!", "PES packet size
+        // mismatch", ...) are routine when joining a live MPEG-TS mid-stream: count them, they are
+        // reported as the cause only if the run fails
+        if (isError) {
+            int &count = startsWith(prefix, "ffmpeg/video") ? run.ffmpegVideoErrors
+                         : startsWith(prefix, "ffmpeg/audio") ? run.ffmpegAudioErrors : run.ffmpegOtherErrors;
+            count++;
+            run.lastFfmpegError = redact::apply("[" + prefix + "] " + text);
+            if (prefix == "ffmpeg/demuxer") {
+                run.lastDemuxerError = run.lastFfmpegError;
+            }
+        }
+        return;
+    }
+    if (prefix == "vd" && text.find("Error while decoding frame") != std::string::npos) {
+        run.decodeFrameErrors++;
+        return;
+    }
+
+    std::string label = classify(prefix, text, isError);
+    if (!label.empty()) {
+        addError(label);
+        if (startsWith(label, "NETWORK")) {
+            run.networkErrorShown = true;
+        }
     } else if (level == diag::Level::Warn) {
         run.warnings.push_back(redact::apply("[" + prefix + "] " + text));
         if (run.warnings.size() > 3) {
@@ -656,6 +730,9 @@ void App::onEndFile(const mpv_event_end_file *ef) {
                 break;
         }
         addError(diag::format("%s: mpv error %d (%s)", label, ef->error, mpv_error_string(ef->error)));
+        if (run.tFirstFrame < 0 && !run.networkErrorShown && !run.lastDemuxerError.empty()) {
+            addError("DEMUX FAILED: last demuxer error: " + run.lastDemuxerError);
+        }
         finishRun(diag::format("error %d (%s)", ef->error, mpv_error_string(ef->error)));
         setState(PlayState::Failed);
         return;
@@ -778,6 +855,14 @@ void App::runWatchdog() {
         if (!fired) {
             run.watchdogFired.push_back(wd);
             LOG_W("watchdog", "%s", wd.c_str());
+            if (state == PlayState::Opening) {
+                addError(diag::format("OPEN TIMEOUT: no stream data after %.0f s (mpv gives up at network-timeout "
+                                      "60 s; Circle = stop)", t));
+            } else if (run.tFirstFrame < 0 && run.tLoaded >= 0) {
+                addError(diag::format("NO VIDEO FRAME %.0f s after open%s", t - run.tLoaded,
+                                      run.tAudioOut >= 0 ? " while audio plays: decoder/renderer problem"
+                                                         : ""));
+            }
         }
     }
     run.watchdog = wd;
@@ -812,6 +897,11 @@ void App::onUpdate() {
             LOG_W("cleanup", "no MPV_EVENT_IDLE within %.0fs after stop", RETURN_AFTER_END_TIMEOUT);
         }
         returnToMenu();
+    }
+
+    if (screen == Screen::Menu && up - lastMenuRefresh >= 1.0) {
+        lastMenuRefresh = up;
+        updateMenuText();
     }
 
     if (screen == Screen::Playback && up - lastOverlayUpdate >= 0.25) {
@@ -850,6 +940,10 @@ void App::updateOverlayText() {
     std::string wd = run.watchdog;
     for (const auto &w: run.warnings) {
         wd += (wd.empty() ? "" : "\n") + std::string("warning: ") + w.substr(0, 160);
+    }
+    if (run.hlsSegmentFailures + run.decodeFrameErrors > 0) {
+        wd += (wd.empty() ? "" : "\n") + diag::format("HLS segment/playlist failures: %d   frame decode errors: %d",
+                                                      run.hlsSegmentFailures, run.decodeFrameErrors);
     }
     if (run.ffmpegVideoErrors + run.ffmpegAudioErrors + run.ffmpegOtherErrors > 0) {
         wd += (wd.empty() ? "" : "\n")

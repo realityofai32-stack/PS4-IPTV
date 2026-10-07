@@ -12,6 +12,7 @@
 
 #include "cross2d/c2d.h"
 #include "ffmpeg_info.h"
+#include "net_check.h"
 #include "pplay/mpv.h"
 #include "pplay/video_texture.h"
 #include "test_env.h"
@@ -102,6 +103,10 @@ struct RunInfo {
     int ffmpegAudioErrors = 0;
     int ffmpegOtherErrors = 0;
     std::string lastFfmpegError;
+    std::string lastDemuxerError;        // last ffmpeg/demuxer error line
+    int hlsSegmentFailures = 0;          // "Failed to open segment" / "Failed to reload playlist"
+    int decodeFrameErrors = 0;           // [vd] "Error while decoding frame" warnings
+    bool networkErrorShown = false;
     std::string watchdog;                // current watchdog message
     bool shaderMissing = false;
 };
@@ -137,6 +142,12 @@ private:
     void refreshEnvironment();
 
     void copyLogToUsb();
+
+    void startDnsCheck();
+
+    std::string configOrigin() const;
+
+    std::vector<std::string> dnsLines() const;
 
     std::vector<std::string> environmentLines(bool detailed);
 
@@ -195,6 +206,11 @@ private:
     std::vector<std::string> results;
     std::string menuMessage;
     std::string logCopyStatus;
+    std::string romfsPath;              // PS4Io::getRomFsPath(): "/app0/"
+    DnsCheck dns;
+    double lastStreamClosedUptime = -1;
+    double lastMenuRefresh = 0;
+    std::string lastShaderInfo;         // last "compile_attach_shader: type: X, sha: Y" from mpv
     std::string glInfo;
     bool platformOk = false;
 
@@ -216,6 +232,7 @@ private:
     c2d::Text *envText = nullptr;
     c2d::Text *resultsText = nullptr;
     c2d::Text *messageText = nullptr;
+    c2d::Text *cooldownText = nullptr;
     c2d::Text *hintText = nullptr;
 
     c2d::RectangleShape *diagLayer = nullptr;
@@ -228,7 +245,7 @@ private:
     c2d::Text *overlayWatchdogText = nullptr;
 
     // cached strings to avoid re-laying out unchanged text
-    std::string cacheEnv, cacheResults, cacheMessage, cacheDiag, cacheOverlay, cacheOverlayErr, cacheOverlayWd;
+    std::string cacheEnv, cacheResults, cacheMessage, cacheCooldown, cacheDiag, cacheOverlay, cacheOverlayErr, cacheOverlayWd;
 };
 
 #endif // PS4IPTV_TEST_APP_H

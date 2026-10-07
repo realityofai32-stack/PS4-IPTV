@@ -23,5 +23,11 @@ $cmd = "set `"PATH=${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;%P
 cmd /c $cmd
 if ($LASTEXITCODE -ne 0) { throw 'host test build failed' }
 
+# config_check.exe: the app's own parser/redaction run against a real test_streams.txt
+$sources2 = "`"$t\host-tests\config_check.cpp`" `"$t\src\redact.cpp`" `"$t\src\stream_config.cpp`""
+$cmd2 = "set `"PATH=${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;%PATH%`" && $vcvars >nul && cl /nologo /std:c++17 /EHsc /W4 /WX /utf-8 /Fe`"$Out\config_check.exe`" /Fo`"$Out\\`" $sources2"
+cmd /c $cmd2
+if ($LASTEXITCODE -ne 0) { throw 'config_check build failed' }
+
 & "$Out\host_tests.exe"
 if ($LASTEXITCODE -ne 0) { throw 'host tests failed' }

@@ -17,7 +17,7 @@ endif ()
 
 set(PLATFORM_PS4 ON CACHE BOOL "Sony PS4 target platform" FORCE)
 
-set(APP_VERSION "0.1.0")
+set(APP_VERSION "0.2.0")
 set(APP_TITLE_ID "IPTT00001")
 set(APP_PKG_TITLE "PS4 IPTV Playback Test")
 set(APP_PKG_VERSION "01.00")
@@ -72,6 +72,7 @@ set(APP_SOURCES
         src/stream_config.cpp
         src/test_env.cpp
         src/ffmpeg_info.cpp
+        src/net_check.cpp
         )
 set(PPLAY_DERIVED_SOURCES
         src/pplay/mpv.cpp
@@ -114,14 +115,23 @@ target_link_libraries(${PROJECT_NAME}
 ###################
 # PKG
 ###################
+# Private stream configuration (git-ignored, contains credentials) packaged at the PKG root, which the
+# app reads as /app0/test_streams.txt - the romfs mechanism pPlay uses for its skin (libcross2d
+# PS4Io::getRomFsPath() = "/app0/"). The resulting PKG must therefore never be shared.
+set(PS4IPTV_TEST_STREAMS_FILE "${REPO_ROOT}/config/test_streams.txt" CACHE FILEPATH
+        "private TS/HLS URL file packaged into the playback test PKG")
+
 set(PKG_ROMFS "${CMAKE_BINARY_DIR}/pkg_romfs")
 add_custom_target(${PROJECT_NAME}_data
+        COMMAND ${CMAKE_COMMAND} -DSTREAMS_FILE=${PS4IPTV_TEST_STREAMS_FILE}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_test_streams.cmake"
         COMMAND ${CMAKE_COMMAND} -E remove_directory "${PKG_ROMFS}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${PKG_ROMFS}/sce_sys"
         # same system modules / about file as pPlay's PKG (data/ps4/romfs)
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${PPLAY_DIR}/data/ps4/romfs/sce_module" "${PKG_ROMFS}/sce_module"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${PPLAY_DIR}/data/ps4/romfs/sce_sys/about" "${PKG_ROMFS}/sce_sys/about"
         COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon0.png" "${PKG_ROMFS}/sce_sys/icon0.png"
+        COMMAND ${CMAKE_COMMAND} -E copy "${PS4IPTV_TEST_STREAMS_FILE}" "${PKG_ROMFS}/test_streams.txt"
         VERBATIM
         )
 

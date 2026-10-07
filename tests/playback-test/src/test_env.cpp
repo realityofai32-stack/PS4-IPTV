@@ -23,6 +23,25 @@ namespace {
         return stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
     }
 
+    std::vector<std::string> listDir(const char *path, std::string &error) {
+        std::vector<std::string> entries;
+        DIR *dir = opendir(path);
+        if (dir == nullptr) {
+            error = std::string("opendir(") + path + ") failed: errno " + std::to_string(errno) + " ("
+                    + strerror(errno) + ")";
+            return entries;
+        }
+        struct dirent *ent;
+        while ((ent = readdir(dir)) != nullptr && entries.size() < 64) {
+            if (strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0) {
+                entries.emplace_back(ent->d_name);
+            }
+        }
+        closedir(dir);
+        std::sort(entries.begin(), entries.end());
+        return entries;
+    }
+
     bool readFile(const std::string &path, std::string &out, std::string &error) {
         FILE *f = fopen(path.c_str(), "rb");
         if (f == nullptr) {
@@ -45,22 +64,11 @@ namespace {
     }
 }
 
-TestEnv probeTestEnv(const std::string &dataDir) {
+TestEnv probeTestEnv(const std::string &dataDir, const std::string &romfsDir) {
     TestEnv env;
 
-    DIR *dir = opendir("/mnt");
-    if (dir != nullptr) {
-        struct dirent *ent;
-        while ((ent = readdir(dir)) != nullptr) {
-            if (strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0) {
-                env.mntEntries.emplace_back(ent->d_name);
-            }
-        }
-        closedir(dir);
-        std::sort(env.mntEntries.begin(), env.mntEntries.end());
-    } else {
-        env.mntError = "opendir(/mnt) failed: errno " + std::to_string(errno) + " (" + strerror(errno) + ")";
-    }
+    env.rootEntries = listDir("/", env.rootError);
+    env.mntEntries = listDir("/mnt", env.mntError);
 
     std::vector<std::string> roots;
     for (int i = 0; i < 8; i++) {
@@ -76,8 +84,18 @@ TestEnv probeTestEnv(const std::string &dataDir) {
     }
     roots.push_back(dataDir);
 
+    // config: packaged in the PKG first (no USB dependency), then the data dir, then USB roots
+    std::vector<std::string> configRoots;
+    configRoots.push_back(romfsDir);
+    configRoots.push_back(dataDir);
     for (const auto &root: roots) {
+        if (root != dataDir) {
+            configRoots.push_back(root);
+        }
+    }
+    for (const auto &root: configRoots) {
         std::string path = root + CONFIG_FILE;
+        env.configCandidates.push_back(path);
         if (isFile(path)) {
             std::string content, error;
             if (readFile(path, content, error)) {

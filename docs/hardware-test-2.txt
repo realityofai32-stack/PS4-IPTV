@@ -1,0 +1,56 @@
+PS4 IPTV - HARDWARE TEST SESSION 2: NETWORK PLAYBACK
+====================================================
+
+Goal: prove TS and HLS network playback (video + audio) on the physical PS4 with the unchanged pPlay
+playback stack (libmpv 0.34.1 / FFmpeg 5.0 / SDL2 2.0.18), and stop/reopen without restarting the app.
+Local video+audio was already proven in session 1 with untouched pPlay.
+
+The PKG contains the stream URLs (packaged test_streams.txt, read from /app0/). No USB file is used.
+THE PKG CONTAINS YOUR CREDENTIALS: do not share it, delete it from the USB stick after installing.
+
+IMPORTANT - PROVIDER CONNECTION LIMIT
+  Measured from the PC: after a stream connection closes, this provider answers HTTP 403 for
+  30+ seconds (403 at 15 s and 30 s, OK again at ~45-60 s). Between tests, WAIT until the menu says
+  "OK to start the next test" (60 s countdown on the menu). Make sure nothing else (PC, phone, TV app)
+  is using the account during the test.
+
+0. INSTALL
+   Install IV0001-IPTT00001_00-IPTT000010100000.pkg (same title as before: reinstall/overwrite it;
+   if the installer refuses, delete the old "PS4 IPTV Playback Test" first). The menu must show v0.2.0.
+
+1. MENU CHECK - PHOTO 1
+   Expected on the right:  Log file: OK   mpv: OK   Config: /app0/test_streams.txt (packaged in the PKG)
+                           TS: READY http://...   HLS: READY http://...
+                           DNS: <host> -> <ip address>        (if DNS says FAILED, note the error text)
+
+2. NETWORK TS TEST -> X
+   Watch for OPENING -> BUFFERING -> PLAYING. Watch ~30 s.     RECORD video yes/no, audio yes/no
+   PHOTO 2 (overlay: VIDEO/AUDIO lines, errors in red). Circle -> back to the menu.
+
+3. Wait for "OK to start the next test" (60 s).
+   NETWORK HLS TEST -> X, ~30 s.                               RECORD video/audio. PHOTO 3. Circle.
+
+4. Wait 60 s. NETWORK TS TEST again (reopen after a full cycle) -> ~20 s, PHOTO 4, Circle.
+
+5. Wait 60 s. NETWORK HLS TEST again -> ~20 s, PHOTO 5, Circle.
+
+6. Options -> diagnostics page. PHOTO 6. Circle. Then EXIT.
+
+If a test does not reach PLAYING: wait ~25 s for the red/yellow messages, take the photo, press Circle
+(twice if it says mpv has not confirmed the stop). The app must stay alive.
+
+AFTER THE TEST
+   Report: video/audio yes/no for steps 2-5, photos 1-6.
+   Optional but useful: /data/PS4IPTVTest/log.txt via FTP (GoldHEN FTP, port 2121) - credentials are
+   redacted in it. Delete the PKG from the USB stick.
+   Also tell me: in pPlay (session 1), which folders did you open to reach the video on the USB stick?
+
+WHAT THE RESULTS MEAN
+   DNS ... FAILED ............................ PS4 name resolution (PacBrew musl getaddrinfo) - not the provider.
+   NETWORK OPEN FAILED: HTTP error 403 ....... provider connection slot still busy (wait longer) or account in use.
+   NETWORK OPEN FAILED: other ................ connection/redirect problem; the log has FFmpeg's exact error.
+   DEMUX FAILED .............................. data arrived but was not recognised as MPEG-TS/HLS.
+   RENDERER SHADER MISSING ................... video format needs a shader pPlay's PS4 mpv lacks (audio may play).
+   AUDIO INIT FAILED ......................... PS4 audio output (sceAudioOut via SDL2) problem.
+   TS works, HLS fails ....................... HLS-specific: segment opens (see "HLS SEGMENT" lines).
+   first run works, repeat fails ............. cleanup/reopen problem (or provider limit if HTTP 403).

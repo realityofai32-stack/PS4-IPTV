@@ -14,14 +14,18 @@ namespace {
     const double WD_STOP_TIMEOUT = 8;  // keep in sync with app_playback.cpp
     const int INPUT_REPEAT_MS = 250;
 
+    // local playback is proven by untouched pPlay on hardware: this build only tests the network path
     const char *const MENU_LABELS[] = {
-            "LOCAL FILE TEST",
             "NETWORK TS TEST",
             "NETWORK HLS TEST",
             "SHOW DIAGNOSTICS",
             "EXIT"
     };
-    const int MENU_COUNT = 5;
+    const int MENU_COUNT = 4;
+
+    // measured with scripts/preflight-streams.py: the provider answered HTTP 403 15 s and 30 s after a
+    // stream connection closed, and 200 again after ~45-60 s (one connection per account)
+    const double PROVIDER_COOLDOWN = 60;
 
     // libcross2d key slot -> SDL joystick button index of PacBrew's SDL2 PS4 driver
     // (src/joystick/ps4/SDL_sysjoystick.c @ bf797a5: 0 cross, 1 circle, 2 square, 3 triangle,
@@ -152,8 +156,11 @@ App::App(const Vector2f &size) : C2DRenderer(size) {
               mpv_error_string(mpv->getInitError()));
     }
 
+    // same romfs path pPlay reads its skin from (PS4Io::getRomFsPath() = "/app0/")
+    romfsPath = getIo()->getRomFsPath();
     buildUi();
     refreshEnvironment();
+    startDnsCheck();
     showScreen(Screen::Menu);
     LOG_I("app", "ready");
 }
@@ -207,7 +214,8 @@ void App::buildUi() {
         menuItems.push_back(makeText(menuLayer, MENU_LABELS[i], 38, 90, 180 + (float) i * 72));
     }
     envText = makeText(menuLayer, "", 24, 780, 180, Color(210, 215, 220));
-    messageText = makeText(menuLayer, "", 26, 60, 560, Color(255, 90, 90));
+    messageText = makeText(menuLayer, "", 26, 60, 500, Color(255, 90, 90));
+    cooldownText = makeText(menuLayer, "", 26, 60, 580, Color::Yellow);
     resultsText = makeText(menuLayer, "", 22, 60, 640, Color(200, 230, 200));
     hintText = makeText(menuLayer, "D-pad / left stick: select     X: run test     Circle: stop / back     "
                                    "Options: diagnostics     Triangle (during playback): hide overlay",
@@ -282,13 +290,14 @@ std::vector<std::string> App::environmentLines(bool detailed) {
         l.push_back("mpv:        " + mpvState);
         l.push_back("FFmpeg:     " + ffmpeg.version + "   http " + (ffmpeg.hasHttp ? "yes" : "NO")
                     + " / https " + (ffmpeg.hasHttps ? "yes" : "NO"));
-        l.push_back("USB:        " + truncate(usb, 70));
-        l.push_back("Local file: " + (env.localFile.empty() ? std::string("NOT FOUND (put test.mp4 on USB root)")
-                                                            : env.localFile));
-        l.push_back("Config:     " + (env.config.found ? env.config.path
-                                                       : std::string("NOT FOUND (test_streams.txt on USB root)")));
-        l.push_back("TS URL:     " + describe(ts, env.config.tsUrl));
-        l.push_back("HLS URL:    " + describe(hls, env.config.hlsUrl));
+        l.push_back("Config:     " + configOrigin());
+        l.push_back("TS:         " + std::string(env.config.tsUrl.empty() || !ts.valid ? "NOT READY  " : "READY  ")
+                    + describe(ts, env.config.tsUrl));
+        l.push_back("HLS:        " + std::string(env.config.hlsUrl.empty() || !hls.valid ? "NOT READY  " : "READY  ")
+                    + describe(hls, env.config.hlsUrl));
+        for (const auto &line: dnsLines()) {
+            l.push_back("DNS:        " + line);
+        }
         for (const auto &p: env.config.problems) {
             l.push_back("Config:     !! " + p);
         }
@@ -315,15 +324,20 @@ std::vector<std::string> App::environmentLines(bool detailed) {
         dec += d + " ";
     }
     l.push_back("DEMUXERS: " + dem + "  DECODERS: " + dec);
+    l.push_back("CONFIG: " + configOrigin());
+    for (const auto &line: dnsLines()) {
+        l.push_back("DNS: " + line);
+    }
+    std::string root = env.rootError;
+    for (const auto &e: env.rootEntries) {
+        root += e + " ";
+    }
     std::string mnt = env.mntError;
     for (const auto &e: env.mntEntries) {
         mnt += e + " ";
     }
-    l.push_back("/mnt: " + mnt);
-    l.push_back("USB: " + usb);
-    l.push_back("LOCAL: " + (env.localFile.empty() ? std::string("not found") : env.localFile) + "   searched: "
-                + std::to_string(env.localCandidates.size()) + " locations");
-    l.push_back("CONFIG: " + (env.config.found ? env.config.path : std::string("not found")));
+    l.push_back("FS (evidence only) '/': " + root);
+    l.push_back("FS (evidence only) '/mnt': " + mnt + "   USB: " + usb);
     l.push_back("  TS:  " + describe(ts, env.config.tsUrl));
     l.push_back("  HLS: " + describe(hls, env.config.hlsUrl));
     if (!env.config.userAgent.empty()) {
@@ -338,6 +352,32 @@ std::vector<std::string> App::environmentLines(bool detailed) {
     return l;
 }
 
+std::string App::configOrigin() const {
+    if (!env.config.found) {
+        std::string searched;
+        for (const auto &c: env.configCandidates) {
+            searched += c + " ";
+        }
+        return "NOT FOUND (searched " + searched + ") - rebuild with config/test_streams.txt";
+    }
+    bool packaged = env.config.path.compare(0, romfsPath.size(), romfsPath) == 0;
+    return env.config.path + (packaged ? "  (packaged in the PKG)" : "  (override, not the packaged copy)");
+}
+
+std::vector<std::string> App::dnsLines() const {
+    std::vector<std::string> lines;
+    for (const auto &r: dns.results()) {
+        if (!r.done) {
+            lines.push_back(r.host + " resolving...");
+        } else if (r.ok) {
+            lines.push_back(diag::format("%s -> %s (%.0f ms)", r.host.c_str(), r.addresses.c_str(), r.ms));
+        } else {
+            lines.push_back(diag::format("%s FAILED: %s", r.host.c_str(), r.error.c_str()));
+        }
+    }
+    return lines;
+}
+
 void App::updateMenuText() {
     menuHighlight->setPosition(70, 180 + (float) menuIndex * 72 - 4);
     for (int i = 0; i < MENU_COUNT; i++) {
@@ -350,6 +390,18 @@ void App::updateMenuText() {
     }
     setTextCached(envText, cacheEnv, e);
     setTextCached(messageText, cacheMessage, menuMessage);
+    std::string cooldown;
+    if (lastStreamClosedUptime >= 0) {
+        double ago = diag::uptime() - lastStreamClosedUptime;
+        if (ago < PROVIDER_COOLDOWN) {
+            cooldown = diag::format("Last stream closed %.0f s ago. This provider keeps the connection slot busy for "
+                                    "30-60 s (HTTP 403 meanwhile): wait %.0f s before the next test.",
+                                    ago, PROVIDER_COOLDOWN - ago);
+        } else {
+            cooldown = diag::format("Last stream closed %.0f s ago: OK to start the next test.", ago);
+        }
+    }
+    setTextCached(cooldownText, cacheCooldown, cooldown);
 
     std::string r = "RESULTS (this session):\n";
     if (results.empty()) {
@@ -413,15 +465,12 @@ void App::handleInput() {
             } else if (pressed & Input::Key::Fire1) {
                 switch (menuIndex) {
                     case 0:
-                        startTest(Source::Local);
-                        break;
-                    case 1:
                         startTest(Source::Ts);
                         break;
-                    case 2:
+                    case 1:
                         startTest(Source::Hls);
                         break;
-                    case 3:
+                    case 2:
                         refreshEnvironment();
                         showScreen(Screen::Diagnostics);
                         break;
@@ -457,11 +506,34 @@ void App::handleInput() {
                 overlayVisible = !overlayVisible;
                 overlayLayer->setVisibility(overlayVisible ? Visibility::Visible : Visibility::Hidden);
             } else if (pressed & Input::Key::Start) {
-                // full diagnostics are shown from the menu; during playback Options shows the overlay
+                // full diagnostics are shown from the menu; during playback Options shows the overlay again
                 overlayVisible = true;
                 overlayLayer->setVisibility(Visibility::Visible);
             }
             break;
+    }
+}
+
+void App::startDnsCheck() {
+    std::vector<std::pair<std::string, std::string>> hosts;
+    for (const auto *url: {&env.config.tsUrl, &env.config.hlsUrl}) {
+        redact::UrlInfo u = redact::parseUrl(*url);
+        if (!u.valid) {
+            continue;
+        }
+        std::string port = u.port.empty() ? (u.scheme == "https" ? "443" : "80") : u.port;
+        bool dup = false;
+        for (const auto &h: hosts) {
+            dup |= h.first == u.host && h.second == port;
+        }
+        if (!dup) {
+            hosts.emplace_back(u.host, port);
+        }
+    }
+    if (!hosts.empty()) {
+        LOG_I("dns", "resolving %d stream host(s) in the background (same getaddrinfo call as FFmpeg tcp.c)",
+              (int) hosts.size());
+        dns.start(hosts);
     }
 }
 
@@ -489,7 +561,7 @@ void App::copyLogToUsb() {
 }
 
 void App::refreshEnvironment() {
-    env = probeTestEnv(APP_DATA_DIR);
+    env = probeTestEnv(APP_DATA_DIR, romfsPath);
     if (!env.config.tsUrl.empty()) {
         redact::addUrl(env.config.tsUrl);
     }
@@ -508,7 +580,11 @@ void App::refreshEnvironment() {
                   u.hasTestFile ? "yes" : "no", u.hasConfig ? "yes" : "no");
         }
     }
-    LOG_I("env", "local test file: %s", env.localFile.empty() ? "NOT FOUND" : env.localFile.c_str());
+    std::string root = env.rootError;
+    for (const auto &e: env.rootEntries) {
+        root += e + " ";
+    }
+    LOG_I("env", "'/' entries (filesystem view of this process): %s", root.c_str());
     if (env.config.found) {
         redact::UrlInfo ts = redact::parseUrl(env.config.tsUrl);
         redact::UrlInfo hls = redact::parseUrl(env.config.hlsUrl);
