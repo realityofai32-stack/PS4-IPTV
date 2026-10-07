@@ -1,6 +1,8 @@
-// Global search over locally cached catalogs (no server request per keystroke).
+// Global search over locally cached catalogs (no server request per keystroke): Live channels, then movies,
+// then series. Opening Search loads the Movies / Series catalogs lazily (saved copy first) if needed.
 
 #include "common.h"
+#include "../core/format.h"
 
 using namespace c2d;
 using namespace iptv;
@@ -29,7 +31,7 @@ namespace {
             empty->setAlign(ui::Align::Center, theme::SCREEN_W);
             empty->setMaxWidth(1200);
             empty->setMaxLines(2);
-            screens::hintBar(this, {{ui::Glyph::Cross, "Watch"}, {ui::Glyph::Triangle, "New search"},
+            screens::hintBar(this, {{ui::Glyph::Cross, "Open"}, {ui::Glyph::Triangle, "New search"},
                                     {ui::Glyph::Circle, "Back"}});
             refresh();
         }
@@ -37,7 +39,23 @@ namespace {
         const char *name() const override { return "search"; }
 
         void onEnter() override {
+            app.vod().openMovies(app.session().profile);
+            app.vod().openSeries(app.session().profile);
+            vodGen = app.vod().generation();
             edit();
+        }
+
+        void tick(double) override {
+            // a catalog finished loading: search again so its results appear
+            if (app.vod().generation() != vodGen) {
+                vodGen = app.vod().generation();
+                if (!query.empty()) {
+                    int keep = list->selected();
+                    run();
+                    list->setSelected(keep);
+                    redraw();
+                }
+            }
         }
 
         int count() override { return (int) results.size(); }
@@ -73,6 +91,18 @@ namespace {
                     row.badge->setFillColor(theme::accentDark());
                     row.name->setText(c.name);
                     row.meta->setText(categoryName(c.categoryId));
+                } else if (r.type == ContentType::Movie) {
+                    const Movie &m = app.vod().movies().items()[(size_t) r.index];
+                    row.badgeText->setText("MOVIE");
+                    row.badge->setFillColor(Color(120, 72, 150));
+                    row.name->setText(m.title);
+                    row.meta->setText(join(m.year > 0 ? std::to_string(m.year) : "", fmt::rating(m.rating)));
+                } else {
+                    const Series &se = app.vod().series().items()[(size_t) r.index];
+                    row.badgeText->setText("SERIES");
+                    row.badge->setFillColor(Color(40, 128, 120));
+                    row.name->setText(se.title);
+                    row.meta->setText(join(se.year > 0 ? std::to_string(se.year) : "", se.genre));
                 }
             }
         }
@@ -118,6 +148,10 @@ namespace {
             ui::Label *meta;
         };
 
+        static std::string join(const std::string &a, const std::string &b) {
+            return a.empty() ? b : b.empty() ? a : a + "   \xC2\xB7   " + b;
+        }
+
         std::string categoryName(const std::string &id) const {
             for (const auto &c: app.session().live.categories()) {
                 if (c.id == id) {
@@ -137,8 +171,14 @@ namespace {
 
         void run() {
             results.clear();
-            for (int i: app.session().live.search(query, 300)) {
+            for (int i: app.session().live.search(query, 150)) {
                 results.push_back({ContentType::Live, i});
+            }
+            for (int i: app.vod().movies().search(query, 200)) {
+                results.push_back({ContentType::Movie, i});
+            }
+            for (int i: app.vod().series().search(query, 150)) {
+                results.push_back({ContentType::Series, i});
             }
             list->setSelected(0);
             refresh();
@@ -159,6 +199,10 @@ namespace {
                     }
                 }
                 app.push(screens::makeLivePlayer(app, liveResults, position));
+            } else if (r.type == ContentType::Movie) {
+                app.push(screens::makeMovieDetail(app, app.vod().movies().items()[(size_t) r.index]));
+            } else {
+                app.push(screens::makeSeriesDetail(app, app.vod().series().items()[(size_t) r.index]));
             }
         }
 
@@ -170,13 +214,17 @@ namespace {
             if (!app.session().liveLoaded) {
                 empty->setText("Nothing to search yet: the channel list is not loaded.");
             } else if (!query.empty() && results.empty()) {
-                empty->setText("No channels match \"" + query + "\".");
+                bool vodPending = app.vod().movieStatus().status == CatalogStatus::Loading
+                                  || app.vod().seriesStatus().status == CatalogStatus::Loading;
+                empty->setText("Nothing matches \"" + query + "\"."
+                               + std::string(vodPending ? " Movies and series are still loading" "\xE2\x80\xA6" : ""));
             } else {
                 empty->setText("");
             }
         }
 
         std::string query;
+        unsigned vodGen = 0;
         std::vector<Result> results;
         std::vector<Row> rows;
         ui::ListView *list;

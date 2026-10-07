@@ -5,6 +5,8 @@
 // panel on the right explains the focused setting and its current value. Up/Down move, Left/Right or X
 // change a value, X runs an action.
 
+#include <algorithm>
+
 #include "common.h"
 #include "build_info.h"
 #include "../platform/log.h"
@@ -111,7 +113,8 @@ namespace {
             }
             if (item.kind == Kind::Choice) {
                 int current = item.choice();
-                int n = std::min((int) item.options.size(), (int) dots.size());
+                // position dots only for short choices (language lists are long)
+                int n = (int) item.options.size() <= (int) dots.size() ? (int) item.options.size() : 0;
                 value->setText(item.options[(size_t) current]);
                 value->setColor(focused ? Color::White : theme::text());
                 value->setPosition(0, ui::Label::centerOffset(theme::BODY, h) - 7);
@@ -262,6 +265,26 @@ namespace {
             }));
         }
 
+        // "" (Auto) + common languages + languages met in played files + the saved choices
+        std::vector<std::string> languageCodes() const {
+            std::vector<std::string> codes = {""};
+            auto addCode = [&codes](const std::string &c) {
+                std::string n = tracks::normalizeLanguage(c);
+                if (!n.empty() && std::find(codes.begin(), codes.end(), n) == codes.end()) {
+                    codes.push_back(n);
+                }
+            };
+            for (const auto &c: tracks::commonLanguages()) {
+                addCode(c);
+            }
+            for (const auto &c: app.session().seenLanguages) {
+                addCode(c);
+            }
+            addCode(app.settings().get().audioLanguage);
+            addCode(app.settings().get().subtitleLanguage);
+            return codes;
+        }
+
         void confirm(const std::string &title, const std::string &message, std::function<void()> action) {
             app.push(screens::makeDialog(app, title, message, {"Cancel", "Clear"}, [action](int c) {
                 if (c == 1) {
@@ -357,6 +380,123 @@ namespace {
             };
             items.push_back(retry);
 
+            // ---- movies / episodes: languages and subtitles
+            std::vector<std::string> codes = languageCodes();
+            std::vector<std::string> names;
+            for (const auto &c: codes) {
+                names.push_back(c.empty() ? "Auto" : tracks::languageName(c));
+            }
+            auto indexOfCode = [codes](const std::string &code) {
+                for (size_t i = 0; i < codes.size(); i++) {
+                    if (codes[i] == code) {
+                        return (int) i;
+                    }
+                }
+                return 0;
+            };
+
+            SettingItem audio;
+            audio.kind = Kind::Choice;
+            audio.caption = "Preferred audio language";
+            audio.options = names;
+            audio.options[0] = "Auto (file default)";
+            audio.choice = [&s, indexOfCode] { return indexOfCode(s.audioLanguage); };
+            audio.setChoice = [this, &s, codes](int i) {
+                s.audioLanguage = codes[(size_t) i];
+                save();
+            };
+            audio.describe = [] {
+                return std::string("Movies and episodes start with an audio track in this language when the file has "
+                                   "one (commentary tracks are skipped). Auto plays the track the file marks as "
+                                   "default - usually the original or the provider's main language. You can switch "
+                                   "tracks during playback with the OPTIONS button.");
+            };
+            items.push_back(audio);
+
+            SettingItem subMode;
+            subMode.kind = Kind::Choice;
+            subMode.caption = "Subtitles";
+            subMode.options = {"Off", "Auto", "On when available"};
+            subMode.choice = [&s] { return (int) s.subtitleMode; };
+            subMode.setChoice = [this, &s](int i) {
+                s.subtitleMode = (tracks::SubtitleMode) i;
+                save();
+            };
+            subMode.describe = [&s] {
+                switch (s.subtitleMode) {
+                    case tracks::SubtitleMode::Off:
+                        return std::string("Off: subtitles never turn on by themselves. You can still choose one "
+                                           "during playback with the OPTIONS button.");
+                    case tracks::SubtitleMode::Always:
+                        return std::string("On when available: a subtitle track is shown whenever the file has one - "
+                                           "in your subtitle language if possible.");
+                    default:
+                        return std::string("Auto: subtitles in your subtitle language turn on when the audio is in "
+                                           "another language. Tracks the file marks as forced or default are also "
+                                           "shown.");
+                }
+            };
+            items.push_back(subMode);
+
+            SettingItem subLang;
+            subLang.kind = Kind::Choice;
+            subLang.caption = "Preferred subtitle language";
+            subLang.options = names;
+            subLang.options[0] = "Same as audio";
+            subLang.choice = [&s, indexOfCode] { return indexOfCode(s.subtitleLanguage); };
+            subLang.setChoice = [this, &s, codes](int i) {
+                s.subtitleLanguage = codes[(size_t) i];
+                save();
+            };
+            subLang.describe = [] {
+                return std::string("The language subtitles are chosen in. \"Same as audio\" uses the preferred audio "
+                                   "language. Subtitles are embedded in the video files (the provider sends no separate "
+                                   "subtitle files).");
+            };
+            items.push_back(subLang);
+
+            SettingItem subSize;
+            subSize.kind = Kind::Choice;
+            subSize.caption = "Subtitle size";
+            subSize.options = {"Small", "Medium", "Large"};
+            subSize.choice = [&s] { return std::min(std::max(s.subtitleSize, 0), 2); };
+            subSize.setChoice = [this, &s](int i) {
+                s.subtitleSize = i;
+                save();
+            };
+            subSize.describe = [] {
+                return std::string("Text size of text subtitles (SRT, ASS). Also in the OPTIONS menu during playback.");
+            };
+            items.push_back(subSize);
+
+            SettingItem subPos;
+            subPos.kind = Kind::Choice;
+            subPos.caption = "Subtitle position";
+            subPos.options = {"Bottom", "Raised"};
+            subPos.choice = [&s] { return s.subtitlePosition == 1 ? 1 : 0; };
+            subPos.setChoice = [this, &s](int i) {
+                s.subtitlePosition = i;
+                save();
+            };
+            subPos.describe = [] {
+                return std::string("Raised moves subtitles up, away from the bottom edge (useful when the TV crops "
+                                   "the picture).");
+            };
+            items.push_back(subPos);
+
+            SettingItem subShadow;
+            subShadow.kind = Kind::Toggle;
+            subShadow.caption = "Subtitle shadow";
+            subShadow.toggle = [&s] { return s.subtitleShadow; };
+            subShadow.setToggle = [this, &s](bool on) {
+                s.subtitleShadow = on;
+                save();
+            };
+            subShadow.describe = [] {
+                return std::string("Adds a dark shadow behind the outlined subtitle text, for bright scenes.");
+            };
+            items.push_back(subShadow);
+
             SettingItem tech;
             tech.kind = Kind::Toggle;
             tech.caption = "Show technical playback info";
@@ -395,10 +535,25 @@ namespace {
                 save();
             };
             resume.describe = [] {
-                return std::string("Continue movies and episodes where you stopped. Takes effect when Movies and "
-                                   "Series arrive in a later version.");
+                return std::string("On: movies and episodes continue where you stopped (Continue Watching on Home). "
+                                   "Off: they always start from the beginning; progress is still remembered. "
+                                   "Never applies to Live TV.");
             };
             items.push_back(resume);
+
+            SettingItem autoNext;
+            autoNext.kind = Kind::Toggle;
+            autoNext.caption = "Auto-play next episode";
+            autoNext.toggle = [&s] { return s.autoPlayNextEpisode; };
+            autoNext.setToggle = [this, &s](bool on) {
+                s.autoPlayNextEpisode = on;
+                save();
+            };
+            autoNext.describe = [] {
+                return std::string("On: when an episode ends, the next one starts after a 10 second countdown. Off: "
+                                   "the next episode is offered and starts when you press X.");
+            };
+            items.push_back(autoNext);
 
             SettingItem clearImages;
             clearImages.caption = "Clear image cache";
@@ -421,8 +576,8 @@ namespace {
             SettingItem clearMeta;
             clearMeta.caption = "Clear metadata cache";
             clearMeta.run = [this] {
-                confirm("Clear metadata cache?", "The saved channel lists are deleted. The list loaded now stays "
-                                                 "until you reconnect.", [this] {
+                confirm("Clear metadata cache?", "The saved channel, movie and series lists are deleted. The lists "
+                                                 "loaded now stay until you reconnect.", [this] {
                     app.jobs().submit(JobPriority::High, "clear-metadata", [](const CancelToken &) {
                         CatalogCache(APP_DATA_DIR).clearAll();
                     }, guarded([this] {
@@ -432,8 +587,9 @@ namespace {
                 });
             };
             clearMeta.describe = [] {
-                return std::string("Deletes the saved copy of your channel lists, which is used when the provider "
-                                   "cannot be reached at startup.");
+                return std::string("Deletes the saved copies of your channel, movie and series lists. They make "
+                                   "Movies and Series open instantly and are used when the provider cannot be "
+                                   "reached; they are downloaded again when needed.");
             };
             items.push_back(clearMeta);
 

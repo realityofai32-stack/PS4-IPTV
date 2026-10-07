@@ -359,6 +359,181 @@ namespace ui {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
+    PosterView::PosterView(const FloatRect &rect, unsigned textSize) : RectangleShape(rect) {
+        setCornersRadius(theme::RADIUS_SMALL);
+        setCornerPointCount(8);
+        setFillColor(theme::surfaceRaised());
+        image = new RectangleShape(FloatRect(0, 0, 1, 1));
+        image->setFillColor(Color::White);
+        image->setVisibility(Visibility::Hidden);
+        add(image);
+        fallback = new Label("", textSize, Weight::SemiBold, theme::textDim());
+        fallback->setAlign(Align::Center, rect.width);
+        fallback->setMaxWidth(rect.width - 20);
+        fallback->setMaxLines(4);
+        add(fallback);
+        barTrack = box(this, FloatRect(10, rect.height - 16, rect.width - 20, 6), Color(0, 0, 0, 170), 3);
+        barFill = box(barTrack, FloatRect(0, 0, 1, 6), theme::accent(), 3);
+        barTrack->setVisibility(Visibility::Hidden);
+        float r = std::max(12.0f, rect.width * 0.09f);
+        badge = new CircleShape(r);
+        badge->setPointCount(20);
+        badge->setFillColor(theme::success());
+        badge->setPosition(rect.width - 2 * r - 8, 8);
+        add(badge);
+        badgeMark = new Label("\xE2\x9C\x93", (unsigned) (r * 1.3f), Weight::SemiBold, Color::White);  // check mark
+        badgeMark->setAlign(Align::Center, 2 * r);
+        badgeMark->setPosition(0, Label::centerOffset((unsigned) (r * 1.3f), 2 * r));
+        badge->add(badgeMark);
+        badge->setVisibility(Visibility::Hidden);
+    }
+
+    void PosterView::set(const std::string &title, const std::shared_ptr<Texture> &texture, const Vector2i &size) {
+        bool hasImage = texture != nullptr && size.x > 0 && size.y > 0;
+        if (title == currentTitle && hasImage == showingImage && (!hasImage || texture == shown)) {
+            return;
+        }
+        currentTitle = title;
+        showingImage = hasImage;
+        if (!hasImage) {
+            image->setVisibility(Visibility::Hidden);   // keeps pointing at `shown`, still referenced
+            fallback->setText(title);
+            fallback->setPosition(0, std::round((getSize().y - fallback->height()) / 2));
+            fallback->setVisibility(Visibility::Visible);
+            return;
+        }
+        if (texture != shown) {
+            image->setTexture(texture.get(), true);
+            shown = texture;
+        }
+        float tw = getSize().x;
+        float th = getSize().y;
+        float tileAspect = tw / th;
+        float imgAspect = (float) size.x / (float) size.y;
+        if (std::fabs(imgAspect / tileAspect - 1.0f) < 0.15f) {
+            // close to the tile shape: fill it, cropping the longer side evenly (no distortion)
+            IntRect crop(0, 0, size.x, size.y);
+            if (imgAspect > tileAspect) {
+                crop.width = (int) std::round((float) size.y * tileAspect);
+                crop.left = (size.x - crop.width) / 2;
+            } else {
+                crop.height = (int) std::round((float) size.x / tileAspect);
+                crop.top = (size.y - crop.height) / 2;
+            }
+            image->setTextureRect(crop);
+            image->setSize(tw, th);
+            image->setPosition(0, 0);
+        } else {
+            image->setTextureRect(IntRect(0, 0, size.x, size.y));
+            float scale = std::min(tw / (float) size.x, th / (float) size.y);
+            float w = std::round((float) size.x * scale);
+            float h = std::round((float) size.y * scale);
+            image->setSize(w, h);
+            image->setPosition(std::round((tw - w) / 2), std::round((th - h) / 2));
+        }
+        image->setVisibility(Visibility::Visible);
+        fallback->setVisibility(Visibility::Hidden);
+    }
+
+    void PosterView::setProgress(float fraction) {
+        bool show = fraction > 0.001f;
+        barTrack->setVisibility(show ? Visibility::Visible : Visibility::Hidden);
+        if (show) {
+            float w = barTrack->getSize().x;
+            barFill->setSize(std::max(6.0f, std::round(w * std::min(1.0f, fraction))), 6);
+        }
+    }
+
+    void PosterView::setWatched(bool watched) {
+        badge->setVisibility(watched ? Visibility::Visible : Visibility::Hidden);
+    }
+
+    void PosterView::setFocused(bool focused) {
+        setOutlineColor(theme::accent());
+        setOutlineThickness(focused ? 4 : 0);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    GridView::GridView(const FloatRect &rect, float cellW, float cellH, int columns, int visibleRows, Adapter *a)
+            : RectangleShape(rect), adapter(a), cols(std::max(1, columns)), rows(std::max(1, visibleRows)) {
+        setFillColor(Color::Transparent);
+        float usableW = rect.width - ScrollBar::WIDTH - ScrollBar::GAP;
+        float gapX = cols > 1 ? std::max(0.0f, (usableW - (float) cols * cellW) / (float) (cols - 1)) : 0;
+        float gapY = rows > 1 ? std::max(0.0f, (rect.height - (float) rows * cellH) / (float) (rows - 1)) : 0;
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                C2DObject *cell = adapter->createCell(cellW, cellH);
+                ((Transformable *) cell)->setPosition(std::round((float) c * (cellW + gapX)),
+                                                      std::round((float) r * (cellH + gapY)));
+                add(cell);
+                cells.push_back(cell);
+            }
+        }
+        bar = new ScrollBar(rect.width - ScrollBar::WIDTH, 0, rect.height);
+        add(bar);
+        reload();
+    }
+
+    void GridView::reload() {
+        int count = adapter->count();
+        sel = count == 0 ? 0 : std::min(std::max(sel, 0), count - 1);
+        layout();
+    }
+
+    void GridView::setSelected(int index) {
+        sel = index;
+        reload();
+    }
+
+    bool GridView::navigate(int dx, int dy) {
+        int target = scroll::gridMove(sel, dx, dy, cols, adapter->count());
+        if (target < 0 || target == sel) {
+            return false;
+        }
+        sel = target;
+        layout();
+        return true;
+    }
+
+    bool GridView::page(int pages) {
+        int target = scroll::gridPage(sel, pages, rows, cols, adapter->count());
+        if (target == sel) {
+            return false;
+        }
+        sel = target;
+        layout();
+        return true;
+    }
+
+    void GridView::setFocused(bool f) {
+        if (f != focus) {
+            focus = f;
+            bar->setActive(focus);
+            layout();
+        }
+    }
+
+    void GridView::layout() {
+        int count = adapter->count();
+        int totalRows = count == 0 ? 0 : (count - 1) / cols + 1;
+        // keep one row of context above/below while scrolling (selection in the middle row of three)
+        firstRow = scroll::firstVisible(sel / cols, firstRow, rows, totalRows, rows >= 3 ? 1 : 0);
+        for (int i = 0; i < (int) cells.size(); i++) {
+            int index = firstRow * cols + i;
+            C2DObject *cell = cells[(size_t) i];
+            if (index < count) {
+                cell->setVisibility(Visibility::Visible);
+                adapter->bindCell(cell, index, focus && index == sel);
+            } else {
+                cell->setVisibility(Visibility::Hidden);
+            }
+        }
+        bar->setRange(totalRows, rows, firstRow);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
     ListView::ListView(const FloatRect &rect, float rowHeight, float spacing, Adapter *a)
             : RectangleShape(rect), adapter(a) {
         setFillColor(Color::Transparent);

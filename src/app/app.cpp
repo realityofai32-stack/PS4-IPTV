@@ -46,7 +46,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
         LOG_E("app", "UI fonts missing from the package");
     }
     http::globalInit(romfsPath + "assets/cacert.pem", std::string("PS4IPTV/") + APP_VERSION);
-    jobSystem.start(3);
+    jobSystem.start(4);   // API + catalog downloads + up to 2 image loads, never all blocked by one kind
 
     std::string warning;
     std::string err;
@@ -74,6 +74,23 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     // the proven pPlay playback backend; created once, like pPlay's Player (needs the GL context)
     std::string mpvDir = std::string(APP_DATA_DIR) + "mpv";
     fs::ensureDir(mpvDir);
+    // Text subtitles are drawn by libass, which has no system fonts on the PS4: mpv 0.34.1 passes
+    // <config-dir>/subfont.ttf to libass as the default font (sub/ass_mp.c), like pPlay's data dir does.
+    // The packaged UI font (Latin, Greek, Cyrillic incl. Turkish) is copied there once.
+    {
+        std::string src = romfsPath + "assets/fonts/Inter-SemiBold.ttf";
+        std::string dst = fs::join(mpvDir, "subfont.ttf");
+        int64_t size = fs::fileSize(src);
+        if (size > 0 && fs::fileSize(dst) != size) {
+            std::string font;
+            std::string err;
+            if (fs::readFile(src, font, 8u * 1024 * 1024, &err) && fs::writeFileReplace(dst, font, &err)) {
+                LOG_I("app", "subtitle font installed (%lld bytes)", (long long) size);
+            } else {
+                LOG_W("app", "subtitle font not installed: %s", err.c_str());
+            }
+        }
+    }
     if (!player.init(mpvDir)) {
         LOG_E("app", "%s", player.initError().c_str());
     }

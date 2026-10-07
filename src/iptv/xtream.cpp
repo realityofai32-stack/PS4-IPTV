@@ -362,11 +362,38 @@ namespace xtream {
                 break;
             }
         }
-        // remove the series name at the start
-        std::string name = url::lower(url::trim(seriesName));
-        if (!name.empty() && l.compare(0, name.size(), name) == 0) {
-            t.erase(0, name.size());
+        // remove the series name at the start, ignoring punctuation and spaces ("Handmaids" vs "Handmaid's")
+        std::string loose;
+        for (char c: url::lower(seriesName)) {
+            if (isalnum((unsigned char) c) || (unsigned char) c >= 0x80) {
+                loose += c;
+            }
         }
+        size_t matched = 0;
+        size_t cut = 0;
+        for (size_t i = 0; i < t.size() && matched < loose.size(); i++) {
+            char c = (char) tolower((unsigned char) t[i]);
+            if (!(isalnum((unsigned char) c) || (unsigned char) c >= 0x80)) {
+                continue;
+            }
+            if (c != loose[matched]) {
+                break;
+            }
+            matched++;
+            cut = i + 1;
+        }
+        bool wordEnds = cut >= t.size() || !isalnum((unsigned char) t[cut]);   // "Showtime" is not "Show"
+        if (!loose.empty() && matched == loose.size() && wordEnds) {
+            t.erase(0, cut);
+        }
+        // the removed episode code may leave double spaces
+        std::string collapsed;
+        for (char c: t) {
+            if (!(c == ' ' && !collapsed.empty() && collapsed.back() == ' ')) {
+                collapsed += c;
+            }
+        }
+        t = collapsed;
         auto sep = [](char c) { return c == ' ' || c == '-' || c == ':' || c == '|' || c == '.' || c == '_'; };
         while (!t.empty() && sep(t.front())) {
             t.erase(t.begin());

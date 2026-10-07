@@ -87,9 +87,11 @@ TEST(vod_title_year_and_cleaning) {
     CHECK(xtream::cleanText(" Drama ") == "Drama");
     CHECK(xtream::cleanEpisodeTitle("American Hostage S01-E01", "American Hostage").empty());
     CHECK(xtream::cleanEpisodeTitle("Crossing Lines S01E02 - The Hunter", "Crossing Lines") == "The Hunter");
-    CHECK(xtream::cleanEpisodeTitle("The Handmaids Tale S01-E01", "The Handmaid's Tale").empty()
-          == false);   // name differs (apostrophe): only the episode code is removed
-    CHECK(xtream::cleanEpisodeTitle("The Handmaids Tale S01-E01", "The Handmaid's Tale") == "The Handmaids Tale");
+    // the provider drops punctuation from episode titles: "Handmaids" for "Handmaid's"
+    CHECK(xtream::cleanEpisodeTitle("The Handmaids Tale S01-E01", "The Handmaid's Tale").empty());
+    CHECK(xtream::cleanEpisodeTitle("Trust Me - The False Prophet S01-E01", "Trust Me: The False Prophet").empty());
+    CHECK(xtream::cleanEpisodeTitle("Showtime S01E01 Pilot", "Show") == "Showtime Pilot");   // whole words only
+    CHECK(xtream::cleanEpisodeTitle("Dark S01E01 Secrets", "Dark") == "Secrets");
     CHECK(xtream::cleanEpisodeTitle("Pilot", "Show") == "Pilot");
     CHECK(xtream::cleanEpisodeTitle("Show s2 e10: Finale", "Show") == "Finale");
     CHECK(xtream::cleanEpisodeTitle("Mission S1 Starts", "X") == "Mission S1 Starts");   // no episode code
@@ -315,4 +317,22 @@ TEST(vod_real_provider_samples_if_available) {
         }
     }
     std::printf("     %d real detail responses parsed\n", infos);
+}
+
+#include "../../src/core/format.h"
+
+TEST(vod_display_formatting) {
+    CHECK(fmt::clock(0) == "0:00" && fmt::clock(2533) == "42:13" && fmt::clock(3723) == "1:02:03");
+    CHECK(fmt::clock(2533, true) == "0:42:13" && fmt::clock(-5) == "0:00");
+    CHECK(fmt::clockPair(2533, 6920) == "0:42:13 / 1:55:20");
+    CHECK(fmt::clockPair(65, 2400) == "1:05 / 40:00");
+    CHECK(fmt::clockPair(65, 0) == "1:05");
+    CHECK(fmt::duration(8700) == "2 h 25 min" && fmt::duration(2700) == "45 min" && fmt::duration(3600) == "1 h");
+    CHECK(fmt::duration(0).empty() && fmt::duration(20) == "1 min");
+    CHECK(fmt::remaining(1200, 3720) == "42 min left" && fmt::remaining(5000, 4000).empty());
+    CHECK(fmt::episodeCode(1, 3) == "S01E03" && fmt::episodeCode(12, 104) == "S12E104");
+    CHECK(fmt::rating(7.9f) == "\xE2\x98\x85 7.9" && fmt::rating(7.0f) == "\xE2\x98\x85 7" && fmt::rating(0).empty());
+    CHECK(fmt::resolution(1920, 800) == "1080p" && fmt::resolution(1920, 1080) == "1080p");
+    CHECK(fmt::resolution(1280, 720) == "720p" && fmt::resolution(720, 408) == "408p");
+    CHECK(fmt::resolution(3840, 1600) == "4K" && fmt::resolution(0, 0).empty());
 }

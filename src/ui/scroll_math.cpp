@@ -30,6 +30,40 @@ namespace scroll {
         return std::max(0, std::min(first, std::max(0, count - visible)));
     }
 
+    int gridMove(int selected, int dx, int dy, int columns, int count) {
+        if (count <= 0 || columns <= 0) {
+            return -1;
+        }
+        int col = selected % columns;
+        int row = selected / columns;
+        int lastRow = (count - 1) / columns;
+        if (dx != 0) {
+            int c = col + dx;
+            if (c < 0 || c >= columns || selected + dx < 0 || selected + dx >= count) {
+                return -1;
+            }
+            return selected + dx;
+        }
+        if (dy != 0) {
+            int r = row + dy;
+            if (r < 0 || r > lastRow) {
+                return -1;
+            }
+            return std::min(r * columns + col, count - 1);
+        }
+        return selected;
+    }
+
+    int gridPage(int selected, int pages, int rows, int columns, int count) {
+        if (count <= 0 || columns <= 0) {
+            return 0;
+        }
+        int col = selected % columns;
+        int lastRow = (count - 1) / columns;
+        int row = std::max(0, std::min(lastRow, selected / columns + pages * std::max(1, rows)));
+        return std::min(row * columns + col, count - 1);
+    }
+
     int pageTarget(int selected, int pages, int pageSize, int count) {
         if (count <= 0) {
             return 0;

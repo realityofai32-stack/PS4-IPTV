@@ -1,12 +1,26 @@
-// Home dashboard and section placeholders.
+// Home: section tiles, Continue Watching (resume with one press) and Recently Watched.
+// Movies / Series counts appear once their catalog has been loaded (it is never loaded at sign-in).
 
 #include "common.h"
+#include "../core/format.h"
 #include "../platform/clock.h"
 
 using namespace c2d;
 using namespace iptv;
+using screens::VodItem;
 
 namespace {
+
+    const float TILE_Y = 150;
+    const float TILE_H = 200;
+    const float CW_Y = 384;
+    const float CW_CARD_W = 128;
+    const float CW_POSTER_H = 192;
+    const int CW_MAX = 11;
+    const float RECENT_Y = 716;
+    const float RECENT_W = 330;
+    const float RECENT_H = 104;
+    const int RECENT_MAX = 5;
 
     class HomeScreen : public Screen {
     public:
@@ -32,7 +46,6 @@ namespace {
 
             // account notice
             std::string notice;
-            Color noticeColor = theme::warning();
             int64_t now = clockx::unixNow();
             if (s.httpsWarning) {
                 notice = "This server uses HTTPS. This build currently supports HTTP streams only.";
@@ -40,55 +53,72 @@ namespace {
                 notice = "Your subscription expires on " + clockx::localDate(s.account.expiresAt) + ".";
             }
             if (!notice.empty()) {
-                auto *n = ui::label(this, notice, theme::LABEL, theme::SAFE_X, 120, ui::Weight::Regular, noticeColor);
+                auto *n = ui::label(this, notice, theme::LABEL, theme::SAFE_X, 112, ui::Weight::Regular,
+                                    theme::warning());
                 n->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
             }
 
-            // section tiles
-            struct TileDef {
-                const char *title;
-                std::string subtitle;
-            };
-            auto count = [&s](int i) {
-                return s.categoriesLoaded[i] ? std::to_string(s.categories[i].size()) + " categories"
-                                             : std::string("Unavailable");
-            };
-            std::string liveSub = s.liveLoaded ? std::to_string(s.live.channels().size()) + " channels" : count(0);
-            TileDef defs[] = {{"Live TV", liveSub},
-                              {"Movies", count(1)},
-                              {"Series", count(2)},
-                              {"Favorites", "Your saved picks"},
-                              {"Search", "Channels, movies, series"},
-                              {"Settings", "Profiles and playback"}};
+            const char *titles[] = {"Live TV", "Movies", "Series", "Favorites", "Search", "Settings"};
             const float gap = 24;
             const float tileW = (theme::SCREEN_W - 2 * theme::SAFE_X - 5 * gap) / 6;
             for (int i = 0; i < 6; i++) {
                 Tile &t = tiles[i];
-                t.bg = ui::box(this, FloatRect(theme::SAFE_X + (float) i * (tileW + gap), 180, tileW, 230),
+                t.bg = ui::box(this, FloatRect(theme::SAFE_X + (float) i * (tileW + gap), TILE_Y, tileW, TILE_H),
                                theme::surface(), 20);
-                t.accentBar = ui::box(t.bg, FloatRect(28, 32, 44, 6), theme::accent(), 3);
-                t.title = ui::label(t.bg, defs[i].title, theme::HEADING, 28, 120, ui::Weight::SemiBold);
+                t.accentBar = ui::box(t.bg, FloatRect(28, 30, 44, 6), theme::accent(), 3);
+                t.title = ui::label(t.bg, titles[i], theme::HEADING, 28, 96, ui::Weight::SemiBold);
                 t.title->setMaxWidth(tileW - 56);
-                t.subtitle = ui::label(t.bg, defs[i].subtitle, theme::LABEL, 28, 172, ui::Weight::Regular,
-                                       theme::textDim());
+                t.subtitle = ui::label(t.bg, "", theme::LABEL, 28, 148, ui::Weight::Regular, theme::textDim());
                 t.subtitle->setMaxWidth(tileW - 56);
             }
 
-            // rows (filled by later milestones: continue watching / history)
-            row(470, "Continue Watching", "Movies and episodes you start will appear here, ready to resume.");
-            row(730, "Recently Watched", "Channels, movies and episodes you watch will appear here.");
+            ui::label(this, "Continue Watching", theme::HEADING, theme::SAFE_X, CW_Y, ui::Weight::SemiBold);
+            cwLayer = new RectangleShape(FloatRect(theme::SAFE_X, CW_Y + 56, theme::SCREEN_W - 2 * theme::SAFE_X, 260));
+            cwLayer->setFillColor(Color::Transparent);
+            add(cwLayer);
+            cwEmpty = ui::label(this, "Movies and episodes you start appear here, ready to resume.", theme::BODY,
+                                theme::SAFE_X + 8, CW_Y + 140, ui::Weight::Regular, theme::textMuted());
+
+            ui::label(this, "Recently Watched", theme::HEADING, theme::SAFE_X, RECENT_Y, ui::Weight::SemiBold);
+            recentLayer = new RectangleShape(FloatRect(theme::SAFE_X, RECENT_Y + 56, theme::SCREEN_W - 2 * theme::SAFE_X,
+                                                       RECENT_H));
+            recentLayer->setFillColor(Color::Transparent);
+            add(recentLayer);
+            recentEmpty = ui::label(this, "Channels, movies and episodes you watch appear here.", theme::BODY,
+                                    theme::SAFE_X + 8, RECENT_Y + 90, ui::Weight::Regular, theme::textMuted());
 
             hints = screens::hintBar(this, {{ui::Glyph::Cross, "Open"}, {ui::Glyph::Triangle, "Search"},
                                             {ui::Glyph::Options, "Settings"}, {ui::Glyph::Circle, "Exit"}});
+            rebuildRows();
             refresh();
         }
 
         const char *name() const override { return "home"; }
 
+        void onResume() override {
+            rebuildRows();
+            refresh();
+            requestImages();
+        }
+
+        void onEnter() override {
+            requestImages();
+        }
+
+        void onPause() override {
+            app.images().want(std::vector<ImageRequest>());
+        }
+
         void tick(double) override {
             std::string t = clockx::localTime();
             if (t != clock->getText()) {
                 clock->setText(t);
+                redraw();
+            }
+            if (app.vod().generation() != vodGen || app.images().generation() != imageGen) {
+                imageGen = app.images().generation();
+                rebuildRows();
+                refresh();
                 redraw();
             }
         }
@@ -97,28 +127,56 @@ namespace {
             switch (e.button) {
                 case PadButton::Left:
                 case PadButton::L1:
-                    if (focus > 0) {
-                        focus--;
+                    if (index[zone] > 0) {
+                        index[zone]--;
                     }
                     break;
                 case PadButton::Right:
                 case PadButton::R1:
-                    if (focus < 5) {
-                        focus++;
+                    if (index[zone] + 1 < zoneSize(zone)) {
+                        index[zone]++;
+                    }
+                    break;
+                case PadButton::Down:
+                    for (int z = zone + 1; z < 3; z++) {
+                        if (zoneSize(z) > 0) {
+                            zone = z;
+                            index[z] = std::min(index[z], zoneSize(z) - 1);
+                            break;
+                        }
+                    }
+                    break;
+                case PadButton::Up:
+                    for (int z = zone - 1; z >= 0; z--) {
+                        if (zoneSize(z) > 0) {
+                            zone = z;
+                            break;
+                        }
                     }
                     break;
                 case PadButton::Cross:
                     if (!e.repeat) {
-                        open(focus);
+                        activate();
                     }
                     return;
                 case PadButton::Triangle:
-                    open(4);
+                    if (!e.repeat) {
+                        openTile(4);
+                    }
                     return;
                 case PadButton::Options:
-                    open(5);
+                    if (!e.repeat) {
+                        openTile(5);
+                    }
                     return;
                 case PadButton::Circle:
+                    if (e.repeat) {
+                        return;
+                    }
+                    if (zone != 0) {
+                        zone = 0;
+                        break;
+                    }
                     app.push(screens::makeDialog(app, "Exit PS4 IPTV?", "", {"Cancel", "Exit"}, [this](int c) {
                         if (c == 1) {
                             app.quit();
@@ -139,28 +197,148 @@ namespace {
             ui::Label *subtitle;
         };
 
-        void row(float y, const char *title, const char *empty) {
-            ui::label(this, title, theme::HEADING, theme::SAFE_X, y, ui::Weight::SemiBold);
-            auto *card = ui::box(this, FloatRect(theme::SAFE_X, y + 62, theme::SCREEN_W - 2 * theme::SAFE_X, 150),
-                                 theme::withAlpha(theme::surface(), 160), theme::RADIUS);
-            auto *l = ui::label(card, empty, theme::BODY, 40, ui::Label::centerOffset(theme::BODY, 150),
-                                ui::Weight::Regular, theme::textMuted());
-            l->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X - 80);
+        struct Card {
+            RectangleShape *bg;          // focus frame
+            ui::PosterView *poster;      // Continue Watching
+            ui::LogoView *logo;          // Recently Watched
+        };
+
+        int zoneSize(int z) const {
+            return z == 0 ? 6 : z == 1 ? (int) cw.size() : (int) recent.size();
         }
 
-        void open(int index) {
-            switch (index) {
+        static std::string sectionCount(const SectionStatus &st, size_t n, const char *noun) {
+            if (n > 0) {
+                return std::to_string(n) + " " + noun;
+            }
+            switch (st.status) {
+                case CatalogStatus::Loading:
+                    return "Loading" "\xE2\x80\xA6";
+                case CatalogStatus::Failed:
+                    return "Unavailable, open to retry";
+                default:
+                    return "Open to load";
+            }
+        }
+
+        // one line under a history card: episode code or the type
+        static std::string kindLine(const HistoryEntry &h) {
+            if (h.type == ContentType::Series) {
+                return fmt::episodeCode(h.season, h.episode);
+            }
+            return h.type == ContentType::Movie ? "Movie" : "Live TV";
+        }
+
+        static std::string titleOf(const HistoryEntry &h) {
+            return h.type == ContentType::Series && !h.seriesName.empty() ? h.seriesName : h.name;
+        }
+
+        void rebuildRows() {
+            vodGen = app.vod().generation();
+            cw.clear();
+            for (const HistoryEntry *h: app.library().continueWatching(CW_MAX)) {
+                cw.push_back(*h);
+            }
+            recent.clear();
+            for (const HistoryEntry *h: app.library().recentlyWatched(RECENT_MAX)) {
+                recent.push_back(*h);
+            }
+            for (auto *layer: {cwLayer, recentLayer}) {
+                for (auto *c: layer->getChilds()) {
+                    layer->remove(c);
+                    delete c;
+                }
+            }
+            cwCards.clear();
+            recentCards.clear();
+            for (size_t i = 0; i < cw.size(); i++) {
+                const HistoryEntry &h = cw[i];
+                float x = (float) i * (CW_CARD_W + 24);
+                Card c{};
+                c.bg = ui::box(cwLayer, FloatRect(x - 6, -6, CW_CARD_W + 12, CW_POSTER_H + 12), Color::Transparent, 14);
+                c.poster = new ui::PosterView(FloatRect(x, 0, CW_CARD_W, CW_POSTER_H), theme::CAPTION);
+                cwLayer->add(c.poster);
+                std::shared_ptr<ImageSet> img = app.images().get(ImageKind::Poster, h.icon);
+                c.poster->set(titleOf(h), img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
+                c.poster->setProgress((float) progress::fraction(h.position, h.duration));
+                auto *t = ui::label(cwLayer, titleOf(h), theme::CAPTION, x, CW_POSTER_H + 10, ui::Weight::SemiBold);
+                t->setMaxWidth(CW_CARD_W);
+                auto *k = ui::label(cwLayer, h.type == ContentType::Series ? kindLine(h)
+                                                                          : fmt::remaining(h.position, h.duration),
+                                    theme::CAPTION, x, CW_POSTER_H + 38, ui::Weight::Regular, theme::textDim());
+                k->setMaxWidth(CW_CARD_W);
+                cwCards.push_back(c);
+            }
+            for (size_t i = 0; i < recent.size(); i++) {
+                const HistoryEntry &h = recent[i];
+                float x = (float) i * (RECENT_W + 20);
+                Card c{};
+                c.bg = ui::box(recentLayer, FloatRect(x, 0, RECENT_W, RECENT_H), theme::surface(), theme::RADIUS_SMALL);
+                bool live = h.type == ContentType::Live;
+                std::shared_ptr<ImageSet> img = app.images().get(live ? ImageKind::Logo : ImageKind::Poster, h.icon);
+                if (live) {
+                    c.logo = new ui::LogoView(FloatRect(14, (RECENT_H - 60) / 2, 104, 60), 22, 4, 1.25f);
+                    c.logo->set(h.name, img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
+                    c.bg->add(c.logo);
+                } else {
+                    c.poster = new ui::PosterView(FloatRect(14, 8, 59, 88), 14);
+                    c.poster->set(titleOf(h), img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
+                    c.bg->add(c.poster);
+                }
+                float tx = live ? 134 : 90;
+                auto *t = ui::label(c.bg, titleOf(h), theme::LABEL, tx, 22, ui::Weight::SemiBold);
+                t->setMaxWidth(RECENT_W - tx - 16);
+                auto *k = ui::label(c.bg, kindLine(h), theme::CAPTION, tx, 58, ui::Weight::Regular, theme::textDim());
+                k->setMaxWidth(RECENT_W - tx - 16);
+                recentCards.push_back(c);
+            }
+            cwEmpty->setVisibility(cw.empty() ? Visibility::Visible : Visibility::Hidden);
+            recentEmpty->setVisibility(recent.empty() ? Visibility::Visible : Visibility::Hidden);
+            for (int z = 1; z < 3; z++) {
+                index[z] = std::min(index[z], std::max(0, zoneSize(z) - 1));
+            }
+            if (zoneSize(zone) == 0) {
+                zone = 0;
+            }
+        }
+
+        void requestImages() {
+            if (!app.settings().get().loadImages) {
+                return;
+            }
+            std::vector<ImageRequest> req;
+            for (const auto &h: cw) {
+                req.push_back({ImageKind::Poster, h.icon});
+            }
+            for (const auto &h: recent) {
+                req.push_back({h.type == ContentType::Live ? ImageKind::Logo : ImageKind::Poster, h.icon});
+            }
+            app.images().want(req);
+        }
+
+        void activate() {
+            if (zone == 0) {
+                openTile(index[0]);
+            } else if (zone == 1) {
+                resume(cw[(size_t) index[1]]);
+            } else {
+                openRecent(recent[(size_t) index[2]]);
+            }
+        }
+
+        void openTile(int i) {
+            switch (i) {
                 case 0:
                     app.push(screens::makeLive(app));
                     break;
                 case 1:
-                    app.push(screens::makeSection(app, "Movies", "Movies arrive in a later milestone."));
+                    app.push(screens::makeMovies(app));
                     break;
                 case 2:
-                    app.push(screens::makeSection(app, "Series", "Series arrive in a later milestone."));
+                    app.push(screens::makeSeries(app));
                     break;
                 case 3:
-                    app.push(screens::makeLive(app, true));  // Live favorites (movies/series join in later milestones)
+                    app.push(screens::makeFavorites(app));
                     break;
                 case 4:
                     app.push(screens::makeSearch(app));
@@ -171,22 +349,143 @@ namespace {
             }
         }
 
+        static VodItem itemOf(const HistoryEntry &h) {
+            VodItem it;
+            it.type = h.type;
+            it.id = h.id;
+            it.extension = h.extension.empty() ? "mkv" : h.extension;
+            it.title = h.name;
+            it.image = h.icon;
+            it.seriesId = h.seriesId;
+            it.seriesName = h.seriesName;
+            it.season = h.season;
+            it.episode = h.episode;
+            it.durationHint = h.duration;
+            return it;
+        }
+
+        // Continue Watching: play at once. Episodes get the series' next episodes when its details are cached.
+        void resume(const HistoryEntry &h) {
+            std::vector<VodItem> queue = {itemOf(h)};
+            int position = 0;
+            if (h.type == ContentType::Series) {
+                if (std::shared_ptr<const SeriesInfo> info = app.vod().seriesInfo(h.seriesId)) {
+                    queue.clear();
+                    for (const auto &s: info->seasons) {
+                        for (const auto &ep: s.episodes) {
+                            VodItem it = itemOf(h);
+                            it.id = ep.id;
+                            it.extension = ep.extension.empty() ? "mkv" : ep.extension;
+                            it.title = ep.title;
+                            it.season = ep.season;
+                            it.episode = ep.number;
+                            it.durationHint = ep.durationSeconds;
+                            if (ep.id == h.id) {
+                                position = (int) queue.size();
+                            }
+                            queue.push_back(it);
+                        }
+                    }
+                    if (queue.empty()) {
+                        queue.push_back(itemOf(h));
+                    }
+                } else {
+                    app.vod().requestSeriesInfo(app.session().profile, h.seriesId);   // for the next time
+                }
+            }
+            app.push(screens::makeVodPlayer(app, queue, position, true));
+        }
+
+        void openRecent(const HistoryEntry &h) {
+            switch (h.type) {
+                case ContentType::Live: {
+                    const auto &live = app.session().live;
+                    for (int i = 0; i < (int) live.channels().size(); i++) {
+                        if (live.channels()[(size_t) i].streamId == h.id) {
+                            app.push(screens::makeLivePlayer(app, {i}, 0));
+                            return;
+                        }
+                    }
+                    app.toast("This channel is no longer in the list", ToastKind::Error);
+                    return;
+                }
+                case ContentType::Movie: {
+                    const Movie *m = app.vod().movies().find(h.id);
+                    if (m) {
+                        app.push(screens::makeMovieDetail(app, *m));
+                    } else {
+                        Movie fallback;   // catalog not loaded yet: what the history knows is enough
+                        fallback.streamId = h.id;
+                        fallback.name = fallback.title = h.name;
+                        fallback.icon = h.icon;
+                        fallback.extension = h.extension;
+                        app.push(screens::makeMovieDetail(app, fallback));
+                    }
+                    return;
+                }
+                default: {
+                    const Series *s = app.vod().series().find(h.seriesId);
+                    if (s) {
+                        app.push(screens::makeSeriesDetail(app, *s));
+                    } else {
+                        Series fallback;
+                        fallback.seriesId = h.seriesId;
+                        fallback.name = fallback.title = h.seriesName;
+                        fallback.cover = h.icon;
+                        app.push(screens::makeSeriesDetail(app, fallback));
+                    }
+                    return;
+                }
+            }
+        }
+
         void refresh() {
+            const Session &s = app.session();
+            std::string subs[6] = {
+                    s.liveLoaded ? std::to_string(s.live.channels().size()) + " channels" : "Unavailable",
+                    sectionCount(app.vod().movieStatus(), app.vod().movies().size(), "movies"),
+                    sectionCount(app.vod().seriesStatus(), app.vod().series().size(), "series"),
+                    "Channels, movies, series",
+                    "Channels, movies, series",
+                    "Profiles and playback"};
             for (int i = 0; i < 6; i++) {
-                bool f = i == focus;
+                bool f = zone == 0 && i == index[0];
                 Tile &t = tiles[i];
+                t.subtitle->setText(subs[i]);
                 t.bg->setFillColor(f ? theme::accentDark() : theme::surface());
                 t.bg->setOutlineColor(theme::withAlpha(Color::White, 220));
                 t.bg->setOutlineThickness(f ? theme::FOCUS_BORDER : 0);
                 t.accentBar->setFillColor(f ? Color::White : theme::accent());
                 t.subtitle->setColor(f ? theme::text() : theme::textDim());
             }
+            for (size_t i = 0; i < cwCards.size(); i++) {
+                cwCards[i].poster->setFocused(zone == 1 && (int) i == index[1]);
+            }
+            for (size_t i = 0; i < recentCards.size(); i++) {
+                bool f = zone == 2 && (int) i == index[2];
+                recentCards[i].bg->setFillColor(f ? theme::rowFocus() : theme::surface());
+                recentCards[i].bg->setOutlineColor(theme::accent());
+                recentCards[i].bg->setOutlineThickness(f ? 3 : 0);
+            }
+            hints->setHints({{ui::Glyph::Cross, zone == 1 ? "Resume" : "Open"}, {ui::Glyph::Triangle, "Search"},
+                             {ui::Glyph::Options, "Settings"}, {ui::Glyph::Circle, zone == 0 ? "Exit" : "Back"}});
         }
 
         Tile tiles[6];
+        RectangleShape *cwLayer;
+        RectangleShape *recentLayer;
+        ui::Label *cwEmpty;
+        ui::Label *recentEmpty;
         ui::Label *clock;
         ui::HintBar *hints;
-        int focus = 0;
+        std::vector<HistoryEntry> cw;
+        std::vector<HistoryEntry> recent;
+        std::vector<Card> cwCards;
+        std::vector<Card> recentCards;
+        int zone = 0;
+        int index[3] = {0, 0, 0};
+        unsigned vodGen = 0;
+        unsigned imageGen = 0;
     };
 
     class SectionScreen : public Screen {

@@ -1,0 +1,117 @@
+PS4 IPTV - HARDWARE CHECKPOINT 2: MOVIES + SERIES + AUDIO / SUBTITLES  (v0.1.0, title IPTV00002)
+====================================================================================================
+
+Goal: Movies and Series browsing, details, playback with resume, seeking, audio track and subtitle selection,
+Continue Watching, aggregate Favorites and Search - on the proven pPlay/mpv/FFmpeg player.
+Live TV must still work exactly as in Checkpoint 1.5.
+
+This PKG contains NO credentials. Install over the existing "PS4 IPTV": profile, favorites, settings and the
+image cache are kept. Sign-in still loads ONLY the account + Live TV; Movies/Series load when first opened.
+
+Test titles (real items from your provider, track layouts probed from their files):
+  M1  "Primate 2026"                         FILM: En Yeniler 2026   1920x800, audio Türkçe + English, subs TR/EN/DE
+  M2  "Muro - Nalet Olsun ... - 2008"        FILM: Yerli Filmler 2   720x408 (SD), Türkçe audio only
+  M3  "Bülbülü Öldürmek - 1962"               FILM: Suç               3 audio tracks, subs TR/EN
+  M4  "Lone Star State Of Mind - 2002"       FILM: Komedi 3          English audio only, subs TR/EN
+  S1  "The Handmaid's Tale"                  TV SERIES               6 seasons (10/13/13/10/10/10 episodes)
+  S2  "No One Saw Us Leave"                  NETFLIX                 audio Türkçe + Español, subs TR/EN/DE
+  (Search finds them: Home > Search, type e.g. "primate". Any similar titles are fine too.)
+
+0. INSTALL the PKG, launch. Home appears as quickly as before (no Movies/Series download at sign-in).
+   Home tiles: Movies / Series say "Open to load".                                         PHOTO 1
+
+1. MOVIES - FIRST OPEN (Home > Movies)                                                     PHOTO 2
+   - "Loading movies..." with a spinner, then categories on the left and a poster grid (8 x 3).
+   RECORD: seconds until the grid appears (the list has ~19,800 movies).
+   - Posters appear row by row; untitled/broken posters show the title on a grey tile, never a black box.
+   - Header right: "19797 movies". Top line shows the focused title + year + rating.
+   - Back out and open Movies again: the grid is there at once ("saved list").
+   - Close the app completely and relaunch: Movies opens at once from the saved list.
+
+2. GRID NAVIGATION
+   - Left/Right/Up/Down move the focus (blue frame); HOLD Down: rows scroll smoothly with the repeat.
+   - Left in the first column goes back to the categories. L2/R2: page (3 rows). L1/R1: category.
+   - Categories: All movies / Recently added / Continue watching / Favorites / provider categories.
+   - Square on a poster: favorite (appears under "Favorites").
+
+3. MOVIE DETAIL (X on M1)                                                                   PHOTO 3
+   - Opens at once: large poster, title, "2026 · ★ x" then (after a moment) duration and "1080p",
+     "H.264 · AC-3 Stereo · MKV". Your provider sends no plot/genre/cast for movies (see notes).
+   - Buttons: Play, Add to favorites.
+
+4. MOVIE PLAYBACK (Play on M1)                                                              RECORD video/audio
+   - Picture + sound. X pauses ("Paused"), X resumes.
+   - Bottom overlay: progress bar, "0:01:23 / 1:30:00", chips "1080p · Audio: Türkçe · Subtitles: Off".
+   - Right / Left: +/-10 s (press several times quickly: one jump to the sum). R2 / L2: +/-1 min.
+   RECORD: how long a 1-minute seek takes until the picture moves again.
+   - Triangle: stream information (Container MKV, H.264, AC-3, tracks "2 audio, 3 subtitle").   PHOTO 4
+
+5. AUDIO TRACKS (during M1: OPTIONS button > Audio)                                          PHOTO 5
+   - List: "✓ Türkçe  AC-3 · Stereo", "English  AC-3 · Stereo". Choose English: the language changes
+     within a second or two WITHOUT the video restarting. Switch back and forth 5 times.
+   - Then seek, pause, resume. Everything keeps working.                       RECORD: any glitch?
+
+6. SUBTITLES (during M1: OPTIONS > Subtitles)                                                PHOTO 6
+   - "Off", "Türkçe", "English", "Deutsch". Choose Türkçe: text subtitles appear at the bottom.
+   - Switch Türkçe -> English -> Off -> Deutsch. Seek while subtitles are on.
+   - OPTIONS > Subtitle size Small/Medium/Large, position Bottom/Raised, shadow On: changes at once.
+   RECORD: do subtitles appear? Turkish characters (ş ğ İ ı ç ö ü) correct in subtitles?
+   NOTE: if the PS4 build cannot draw subtitles you will see a red message "These subtitles cannot be
+   displayed on PS4: subtitles turned off" and the movie keeps playing - please photo it.
+
+7. RESUME
+   - Stop M1 (Circle) after ~5 minutes. Home: "Continue Watching" shows its poster with a progress bar.
+   - X on that card: playback continues a few seconds before where you stopped ("Resuming at ...").
+   - Movie detail now shows "Resume 0:05:xx" and "Start over".
+   - Quit the app completely, relaunch: Continue Watching still has it.
+
+8. 720p / OTHER FILES
+   - M2 (720x408): plays, info panel shows 720 x 408.
+   - M3: OPTIONS > Audio lists 3 tracks.
+   - M4 with Settings > Subtitles = Auto, Preferred subtitle language = Türkçe: Turkish subtitles turn on by
+     themselves (English audio). With Subtitles = Off they do not.
+
+9. SERIES (Home > Series, then S1)                                                           PHOTO 7
+   - Same grid as Movies. S1 detail: cover, title, year/rating/genre, cast, plot, "6 seasons".
+   - Season chips "Season 1 ... Season 6": Left/Right or L1/R1 switch season; Down to the episode list.
+   - Episodes: "S01E01  Episode 1  45 min · 1080p". X plays.
+
+10. EPISODE PLAYBACK (S2 S01E01)
+   - Overlay title: series name, "S01E01 — Episode 1". OPTIONS > Audio: Türkçe / Español.
+   - R1: next episode, L1: previous (when the season has more).
+   - Let an episode reach the end (seek near the end with R2): "Up next: S01E02" panel, X plays it
+     (Settings > Auto-play next episode = On: starts by itself after 10 s).
+   - Back to the series detail: the episode you watched is selected; finished ones show "✓ Watched";
+     a started one shows a progress bar. The first button says "Resume S01E0x" or "Play S01E0x".
+
+11. CONTINUE WATCHING / RECENTLY WATCHED (Home)                                              PHOTO 8
+   - Continue Watching: started movies and episodes (series name + S01E0x), with progress bars.
+   - Recently Watched: last channels, movies, episodes. X opens them.
+
+12. FAVORITES (Home > Favorites)
+   - Tabs Channels / Movies / Series (L1/R1). Square removes. X opens.
+
+13. SEARCH (Home > Search): "handmaid" -> a SERIES result, "primate" -> a MOVIE result, a channel name ->
+    TV results. X opens details / plays.
+
+14. SETTINGS: Preferred audio language, Subtitles (Off / Auto / On when available), Preferred subtitle
+    language, Subtitle size / position / shadow, Auto-play next episode. Change "Preferred audio language" to
+    English, play M1: it starts in English.
+
+15. LIVE TV REGRESSION: Live TV list with logos, hold-scroll, playback, zapping, HTTP 403 countdown, Circle back
+    - all as in Checkpoint 1.5.
+
+16. STABILITY: play a movie for 10+ minutes; open/close movies 10 times; switch audio 10 times; leave a movie
+    paused 2 minutes and resume (must NOT show "Reconnecting"). Idle on Home 60 s.
+
+IF SOMETHING GOES WRONG: note the step + photo. Log /data/PS4IPTV/logs/log.txt (GoldHEN FTP, port 2121):
+"player" lines (tracks found and chosen, seeks, status), "xtream" lines (catalog sizes and times),
+"images" lines. Credentials and stream URLs are redacted.
+
+WHAT THE RESULTS MEAN
+   Grid takes > 20 s the first time ..... 5.9 MB movie list download/parse on the PS4 (log "xtream movies").
+   Subtitles never appear ............... libass font (log "subtitle font installed") or subtitle shader.
+   Red "cannot be displayed" message ..... PS4 mpv build has no precompiled shader for subtitle drawing.
+   Audio switch restarts the video ....... should not happen (runtime aid switch) - log "audio track".
+   Seek is very slow ..................... software H.264 decoding from the previous keyframe.
+   Resume starts from 0 .................. history.json not written (log "storage").

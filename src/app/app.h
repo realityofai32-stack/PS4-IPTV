@@ -3,6 +3,7 @@
 #ifndef PS4IPTV_APP_APP_H
 #define PS4IPTV_APP_APP_H
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,7 @@ struct Session {
     bool liveLoaded = false;
     std::string liveNotice;                      // e.g. "showing the saved list"
     std::string learnedLiveFormat;               // Auto format: "ts"/"m3u8" that played after a fallback
+    std::set<std::string> seenLanguages;         // track languages met in played files (offered in Settings)
 };
 
 enum class ToastKind {

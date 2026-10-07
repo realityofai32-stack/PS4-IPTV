@@ -36,6 +36,39 @@ namespace screens {
     Screen *makeLivePlayer(App &app, const std::vector<int> &channels, int index,
                            std::function<void(const std::string &)> onExit = nullptr);
 
+    // ------------------------------------------------------------------ Movies / Series
+    // One playable movie or episode (everything the player and the progress store need)
+    struct VodItem {
+        iptv::ContentType type = iptv::ContentType::Movie;   // Movie, or Series for an episode
+        std::string id;               // stream id / episode id
+        std::string extension;        // container_extension
+        std::string title;            // movie title / episode title ("" = "Episode N")
+        std::string image;            // poster / series cover
+        int year = 0;
+        std::string seriesId;
+        std::string seriesName;
+        int season = 0;
+        int episode = 0;
+        double durationHint = 0;      // from the provider metadata, until mpv knows better
+    };
+
+    // categories + poster grid; opening loads the catalog lazily (saved copy first)
+    Screen *makeMovies(App &app);
+
+    Screen *makeSeries(App &app);
+
+    Screen *makeMovieDetail(App &app, const iptv::Movie &movie);
+
+    Screen *makeSeriesDetail(App &app, const iptv::Series &series);
+
+    // plays queue[index]; resume = continue from the saved position. Episodes: the rest of the queue
+    // is offered as "next episode". onExit(id of the item playing last) runs when the user leaves.
+    Screen *makeVodPlayer(App &app, const std::vector<VodItem> &queue, int index, bool resume,
+                          std::function<void(const std::string &)> onExit = nullptr);
+
+    // favorites of all types (Live channels, Movies, Series)
+    Screen *makeFavorites(App &app);
+
     Screen *makeSearch(App &app);
 
     Screen *makeSettings(App &app);

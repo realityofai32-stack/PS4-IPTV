@@ -162,3 +162,23 @@ TEST(scrollbar_thumb_math) {
     scroll::Thumb clamped = scroll::thumb(800, 20, 10, 99, 10);
     CHECK_EQ(clamped.offset, 400.0f);
 }
+
+TEST(grid_navigation_math) {
+    // 8 columns, 20 items: rows 0-7, 8-15, 16-19
+    CHECK_EQ(scroll::gridMove(0, -1, 0, 8, 20), -1);    // left edge: focus may leave the grid
+    CHECK_EQ(scroll::gridMove(0, 1, 0, 8, 20), 1);
+    CHECK_EQ(scroll::gridMove(7, 1, 0, 8, 20), -1);     // right edge does not wrap
+    CHECK_EQ(scroll::gridMove(19, 1, 0, 8, 20), -1);    // last item
+    CHECK_EQ(scroll::gridMove(3, 0, -1, 8, 20), -1);    // top edge
+    CHECK_EQ(scroll::gridMove(3, 0, 1, 8, 20), 11);
+    CHECK_EQ(scroll::gridMove(14, 0, 1, 8, 20), 19);    // into the shorter last row: its last item
+    CHECK_EQ(scroll::gridMove(18, 0, 1, 8, 20), -1);    // bottom edge
+    CHECK_EQ(scroll::gridMove(18, 0, -1, 8, 20), 10);
+    CHECK_EQ(scroll::gridMove(0, 0, 1, 8, 0), -1);
+    // page jumps keep the column
+    CHECK_EQ(scroll::gridPage(2, 1, 3, 8, 19797), 26);
+    CHECK_EQ(scroll::gridPage(26, -1, 3, 8, 19797), 2);
+    CHECK_EQ(scroll::gridPage(5, -1, 3, 8, 19797), 5);   // already on the first page: first row
+    CHECK_EQ(scroll::gridPage(19790, 1, 3, 8, 19797), 19796);
+    CHECK_EQ(scroll::gridPage(3, 5, 3, 8, 20), 19);
+}

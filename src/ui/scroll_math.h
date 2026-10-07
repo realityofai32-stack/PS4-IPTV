@@ -19,6 +19,14 @@ namespace scroll {
 
     // target of a page jump of `pages` pages (negative = up), clamped to the list
     int pageTarget(int selected, int pages, int pageSize, int count);
+
+    // Grid navigation (row-major, `columns` per row). Returns the new index, or -1 when the move hits an
+    // edge (Left in the first column, Up in the first row...): the caller may move focus elsewhere.
+    // Down into a shorter last row lands on its last item.
+    int gridMove(int selected, int dx, int dy, int columns, int count);
+
+    // page jump of `pages` screens of `rows` rows, keeping the column where possible
+    int gridPage(int selected, int pages, int rows, int columns, int count);
 }
 
 #endif // PS4IPTV_UI_SCROLL_MATH_H

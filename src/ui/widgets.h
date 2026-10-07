@@ -149,6 +149,87 @@ namespace ui {
         int phase = -1;
     };
 
+    // Movie poster / series cover in a rounded tile. Images close to the tile's aspect ratio fill it
+    // (cropped evenly, never stretched); others are fitted inside it. Without an image the title is shown.
+    // Optional progress bar (partially watched) and a "watched" badge.
+    class PosterView : public c2d::RectangleShape {
+    public:
+        PosterView(const c2d::FloatRect &rect, unsigned fallbackTextSize);
+
+        void set(const std::string &title, const std::shared_ptr<c2d::Texture> &texture,
+                 const c2d::Vector2i &imageSize);
+
+        // 0 hides the bar
+        void setProgress(float fraction);
+
+        void setWatched(bool watched);
+
+        void setFocused(bool focused);
+
+    private:
+        c2d::RectangleShape *image;
+        Label *fallback;
+        c2d::RectangleShape *barTrack;
+        c2d::RectangleShape *barFill;
+        c2d::CircleShape *badge;
+        Label *badgeMark;
+        std::shared_ptr<c2d::Texture> shown;
+        std::string currentTitle;
+        bool showingImage = false;
+    };
+
+    // Virtualized grid: only the cells on screen exist (columns x rows) and are re-bound when scrolling by
+    // whole rows. Spacing is derived from the rect; a ScrollBar sits in the right gutter.
+    class GridView : public c2d::RectangleShape {
+    public:
+        struct Adapter {
+            virtual ~Adapter() = default;
+
+            virtual int count() = 0;
+
+            virtual c2d::C2DObject *createCell(float width, float height) = 0;
+
+            virtual void bindCell(c2d::C2DObject *cell, int index, bool focused) = 0;
+        };
+
+        GridView(const c2d::FloatRect &rect, float cellWidth, float cellHeight, int columns, int rows,
+                 Adapter *adapter);
+
+        void reload();
+
+        void setSelected(int index);
+
+        int selected() const { return sel; }
+
+        // false when the move hits an edge (nothing changed): the screen may move focus elsewhere
+        bool navigate(int dx, int dy);
+
+        bool page(int pages);
+
+        void setFocused(bool focused);
+
+        int columns() const { return cols; }
+
+        int visibleRows() const { return rows; }
+
+        // first item on screen and how many cells there are (for image requests)
+        int firstVisible() const { return firstRow * cols; }
+
+        int cellCount() const { return cols * rows; }
+
+    private:
+        void layout();
+
+        Adapter *adapter;
+        std::vector<c2d::C2DObject *> cells;
+        ScrollBar *bar;
+        int cols;
+        int rows;
+        int sel = 0;
+        int firstRow = 0;
+        bool focus = true;
+    };
+
     // Virtualized vertical list: only the visible rows exist; rows are re-bound when scrolling.
     class ListView : public c2d::RectangleShape {
     public:
