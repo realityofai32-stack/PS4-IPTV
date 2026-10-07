@@ -1,10 +1,12 @@
 // DualShock 4 input: edge-triggered button events with repeat and acceleration for held
-// directions, left-stick-as-d-pad with a deadzone.
+// directions, left-stick-as-d-pad with a deadzone and hysteresis (logic in input_logic.h).
 
 #ifndef PS4IPTV_PLATFORM_INPUT_H
 #define PS4IPTV_PLATFORM_INPUT_H
 
 #include <vector>
+
+#include "input_logic.h"
 
 enum class PadButton {
     Up,
@@ -38,16 +40,17 @@ public:
 
     const std::vector<InputEvent> &events() const { return pending; }
 
-    bool held(PadButton b) const { return down[(int) b]; }
+    bool held(PadButton b) const { return keys[(int) b].isDown(); }
 
 private:
 
-    bool down[(int) PadButton::Count] = {};
-    double pressedAt[(int) PadButton::Count] = {};
-    double nextRepeat[(int) PadButton::Count] = {};
-    int repeats[(int) PadButton::Count] = {};
+    input::KeyRepeater keys[(int) PadButton::Count];
+    input::StickFilter stick;
     std::vector<InputEvent> pending;
 };
+
+// buttons that repeat while held (navigation, paging, keyboard backspace)
+bool isRepeatable(PadButton b);
 
 const char *buttonName(PadButton b);
 
