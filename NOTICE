@@ -23,6 +23,8 @@ pPlay                       Copyright (C) Cpasjuste                      GPL-3.0
 
 libcross2d                  Copyright (C) Cpasjuste                      GPL-3.0
   https://github.com/Cpasjuste/libcross2d (as pinned by pPlay)
+  Includes stb_image 2.23 / stb_image_write 1.13 (Sean Barrett, public domain or MIT), which PS4 IPTV
+  also uses to decode channel logos.
 
 Linked from PacBrew PS4 portlibs (https://github.com/PacBrew/pacbrew-packages):
 

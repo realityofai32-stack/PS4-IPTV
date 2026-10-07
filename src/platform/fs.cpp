@@ -166,6 +166,29 @@ namespace fs {
         return true;
     }
 
+    bool writeFileReplace(const std::string &path, const std::string &data, std::string *error) {
+        std::string tmp = path + ".tmp";
+        FILE *f = fopen(tmp.c_str(), "wb");
+        if (f == nullptr) {
+            if (error) {
+                *error = errnoText("fopen", tmp);
+            }
+            return false;
+        }
+        bool ok = fwrite(data.data(), 1, data.size(), f) == data.size();
+        if (fclose(f) != 0) {
+            ok = false;
+        }
+        if (!ok || !replaceFile(tmp, path)) {
+            if (error) {
+                *error = errnoText(ok ? "rename" : "write", tmp);
+            }
+            remove(tmp.c_str());
+            return false;
+        }
+        return true;
+    }
+
     bool removeFile(const std::string &path) {
         return remove(path.c_str()) == 0;
     }

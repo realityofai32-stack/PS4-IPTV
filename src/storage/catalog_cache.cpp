@@ -78,7 +78,7 @@ void CatalogCache::clearProfile(const std::string &profileId) const {
 
 void CatalogCache::clearAll() const {
     for (const auto &e: fs::listDir(root)) {
-        if (e.dir) {
+        if (e.dir && e.name != IMAGE_DIR) {
             clearProfile(e.name);
         }
     }

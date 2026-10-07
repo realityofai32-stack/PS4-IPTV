@@ -35,7 +35,7 @@ void Screen::redraw() {
 
 App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
              profileStore(APP_DATA_DIR), settingsStore(APP_DATA_DIR), xtreamService(jobSystem),
-             libraryStore(APP_DATA_DIR) {
+             libraryStore(APP_DATA_DIR), imageLoader(jobSystem, APP_DATA_DIR "cache/images") {
     LOG_I("app", "renderer: %s", available ? "OK (SDL2 + OpenGL ES 2 / Piglet)" : "FAILED");
     romfsPath = getIo()->getRomFsPath();
     setClearColor(theme::bgTop());
@@ -69,6 +69,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     if (!warning.empty()) {
         LOG_W("storage", "%s", warning.c_str());
     }
+    imageLoader.setEnabled(settingsStore.get().loadImages);
 
     // the proven pPlay playback backend; created once, like pPlay's Player (needs the GL context)
     std::string mpvDir = std::string(APP_DATA_DIR) + "mpv";
@@ -263,6 +264,9 @@ void App::logic() {
 
     if (jobSystem.pump() > 0) {
         requestRedraw();
+    }
+    if (imageLoader.update(t)) {
+        requestRedraw();  // logos became available (at most two new textures per frame)
     }
     player.update(t);  // mpv events are drained every frame, whichever screen is on top
     if (top()) {

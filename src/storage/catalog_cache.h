@@ -14,6 +14,9 @@ public:
 
     static const int FORMAT_VERSION = 1;
 
+    // <dataDir>/cache/images/ belongs to the image cache (images::DiskCache): clearAll() leaves it alone
+    static constexpr const char *IMAGE_DIR = "images";
+
     explicit CatalogCache(std::string dataDir);
 
     bool save(const std::string &profileId, const std::string &name, const std::string &body, int64_t now,

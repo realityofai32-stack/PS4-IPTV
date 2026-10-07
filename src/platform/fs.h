@@ -25,6 +25,10 @@ namespace fs {
     // the new file into place. A crash leaves either the old or the new file, never a partial one.
     bool writeFileAtomic(const std::string &path, const std::string &data, std::string *error = nullptr);
 
+    // Cache files: writes <path>.tmp and renames it into place (no backup copy, no flush to disk). A crash
+    // leaves the old file, the new file or a stray .tmp - never a partial file under `path`.
+    bool writeFileReplace(const std::string &path, const std::string &data, std::string *error = nullptr);
+
     bool removeFile(const std::string &path);
 
     struct Entry {
