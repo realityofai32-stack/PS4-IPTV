@@ -1,5 +1,10 @@
 // Home: section tiles, Continue Watching (resume with one press) and Recently Watched.
 // Movies / Series counts appear once their catalog has been loaded (it is never loaded at sign-in).
+//
+// Continue Watching comes from the progress store (LibraryStore::continueWatching): movies and episodes in
+// progress, most recent playback first, one card per series. It is rebuilt whenever the store changes
+// (generation), so returning from the player shows the new position at once. Live TV never appears there;
+// Recently Watched shows at most RECENT_LIVE_MAX channels while movies/episodes can fill the row.
 
 #include "common.h"
 #include "../core/format.h"
@@ -14,13 +19,15 @@ namespace {
     const float TILE_Y = 150;
     const float TILE_H = 200;
     const float CW_Y = 384;
-    const float CW_CARD_W = 128;
-    const float CW_POSTER_H = 192;
-    const int CW_MAX = 11;
-    const float RECENT_Y = 716;
+    const float CW_CARD_W = 144;
+    const float CW_POSTER_H = 216;
+    const float CW_GAP = 24;
+    const int CW_MAX = 10;
+    const float RECENT_Y = 756;
     const float RECENT_W = 330;
     const float RECENT_H = 104;
     const int RECENT_MAX = 5;
+    const int RECENT_LIVE_MAX = 3;
 
     class HomeScreen : public Screen {
     public:
@@ -72,8 +79,13 @@ namespace {
                 t.subtitle->setMaxWidth(tileW - 56);
             }
 
-            ui::label(this, "Continue Watching", theme::HEADING, theme::SAFE_X, CW_Y, ui::Weight::SemiBold);
-            cwLayer = new RectangleShape(FloatRect(theme::SAFE_X, CW_Y + 56, theme::SCREEN_W - 2 * theme::SAFE_X, 260));
+            auto *cwHeading = ui::label(this, "Continue Watching", theme::HEADING, theme::SAFE_X, CW_Y,
+                                        ui::Weight::SemiBold);
+            // the focused card in full: "Series  ·  S01E03 · Title  ·  24:16 / 57:00"
+            cwDetail = ui::label(this, "", theme::LABEL, theme::SAFE_X + cwHeading->width() + 32, CW_Y + 8,
+                                 ui::Weight::Regular, theme::textDim());
+            cwDetail->setMaxWidth(theme::SCREEN_W - theme::SAFE_X - (theme::SAFE_X + cwHeading->width() + 32));
+            cwLayer = new RectangleShape(FloatRect(theme::SAFE_X, CW_Y + 56, theme::SCREEN_W - 2 * theme::SAFE_X, 300));
             cwLayer->setFillColor(Color::Transparent);
             add(cwLayer);
             cwEmpty = ui::label(this, "Movies and episodes you start appear here, ready to resume.", theme::BODY,
@@ -115,7 +127,8 @@ namespace {
                 clock->setText(t);
                 redraw();
             }
-            if (app.vod().generation() != vodGen || app.images().generation() != imageGen) {
+            if (app.vod().generation() != vodGen || app.images().generation() != imageGen
+                || app.library().generation() != libraryGen) {
                 imageGen = app.images().generation();
                 rebuildRows();
                 refresh();
@@ -233,14 +246,32 @@ namespace {
             return h.type == ContentType::Series && !h.seriesName.empty() ? h.seriesName : h.name;
         }
 
+        // "S01E03 · Title" for an episode
+        static std::string episodeLine(const HistoryEntry &h) {
+            std::string code = fmt::episodeCode(h.season, h.episode);
+            return h.name.empty() ? code : code + " \xC2\xB7 " + h.name;
+        }
+
+        static std::string cwDetailOf(const HistoryEntry &h) {
+            std::string sep = "   \xC2\xB7   ";
+            std::string time = h.duration > 0 ? fmt::clock(h.position) + " / " + fmt::clock(h.duration)
+                                               : fmt::clock(h.position);
+            std::string left = fmt::remaining(h.position, h.duration);
+            if (h.type == ContentType::Series) {
+                return titleOf(h) + sep + episodeLine(h) + sep + time + (left.empty() ? "" : sep + left);
+            }
+            return h.name + sep + time + (left.empty() ? "" : sep + left);
+        }
+
         void rebuildRows() {
             vodGen = app.vod().generation();
+            libraryGen = app.library().generation();
             cw.clear();
             for (const HistoryEntry *h: app.library().continueWatching(CW_MAX)) {
                 cw.push_back(*h);
             }
             recent.clear();
-            for (const HistoryEntry *h: app.library().recentlyWatched(RECENT_MAX)) {
+            for (const HistoryEntry *h: app.library().recentlyWatched(RECENT_MAX, RECENT_LIVE_MAX)) {
                 recent.push_back(*h);
             }
             for (auto *layer: {cwLayer, recentLayer}) {
@@ -253,19 +284,20 @@ namespace {
             recentCards.clear();
             for (size_t i = 0; i < cw.size(); i++) {
                 const HistoryEntry &h = cw[i];
-                float x = (float) i * (CW_CARD_W + 24);
+                float x = (float) i * (CW_CARD_W + CW_GAP);
                 Card c{};
                 c.bg = ui::box(cwLayer, FloatRect(x - 6, -6, CW_CARD_W + 12, CW_POSTER_H + 12), Color::Transparent, 14);
                 c.poster = new ui::PosterView(FloatRect(x, 0, CW_CARD_W, CW_POSTER_H), theme::CAPTION);
                 cwLayer->add(c.poster);
                 std::shared_ptr<ImageSet> img = app.images().get(ImageKind::Poster, h.icon);
                 c.poster->set(titleOf(h), img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
-                c.poster->setProgress((float) progress::fraction(h.position, h.duration));
+                c.poster->setProgress(std::max(0.02f, (float) progress::fraction(h.position, h.duration)));
                 auto *t = ui::label(cwLayer, titleOf(h), theme::CAPTION, x, CW_POSTER_H + 10, ui::Weight::SemiBold);
                 t->setMaxWidth(CW_CARD_W);
-                auto *k = ui::label(cwLayer, h.type == ContentType::Series ? kindLine(h)
-                                                                          : fmt::remaining(h.position, h.duration),
-                                    theme::CAPTION, x, CW_POSTER_H + 38, ui::Weight::Regular, theme::textDim());
+                // episodes: "S01E03 · Title"; movies: time left
+                std::string second = h.type == ContentType::Series ? episodeLine(h) : fmt::remaining(h.position, h.duration);
+                auto *k = ui::label(cwLayer, second, theme::CAPTION, x, CW_POSTER_H + 38, ui::Weight::Regular,
+                                    theme::textDim());
                 k->setMaxWidth(CW_CARD_W);
                 cwCards.push_back(c);
             }
@@ -461,6 +493,7 @@ namespace {
             for (size_t i = 0; i < cwCards.size(); i++) {
                 cwCards[i].poster->setFocused(zone == 1 && (int) i == index[1]);
             }
+            cwDetail->setText(zone == 1 && index[1] < (int) cw.size() ? cwDetailOf(cw[(size_t) index[1]]) : "");
             for (size_t i = 0; i < recentCards.size(); i++) {
                 bool f = zone == 2 && (int) i == index[2];
                 recentCards[i].bg->setFillColor(f ? theme::rowFocus() : theme::surface());
@@ -475,6 +508,7 @@ namespace {
         RectangleShape *cwLayer;
         RectangleShape *recentLayer;
         ui::Label *cwEmpty;
+        ui::Label *cwDetail;
         ui::Label *recentEmpty;
         ui::Label *clock;
         ui::HintBar *hints;
@@ -486,6 +520,7 @@ namespace {
         int index[3] = {0, 0, 0};
         unsigned vodGen = 0;
         unsigned imageGen = 0;
+        unsigned libraryGen = 0;
     };
 
     class SectionScreen : public Screen {

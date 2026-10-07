@@ -7,6 +7,7 @@
 #include <cctype>
 
 #include "common.h"
+#include "../app/series_plan.h"
 #include "../core/format.h"
 #include "../platform/log.h"
 
@@ -92,6 +93,10 @@ namespace {
 
         void onResume() override {
             requestImages();
+            if (backFromPlayback) {
+                backFromPlayback = false;
+                focus = 0;   // the primary action (Resume / Play again), where the user started
+            }
             refresh();
         }
 
@@ -100,7 +105,8 @@ namespace {
         }
 
         void tick(double) override {
-            if (app.vod().generation() != vodGen || app.images().generation() != imageGen) {
+            if (app.vod().generation() != vodGen || app.images().generation() != imageGen
+                || app.library().generation() != libraryGen) {
                 refresh();
                 redraw();
             }
@@ -172,6 +178,7 @@ namespace {
                     if (a == Action::StartOver) {
                         app.library().resetProgress(ContentType::Movie, movie.streamId);
                     }
+                    backFromPlayback = true;
                     app.push(screens::makeVodPlayer(app, {item()}, 0, a == Action::Resume));
                     return;
                 case Action::Favorite: {
@@ -193,6 +200,7 @@ namespace {
         void refresh() {
             vodGen = app.vod().generation();
             imageGen = app.images().generation();
+            libraryGen = app.library().generation();
             bindPoster(app, poster, movie.title, movie.icon);
             std::shared_ptr<const MovieInfo> info = app.vod().movieInfo(movie.streamId);
             std::string error = app.vod().detailError("m" + movie.streamId);
@@ -234,7 +242,7 @@ namespace {
             plot->setPosition(plot->getPosition().x, y);
 
             const HistoryEntry *p = app.library().progressOf(ContentType::Movie, movie.streamId);
-            bool resumable = p && progress::canResume(p->position, p->duration, p->watched);
+            bool resumable = p && progress::inProgress(p->position, p->duration, p->watched);
             bool watched = p && p->watched;
             if (resumable) {
                 progressText->setText(fmt::remaining(p->position, p->duration) + "  (stopped at "
@@ -256,7 +264,7 @@ namespace {
                 buttonCount++;
             };
             if (resumable) {
-                addButton(Action::Resume, "\xE2\x96\xB6  Resume " + fmt::clock(progress::resumeFrom(p->position)));
+                addButton(Action::Resume, "\xE2\x96\xB6  Resume " + fmt::clock(p->position));   // exactly there
                 addButton(Action::StartOver, "Start over");
             } else {
                 addButton(Action::Play, watched ? "\xE2\x96\xB6  Play again" : "\xE2\x96\xB6  Play");
@@ -290,8 +298,10 @@ namespace {
         Action actions[3] = {Action::Play, Action::Favorite, Action::Favorite};
         int buttonCount = 0;
         int focus = 0;
+        bool backFromPlayback = false;
         unsigned vodGen = 0;
         unsigned imageGen = 0;
+        unsigned libraryGen = 0;
     };
 
     // ------------------------------------------------------------------ series
@@ -324,8 +334,9 @@ namespace {
             plot->setMaxWidth(w);
             plot->setMaxLines(3);
             for (int i = 0; i < 2; i++) {
-                buttons[i] = new ui::Button("", FloatRect(S_TEXT_X + (float) i * 420, S_TOP + S_COVER_H - 76, 400, 76),
-                                            i == 0);
+                // the main button holds "Resume S01E03 · 1:02:15"
+                buttons[i] = new ui::Button("", FloatRect(S_TEXT_X + (float) i * 520, S_TOP + S_COVER_H - 76,
+                                                          i == 0 ? 500.0f : 400.0f, 76), i == 0);
                 add(buttons[i]);
             }
             seasonLayer = new RectangleShape(FloatRect(theme::SAFE_X, S_SEASONS_Y, theme::SCREEN_W - 2 * theme::SAFE_X,
@@ -378,7 +389,7 @@ namespace {
         }
 
         void tick(double now) override {
-            if (app.vod().generation() != vodGen) {
+            if (app.vod().generation() != vodGen || app.library().generation() != libraryGen) {
                 refreshAll();
                 redraw();
             }
@@ -404,14 +415,18 @@ namespace {
             r.code = ui::label(r.bg, "", theme::LABEL, 28, ui::Label::centerOffset(theme::LABEL, h) - 14,
                                ui::Weight::SemiBold, theme::accent());
             r.name = ui::label(r.bg, "", theme::BODY, 170, ui::Label::centerOffset(theme::BODY, h) - 14);
-            r.name->setMaxWidth(w - 170 - 300);
+            r.name->setMaxWidth(w - 170 - 320);
             r.detail = ui::label(r.bg, "", theme::CAPTION, 170, ui::Label::centerOffset(theme::BODY, h) + 22,
                                  ui::Weight::Regular, theme::textMuted());
-            r.detail->setMaxWidth(w - 170 - 300);
+            r.detail->setMaxWidth(w - 170 - 320);
             r.state = ui::label(r.bg, "", theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, h), ui::Weight::SemiBold,
                                 theme::success());
             r.state->setAlign(ui::Align::Right, w - 28);
-            r.barTrack = ui::box(r.bg, FloatRect(w - 28 - 220, h / 2 - 3, 220, 6), Color(255, 255, 255, 50), 3);
+            // in progress: "24:16 / 57:00" above a bar
+            r.time = ui::label(r.bg, "", theme::CAPTION, 0, ui::Label::centerOffset(theme::CAPTION, h) - 14,
+                               ui::Weight::SemiBold, theme::textDim());
+            r.time->setAlign(ui::Align::Right, w - 28);
+            r.barTrack = ui::box(r.bg, FloatRect(w - 28 - 240, h / 2 + 14, 240, 6), Color(255, 255, 255, 50), 3);
             r.barFill = ui::box(r.barTrack, FloatRect(0, 0, 6, 6), theme::accent(), 3);
             rows.push_back(r);
             return r.bg;
@@ -421,7 +436,8 @@ namespace {
             const Season &season = info->seasons[(size_t) seasonIndex];
             const Episode &ep = season.episodes[(size_t) index];
             const HistoryEntry *p = app.library().progressOf(ContentType::Series, ep.id);
-            bool resumable = p && progress::canResume(p->position, p->duration, p->watched);
+            seriesplan::EpisodeState state = seriesplan::episodeState(p);
+            bool partial = state == seriesplan::EpisodeState::InProgress;
             for (auto &r: rows) {
                 if (r.bg != obj) {
                     continue;
@@ -430,16 +446,15 @@ namespace {
                 r.name->setText(ep.title.empty() ? "Episode " + std::to_string(ep.number) : ep.title);
                 r.name->setWeight(focused ? ui::Weight::SemiBold : ui::Weight::Regular);
                 r.name->setColor(focused ? Color::White : theme::text());
-                std::string d = join({fmt::duration(ep.durationSeconds),
-                                      fmt::resolution(ep.media.width, ep.media.height)});
-                if (resumable) {
-                    d = join({fmt::remaining(p->position, p->duration), d});
-                }
-                r.detail->setText(d);
-                r.state->setText(p && p->watched ? "\xE2\x9C\x93  Watched" : "");
-                r.barTrack->setVisibility(resumable ? Visibility::Visible : Visibility::Hidden);
-                if (resumable) {
-                    r.barFill->setSize(std::max(6.0f, 220.0f * (float) progress::fraction(p->position, p->duration)), 6);
+                r.detail->setText(join({fmt::duration(ep.durationSeconds),
+                                        fmt::resolution(ep.media.width, ep.media.height)}));
+                r.state->setText(state == seriesplan::EpisodeState::Watched ? "\xE2\x9C\x93  Watched" : "");
+                double total = p && p->duration > 0 ? p->duration : ep.durationSeconds;
+                r.time->setText(partial ? (total > 0 ? fmt::clock(p->position) + " / " + fmt::clock(total)
+                                                     : fmt::clock(p->position)) : "");
+                r.barTrack->setVisibility(partial ? Visibility::Visible : Visibility::Hidden);
+                if (partial) {
+                    r.barFill->setSize(std::max(6.0f, 240.0f * (float) progress::fraction(p->position, total)), 6);
                 }
                 r.bg->setFillColor(focused ? theme::rowFocus() : selected ? theme::surfaceRaised() : theme::surface());
                 r.bg->setOutlineColor(theme::accent());
@@ -539,6 +554,7 @@ namespace {
             ui::Label *name;
             ui::Label *detail;
             ui::Label *state;
+            ui::Label *time;
             RectangleShape *barTrack;
             RectangleShape *barFill;
         };
@@ -590,58 +606,16 @@ namespace {
             }));
         }
 
-        // the episode to continue: the last one played if unfinished, else the one after it, else S1E1
-        bool resumeTarget(int &season, int &episode, bool &inProgress) const {
-            season = 0;
-            episode = 0;
-            inProgress = false;
-            if (!hasSeasons()) {
-                return false;
-            }
-            for (const auto &h: app.library().history()) {
-                if (h.type != ContentType::Series || h.seriesId != series.seriesId) {
-                    continue;
-                }
-                for (size_t s = 0; s < info->seasons.size(); s++) {
-                    const auto &eps = info->seasons[s].episodes;
-                    for (size_t e = 0; e < eps.size(); e++) {
-                        if (eps[e].id != h.id) {
-                            continue;
-                        }
-                        if (progress::canResume(h.position, h.duration, h.watched)) {
-                            season = (int) s;
-                            episode = (int) e;
-                            inProgress = true;
-                        } else if (h.watched) {
-                            if (e + 1 < eps.size()) {
-                                season = (int) s;
-                                episode = (int) e + 1;
-                            } else if (s + 1 < info->seasons.size()) {
-                                season = (int) s + 1;
-                                episode = 0;
-                            } else {
-                                season = (int) s;
-                                episode = (int) e;
-                            }
-                        } else {
-                            season = (int) s;
-                            episode = (int) e;
-                        }
-                        return true;
-                    }
-                }
-                break;   // only the most recent entry of this series decides
-            }
-            return true;
+        seriesplan::Action plan() const {
+            return info ? seriesplan::defaultAction(*info, series.seriesId, app.library()) : seriesplan::Action();
         }
 
         void activate(Action a) {
             switch (a) {
                 case Action::Resume: {
-                    int s, e;
-                    bool inProgress;
-                    if (resumeTarget(s, e, inProgress)) {
-                        playEpisode(s, e, inProgress);
+                    seriesplan::Action a = plan();
+                    if (a.kind != seriesplan::Kind::None) {
+                        playEpisode(a.season, a.episode, a.kind == seriesplan::Kind::Resume);
                     }
                     return;
                 }
@@ -726,6 +700,7 @@ namespace {
 
         void refreshAll() {
             vodGen = app.vod().generation();
+            libraryGen = app.library().generation();
             std::shared_ptr<const SeriesInfo> fresh = app.vod().seriesInfo(series.seriesId);
             if (fresh && fresh != info) {
                 info = fresh;
@@ -743,11 +718,10 @@ namespace {
                 if (series.genre.empty()) {
                     series.genre = d.genre;
                 }
-                int s, e;
-                bool inProgress;
-                if (resumeTarget(s, e, inProgress)) {
-                    seasonIndex = s;
-                    episodes->setSelected(e);
+                seriesplan::Action a = plan();
+                if (a.kind != seriesplan::Kind::None && returnEpisode.empty()) {
+                    seasonIndex = a.season;   // open on the episode the main button plays
+                    episodes->setSelected(a.episode);
                 }
             }
             imageGen = app.images().generation();
@@ -781,13 +755,10 @@ namespace {
             }
 
             buttonCount = 0;
-            int s, e;
-            bool inProgress;
-            if (info && resumeTarget(s, e, inProgress) && hasSeasons()) {
-                const Episode &ep = info->seasons[(size_t) s].episodes[(size_t) e];
+            seriesplan::Action a = plan();
+            if (info && a.kind != seriesplan::Kind::None) {
                 actions[buttonCount] = Action::Resume;
-                buttons[buttonCount++]->setText(std::string(inProgress ? "\xE2\x96\xB6  Resume " : "\xE2\x96\xB6  Play ")
-                                                + fmt::episodeCode(ep.season, ep.number));
+                buttons[buttonCount++]->setText("\xE2\x96\xB6  " + seriesplan::label(a, *info));
             } else if (!info && !error.empty()) {
                 actions[buttonCount] = Action::Retry;
                 buttons[buttonCount++]->setText("Try again");
@@ -826,6 +797,7 @@ namespace {
         int buttonCount = 0;
         unsigned vodGen = 0;
         unsigned imageGen = 0;
+        unsigned libraryGen = 0;
     };
 }
 

@@ -175,8 +175,10 @@ TEST(vod_catalog_indices_search_and_recent) {
     xtream::parseVodStreams(VOD_STREAMS, movies, err);
     std::vector<Category> cats = {{"83", "Yerli", ""}, {"98", "Aksiyon", ""}, {"999", "Empty", ""}};
     MovieCatalog c;
-    c.assign(cats, movies);
-    CHECK_EQ(c.categories().size(), (size_t) 2);   // empty categories are hidden
+    c.prepare(cats, movies);
+    // empty categories are hidden; the movie of the unknown category "x" is listed under Uncategorized
+    CHECK_EQ(c.categories().size(), (size_t) 3);
+    CHECK(c.categories()[2].id == UNCATEGORIZED_ID && c.inCategory(UNCATEGORIZED_ID).size() == 1);
     CHECK_EQ(c.inCategory("98").size(), (size_t) 2);
     CHECK(c.inCategory("nope").empty());
     CHECK(c.find("96825") && c.find("96825")->title == "975");
@@ -192,14 +194,14 @@ TEST(vod_catalog_indices_search_and_recent) {
 }
 
 TEST(progress_rules_and_continue_watching) {
-    using progress::canResume;
+    using progress::inProgress;
     using progress::isWatched;
-    CHECK(!canResume(20, 6000, false));       // too early to bother
-    CHECK(canResume(600, 6000, false));
-    CHECK(!canResume(5700, 6000, false));     // 95 %: watched
+    CHECK(!inProgress(4, 6000, false));       // not genuinely started
+    CHECK(inProgress(20, 6000, false));       // the old 30 s minimum is gone
+    CHECK(inProgress(600, 6000, false));
+    CHECK(!inProgress(5700, 6000, false));    // 95 %: watched
     CHECK(isWatched(5600, 6000) && !isWatched(5500, 6000) && !isWatched(100, 0));
-    CHECK(!canResume(600, 6000, true));
-    CHECK(progress::resumeFrom(600) == 595 && progress::resumeFrom(8) == 0);
+    CHECK(!inProgress(600, 6000, true));
     CHECK(progress::fraction(300, 600) == 0.5 && progress::fraction(9, 0) == 0 && progress::fraction(700, 600) == 1);
 
     LibraryStore lib("unused");
@@ -230,11 +232,11 @@ TEST(progress_rules_and_continue_watching) {
     HistoryEntry ep2 = ep1;
     ep2.id = "e2";
     ep2.episode = 2;
-    ep2.position = 2300;   // finished: the series is not "continue watching" any more
+    ep2.position = 2300;   // finished: leaves Continue Watching, episode 1 (in progress) stays
     ep2.watched = true;
     lib.updateProgress(ep2);
     std::vector<const HistoryEntry *> cw = lib.continueWatching(10);
-    CHECK(cw.size() == 1 && cw[0]->id == "m1");
+    CHECK(cw.size() == 2 && cw[0]->id == "e1" && cw[1]->id == "m1");
     std::vector<const HistoryEntry *> recent = lib.recentlyWatched(10);
     CHECK(recent.size() == 3 && recent[0]->id == "e2" && recent[1]->id == "m1" && recent[2]->id == "ch1");
     // progress lookup / reset
@@ -242,7 +244,7 @@ TEST(progress_rules_and_continue_watching) {
     CHECK(lib.progressOf(ContentType::Series, "nope") == nullptr);
     lib.resetProgress(ContentType::Movie, "m1");
     CHECK(lib.progressOf(ContentType::Movie, "m1")->position == 0);
-    CHECK(lib.continueWatching(10).empty());
+    CHECK(lib.continueWatching(10).size() == 1);
 
     // persistence round trip, and profiles are separate
     lib.updateProgress(movie);
@@ -255,8 +257,7 @@ TEST(progress_rules_and_continue_watching) {
     CHECK(m && m->position == 1200 && m->duration == 6000 && m->extension == "mkv" && !m->watched);
     const HistoryEntry *e = again.progressOf(ContentType::Series, "e2");
     CHECK(e && e->watched && e->seriesId == "s1" && e->seriesName == "Show" && e->season == 1 && e->episode == 2);
-    const HistoryEntry *l = again.progressOf(ContentType::Live, "ch1");
-    CHECK(l && l->position == 0);
+    CHECK(again.progressOf(ContentType::Live, "ch1") == nullptr);   // Live TV has no progress
     again.setProfile("p2");
     CHECK(again.continueWatching(10).empty());
     // a Checkpoint 1 history.json (no new keys) still loads

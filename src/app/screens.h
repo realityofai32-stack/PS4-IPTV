@@ -69,7 +69,8 @@ namespace screens {
     // favorites of all types (Live channels, Movies, Series)
     Screen *makeFavorites(App &app);
 
-    Screen *makeSearch(App &app);
+    // Search across Live TV, Movies and Series; filter: 0 All, 1 Movies, 2 Series, 3 Live TV
+    Screen *makeSearch(App &app, int filter = 0);
 
     Screen *makeSettings(App &app);
 
@@ -83,6 +84,11 @@ namespace screens {
                          std::function<void(const std::string &)> onDone);
 
     // modal message with buttons; onChoice(index) when a button is chosen, -1 on Circle (if cancellable)
+    // modal list in a side panel (Options menus): onChoice(index) on X, -1 on Circle. checked: index shown
+    // with a check mark (-1 = none); details: optional second line per option
+    Screen *makeMenu(App &app, const std::string &title, const std::vector<std::string> &options, int checked,
+                     std::function<void(int)> onChoice, const std::vector<std::string> &details = {});
+
     Screen *makeDialog(App &app, const std::string &title, const std::string &message,
                        const std::vector<std::string> &buttons, std::function<void(int)> onChoice,
                        bool destructive = false);

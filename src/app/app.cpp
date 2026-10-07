@@ -320,4 +320,9 @@ void App::run() {
         }
     }
     LOG_I("app", "main loop ended");
+    // a movie / episode still open keeps its exact position (written synchronously)
+    for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+        (*it)->onAppExit();
+    }
+    saveLibrary();
 }

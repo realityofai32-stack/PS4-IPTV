@@ -232,7 +232,116 @@ namespace {
     };
 }
 
+namespace {
+
+    // Options menus: a list in a panel on the right, over a dimmed screen
+    class MenuScreen : public Screen, public ui::ListView::Adapter {
+
+    public:
+
+        MenuScreen(App &a, const std::string &title, std::vector<std::string> opts, int checkedIndex,
+                   std::function<void(int)> choice, std::vector<std::string> extra)
+                : Screen(a, true), options(std::move(opts)), details(std::move(extra)), checked(checkedIndex),
+                  onChoice(std::move(choice)) {
+            const float w = 680;
+            auto *panel = ui::box(this, FloatRect(theme::SCREEN_W - w, 0, w, theme::SCREEN_H), Color(14, 18, 26, 245), 0);
+            auto *t = ui::label(panel, title, theme::TITLE, 48, 64, ui::Weight::SemiBold);
+            t->setMaxWidth(w - 96);
+            list = new ui::ListView(FloatRect(40, 170, w - 70, 760), 84, 8, this);
+            panel->add(list);
+            auto *hints = new ui::HintBar();
+            hints->setPosition(48, theme::SCREEN_H - theme::SAFE_Y - 40);
+            hints->setHints({{ui::Glyph::Cross, "Select"}, {ui::Glyph::Circle, "Back"}});
+            panel->add(hints);
+            list->setSelected(checked >= 0 ? checked : 0);
+        }
+
+        const char *name() const override { return "menu"; }
+
+        int count() override { return (int) options.size(); }
+
+        C2DObject *createRow(float w, float h) override {
+            Row r;
+            r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), Color::Transparent, theme::RADIUS_SMALL);
+            r.check = ui::label(r.bg, "", theme::BODY, 20, ui::Label::centerOffset(theme::BODY, h), ui::Weight::SemiBold,
+                                theme::accent());
+            r.name = ui::label(r.bg, "", theme::BODY, 64, ui::Label::centerOffset(theme::BODY, h));
+            r.name->setMaxWidth(w - 64 - 24);
+            r.detail = ui::label(r.bg, "", theme::CAPTION, 64, ui::Label::centerOffset(theme::BODY, h) + 22,
+                                 ui::Weight::Regular, theme::textMuted());
+            r.detail->setMaxWidth(w - 64 - 24);
+            rows.push_back(r);
+            return r.bg;
+        }
+
+        void bindRow(C2DObject *obj, int i, bool, bool focused) override {
+            bool hasDetail = i < (int) details.size() && !details[(size_t) i].empty();
+            for (auto &r: rows) {
+                if (r.bg != obj) {
+                    continue;
+                }
+                r.check->setText(i == checked ? "\xE2\x9C\x93" : "");
+                r.name->setText(options[(size_t) i]);
+                r.name->setPosition(64, ui::Label::centerOffset(theme::BODY, 84) - (hasDetail ? 12 : 0));
+                r.detail->setText(hasDetail ? details[(size_t) i] : "");
+                r.name->setColor(focused ? Color::White : theme::text());
+                r.bg->setFillColor(focused ? theme::rowFocus() : Color::Transparent);
+                r.bg->setOutlineColor(theme::accent());
+                r.bg->setOutlineThickness(focused ? 3 : 0);
+            }
+        }
+
+        void handleInput(const InputEvent &e) override {
+            switch (e.button) {
+                case PadButton::Up:
+                    list->moveSelection(-1);
+                    return;
+                case PadButton::Down:
+                    list->moveSelection(1);
+                    return;
+                case PadButton::Cross:
+                case PadButton::Circle:
+                case PadButton::Options: {
+                    if (e.repeat) {
+                        return;
+                    }
+                    int chosen = e.button == PadButton::Cross ? list->selected() : -1;
+                    auto cb = onChoice;
+                    app.pop();   // first: a callback may open another screen
+                    if (cb) {
+                        cb(chosen);
+                    }
+                    return;
+                }
+                default:
+                    return;
+            }
+        }
+
+    private:
+
+        struct Row {
+            RectangleShape *bg;
+            ui::Label *check;
+            ui::Label *name;
+            ui::Label *detail;
+        };
+
+        std::vector<std::string> options;
+        std::vector<std::string> details;
+        int checked;
+        std::function<void(int)> onChoice;
+        ui::ListView *list = nullptr;
+        std::vector<Row> rows;
+    };
+}
+
 namespace screens {
+
+    Screen *makeMenu(App &app, const std::string &title, const std::vector<std::string> &options, int checked,
+                     std::function<void(int)> onChoice, const std::vector<std::string> &details) {
+        return new MenuScreen(app, title, options, checked, std::move(onChoice), details);
+    }
 
     Screen *makeKeyboard(App &app, const std::string &title, const std::string &initial, bool password,
                          std::function<void(const std::string &)> onDone) {

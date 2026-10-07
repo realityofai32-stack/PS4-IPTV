@@ -1,11 +1,13 @@
 // Movie / episode playback on the proven pPlay backend (player/playback + pplay VideoTexture).
 //
 // Same mpv instance, options and recovery logic as Live TV, plus what VOD needs:
-//   - resume: mpv's per-file "start" option from the saved position
+//   - resume: mpv's per-file "start" option at exactly the saved position (precise seek, see Playback)
 //   - seeking: Left/Right 10 s, L2/R2 1 min; presses accumulate and one keyframe seek is sent when they stop
 //   - tracks: picked automatically when the file loads (Settings: audio language, subtitle mode/language),
 //     switched at runtime from the Options panel through mpv's aid / sid (no reload)
-//   - progress: kept in memory every 10 s, written to disk every 30 s, on pause, on exit and at the end
+//   - progress (app/vod_progress): the store every 5 s, history.json every 15 s; on pause, Circle, next
+//     episode and app exit the position is queried from mpv right before stopping and written at once
+//   - overlay: hides 4 s after the last input while playing (player/hud_logic.h)
 //   - episodes: L1/R1 previous/next, an "Up next" panel at the end (auto-play only when enabled in Settings)
 
 #include <cctype>
@@ -16,6 +18,8 @@
 #include "../iptv/xtream.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
+#include "../app/vod_progress.h"
+#include "../player/hud_logic.h"
 #include "../player/pplay/video_texture.h"
 
 using namespace c2d;
@@ -24,10 +28,7 @@ using screens::VodItem;
 
 namespace {
 
-    const double OVERLAY_TIMEOUT = 5.0;
     const double SEEK_COMMIT_DELAY = 0.45;    // seconds after the last seek press
-    const double PROGRESS_MEMORY_EVERY = 10;
-    const double PROGRESS_DISK_EVERY = 30;
     const double END_MARGIN = 30;             // an end of file this close to the duration is the real end
     const double AUTOPLAY_COUNTDOWN = 10;
     const float PANEL_W = 680;
@@ -57,7 +58,7 @@ namespace {
         VodPlayerScreen(App &a, std::vector<VodItem> items, int start, bool resumeFirst,
                         std::function<void(const std::string &)> exitCallback)
                 : Screen(a), queue(std::move(items)), index(start), resumeOnStart(resumeFirst),
-                  onExit(std::move(exitCallback)) {
+                  onExit(std::move(exitCallback)), tracker(a.library(), &clockx::unixNow) {
             setFillColor(Color::Black);
             video = new VideoTexture(app.playback().backend(), {theme::SCREEN_W, theme::SCREEN_H});
             add(video);
@@ -79,6 +80,13 @@ namespace {
             startItem(index, resumeOnStart);
         }
 
+        // the app is closing with this player open: keep the exact position
+        void onAppExit() override {
+            if (!finished) {
+                saveFinal("app exit");
+            }
+        }
+
         // ------------------------------------------------------------------ frame
         void tick(double now) override {
             Playback &pb = app.playback();
@@ -88,18 +96,19 @@ namespace {
             }
             if (pendingSeek && now >= seekCommitAt) {
                 pendingSeek = false;
-                LOG_I("player", "seek to %.0fs", seekTarget);
+                LOG_I("player", "seek to %.1fs", seekTarget);
                 pb.seekTo(seekTarget);
-                lastKnownPosition = seekTarget;
+                tracker.seekCommitted(seekTarget, now);
+                lastActivity = now;
             }
-            if (pb.started() && pb.state() == PlaybackState::Playing && !pendingSeek) {
-                lastKnownPosition = pb.position();
-                if (pb.duration() > 0) {
-                    knownDuration = pb.duration();
+            bool sampling = pb.state() == PlaybackState::Playing || pb.state() == PlaybackState::Paused
+                            || pb.state() == PlaybackState::Buffering;
+            tracker.observe(sampling ? pb.position() : -1, pb.duration(), pb.started() && sampling, now);
+            if (!finished) {
+                VodProgress::Due due = tracker.due(now);
+                if (due != VodProgress::Due::None) {
+                    saveProgress(due == VodProgress::Due::Disk);
                 }
-            }
-            if (now - lastProgressMemory >= PROGRESS_MEMORY_EVERY && pb.started()) {
-                saveProgress(now - lastProgressDisk >= PROGRESS_DISK_EVERY);
             }
             if (!languagesRecorded && !pb.trackList().empty()) {
                 languagesRecorded = true;   // offered in Settings > preferred languages
@@ -120,8 +129,20 @@ namespace {
                 return;
             }
             bool paused = pb.state() == PlaybackState::Paused;
-            if (overlayVisible && !paused && !pendingSeek && !panelOpen && !finished && now - lastInput > OVERLAY_TIMEOUT
-                && recovery.status() == stability::Status::Playing) {
+            bool playing = recovery.status() == stability::Status::Playing && !paused;
+            if (playing && !wasPlaying) {
+                lastActivity = now;   // playback (re)started: the overlay stays for the full 4 s
+            }
+            wasPlaying = playing;
+            hud::State h;
+            h.visible = overlayVisible;
+            h.playing = playing;
+            h.paused = paused;
+            h.panelOpen = panelOpen;
+            h.seekPending = pendingSeek;
+            h.finished = finished;
+            h.lastActivity = lastActivity;
+            if (hud::shouldAutoHide(h, now)) {
                 setOverlay(false);
             }
             if (now - lastRefresh >= 0.25) {
@@ -132,7 +153,7 @@ namespace {
 
         // ------------------------------------------------------------------ input
         void handleInput(const InputEvent &e) override {
-            lastInput = app.now();
+            lastActivity = app.now();
             if (panelOpen) {
                 panelInput(e);
                 return;
@@ -157,13 +178,13 @@ namespace {
                         || s == stability::Status::Reconnecting) {
                         LOG_I("player", "retry requested by the user (%s)", statusName(s));
                         recovery.retryNow(app.now());
-                        open(lastKnownPosition);
+                        open(tracker.position());
                     } else if (pb.state() == PlaybackState::Playing || pb.state() == PlaybackState::Paused) {
                         bool pause = pb.state() == PlaybackState::Playing;
-                        pb.setPaused(pause);
                         if (pause) {
-                            saveProgress(true);
+                            saveFinal("pause");   // the exact paused position
                         }
+                        pb.setPaused(pause);
                         setOverlay(true);
                     } else {
                         setOverlay(!overlayVisible);
@@ -183,7 +204,7 @@ namespace {
                     if (!e.repeat && isEpisode()) {
                         int target = index + (e.button == PadButton::L1 ? -1 : 1);
                         if (target >= 0 && target < (int) queue.size()) {
-                            saveProgress(true);
+                            saveFinal("episode change");
                             startItem(target, true);
                         }
                     }
@@ -227,8 +248,7 @@ namespace {
             finished = false;
             autoplayAt = 0;
             endPanel->setVisibility(Visibility::Hidden);
-            knownDuration = item().durationHint;
-            lastKnownPosition = 0;
+            pendingSeek = false;
             subtitleWarningShown = false;
             languagesRecorded = false;
             manualAudio = -1;
@@ -236,18 +256,12 @@ namespace {
             const Settings &s = app.settings().get();
             preset = s.stability;
             recovery.begin(stability::policy(preset), s.retryOnStall, false, app.now());
-            double start = 0;
-            const HistoryEntry *p = app.library().progressOf(isEpisode() ? ContentType::Series : ContentType::Movie,
-                                                             item().id);
-            if (resume && s.resumeVod && p && progress::canResume(p->position, p->duration, p->watched)) {
-                start = progress::resumeFrom(p->position);
-            }
+            // exactly the saved position (no seconds subtracted), when resuming an item in progress
+            double start = tracker.begin(item(), resume && s.resumeVod, app.now());
             LOG_I("player", "%s %s (%s), %s, stability %s", isEpisode() ? "episode" : "movie", item().id.c_str(),
-                  item().extension.c_str(), start > 0 ? diag::format("resume at %.0fs", start).c_str() : "from the start",
+                  item().extension.c_str(), start > 0 ? diag::format("resume at %.3fs", start).c_str() : "from the start",
                   stabilityName(preset));
-            lastKnownPosition = start;
-            lastProgressMemory = app.now();
-            lastProgressDisk = app.now();
+            lastActivity = app.now();
             open(start);
             setOverlay(true);
             refresh(app.now());
@@ -258,6 +272,8 @@ namespace {
             const Settings &s = app.settings().get();
             pb.applyOptions(stability::mpvOptions(preset));
             pb.applyOptions(tracks::appearanceOptions(s.subtitleSize, s.subtitlePosition, s.subtitleShadow));
+            // precise absolute seeks for the resume start (mpv 0.34.1 default, set explicitly against configs)
+            pb.applyOptions({{"hr-seek", "default"}});
             const VodItem &it = item();
             std::string url = isEpisode() ? xtream::seriesUrl(app.session().profile, it.id, it.extension)
                                           : xtream::movieUrl(app.session().profile, it.id, it.extension);
@@ -314,8 +330,8 @@ namespace {
                     o.failKind = pb.failKind();
                     break;
                 case PlaybackState::Ended: {
-                    double d = knownDuration;
-                    if (pb.started() && (d <= 0 || lastKnownPosition >= d - END_MARGIN)) {
+                    double d = tracker.duration();
+                    if (pb.started() && (d <= 0 || tracker.position() >= d - END_MARGIN)) {
                         reachedEnd();
                         return;
                     }
@@ -358,19 +374,17 @@ namespace {
                 pb.stop();
             }
             if (action != stability::Action::None) {
-                LOG_I("player", "reconnecting at %.0fs (attempt %d/%d)", lastKnownPosition, recovery.attempts(),
+                LOG_I("player", "reconnecting at %.3fs (attempt %d/%d)", tracker.position(), recovery.attempts(),
                       recovery.maxAttempts());
-                open(lastKnownPosition > 5 ? lastKnownPosition - 2 : 0);
+                open(tracker.position());
             }
         }
 
         void reachedEnd() {
             finished = true;
             Playback &pb = app.playback();
-            if (knownDuration > 0) {
-                lastKnownPosition = knownDuration;
-            }
-            saveProgress(true, true);
+            tracker.record(app.now(), -1, true);   // completed: watched, leaves Continue Watching
+            app.saveLibrary();
             LOG_I("player", "%s finished", item().id.c_str());
             pb.stop();
             bool next = isEpisode() && index + 1 < (int) queue.size();
@@ -415,7 +429,7 @@ namespace {
 
         void exit() {
             if (!finished) {
-                saveProgress(true);
+                saveFinal("stop");
             }
             if (onExit) {
                 onExit(item().id);
@@ -430,41 +444,28 @@ namespace {
                 return;
             }
             double base = pendingSeek ? seekTarget : pb.position();
-            double max = knownDuration > 0 ? knownDuration - 3 : base + seconds;
+            double max = tracker.duration() > 0 ? tracker.duration() - 3 : base + seconds;
             seekTarget = std::max(0.0, std::min(base + seconds, max));
             pendingSeek = true;
+            tracker.seekPending(seekTarget);
             seekCommitAt = app.now() + SEEK_COMMIT_DELAY;
             setOverlay(true);
             refresh(app.now());
         }
 
-        // progress entry of the current item; toDisk: also write history.json
-        void saveProgress(bool toDisk, bool atEnd = false) {
-            lastProgressMemory = app.now();
-            const VodItem &it = item();
-            double duration = knownDuration > 0 ? knownDuration : app.playback().duration();
-            double position = atEnd ? duration : lastKnownPosition;
-            if (position <= 1 && !atEnd) {
-                return;   // never started: nothing worth remembering
-            }
-            HistoryEntry h;
-            h.type = isEpisode() ? ContentType::Series : ContentType::Movie;
-            h.id = it.id;
-            h.name = it.title.empty() && isEpisode() ? "Episode " + std::to_string(it.episode) : it.title;
-            h.icon = it.image;
-            h.extension = it.extension;
-            h.seriesId = it.seriesId;
-            h.seriesName = it.seriesName;
-            h.season = it.season;
-            h.episode = it.episode;
-            h.position = position;
-            h.duration = duration;
-            h.watched = atEnd || progress::isWatched(position, duration);
-            h.watchedAt = clockx::unixNow();
-            app.library().updateProgress(h);
-            if (toDisk) {
-                lastProgressDisk = app.now();
+        // periodic progress of the current item; toDisk: also write history.json
+        void saveProgress(bool toDisk) {
+            if (tracker.record(app.now()) && toDisk) {
                 app.saveLibrary();
+            }
+        }
+
+        // stop / pause / next episode / app exit: the position mpv has right now, written to disk at once
+        void saveFinal(const char *why) {
+            double now = app.playback().queryPosition();
+            if (tracker.record(app.now(), now)) {
+                app.saveLibrary();
+                LOG_I("player", "%s: progress saved at %.3fs of %.0fs", why, tracker.position(), tracker.duration());
             }
         }
 
@@ -588,8 +589,8 @@ namespace {
             }
             clock->setText(clockx::localTime());
 
-            double duration = knownDuration > 0 ? knownDuration : pb.duration();
-            double position = pendingSeek ? seekTarget : (pb.started() ? pb.position() : lastKnownPosition);
+            double duration = tracker.duration() > 0 ? tracker.duration() : pb.duration();
+            double position = pendingSeek ? seekTarget : (pb.started() ? pb.position() : tracker.position());
             float frac = (float) progress::fraction(position, duration);
             float w = barTrack->getSize().x;
             barFill->setSize(std::max(8.0f, std::round(w * frac)), 8);
@@ -632,8 +633,8 @@ namespace {
             std::string attempt = std::to_string(recovery.attempts()) + " of " + std::to_string(recovery.maxAttempts());
             if (rs == stability::Status::Opening) {
                 centreTitle->setText(isEpisode() ? it.seriesName : it.title);
-                centreText->setText(lastKnownPosition > 1 ? "Resuming at " + fmt::clock(lastKnownPosition) + "\xE2\x80\xA6"
-                                                          : std::string("Opening" "\xE2\x80\xA6"));
+                centreText->setText(tracker.position() > 1 ? "Resuming at " + fmt::clock(tracker.position()) + "\xE2\x80\xA6"
+                                                           : std::string("Opening" "\xE2\x80\xA6"));
             } else if (rs == stability::Status::Reconnecting) {
                 centreTitle->setText("Reconnecting" "\xE2\x80\xA6");
                 centreText->setText(secondsLeft > 0 ? "Connection lost. Next attempt in " + std::to_string(secondsLeft)
@@ -973,19 +974,17 @@ namespace {
         int index;
         bool resumeOnStart;
         std::function<void(const std::string &)> onExit;
+        VodProgress tracker;
         StabilityPreset preset = StabilityPreset::Balanced;
         stability::Recovery recovery;
-        double knownDuration = 0;
-        double lastKnownPosition = 0;
-        double lastProgressMemory = 0;
-        double lastProgressDisk = 0;
         bool pendingSeek = false;
         double seekTarget = 0;
         double seekCommitAt = 0;
         bool finished = false;
         double autoplayAt = 0;
         bool overlayVisible = true;
-        double lastInput = 0;
+        double lastActivity = 0;
+        bool wasPlaying = false;
         double lastRefresh = 0;
         bool subtitleWarningShown = false;
         bool languagesRecorded = false;

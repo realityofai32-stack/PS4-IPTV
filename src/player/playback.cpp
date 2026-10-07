@@ -151,9 +151,10 @@ void Playback::open(const std::string &url, const std::string &format, const Ope
 
     st = PlaybackState::Opening;
     std::string loadOptions = "pause=yes,speed=1";   // pPlay: start paused, resume on MPV_EVENT_FILE_LOADED
-    if (options.start > 1) {
-        loadOptions += diag::format(",start=%.1f", options.start);
-        LOG_I("player", "resuming at %.1fs", options.start);
+    if (options.start > 0) {
+        // exact saved position, no offset (see OpenOptions::start)
+        loadOptions += diag::format(",start=%.3f", options.start);
+        LOG_I("player", "resuming at %.3fs", options.start);
     }
     int res = mpv->load(url, Mpv::LoadType::Replace, loadOptions);
     if (res != 0) {
@@ -183,6 +184,18 @@ void Playback::setPaused(bool paused) {
         st = PlaybackState::Playing;
         lastProgress = now;   // the pause was not a stall
     }
+}
+
+double Playback::queryPosition() {
+    if (!available() || st == PlaybackState::Idle || st == PlaybackState::Opening || st == PlaybackState::Error) {
+        return -1;
+    }
+    double d = 0;
+    if (mpv_get_property(mpv->getHandle(), "time-pos", MPV_FORMAT_DOUBLE, &d) < 0 || d < 0) {
+        return -1;
+    }
+    si.position = d;
+    return d;
 }
 
 void Playback::seekRelative(double seconds) {

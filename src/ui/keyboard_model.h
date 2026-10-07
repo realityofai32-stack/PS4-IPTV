@@ -31,7 +31,12 @@ public:
 
     static const int COLUMNS = 12;  // grid units per row
 
-    explicit KeyboardModel(std::string initial = "", size_t maxLength = 256);
+    enum class Layout {
+        Full,     // text entry dialogs: URL keys, Cancel / OK
+        Search    // the search screen: letters, digits, punctuation found in titles, Space / Clear / Results
+    };
+
+    explicit KeyboardModel(std::string initial = "", size_t maxLength = 256, Layout layout = Layout::Full);
 
     enum class Result {
         None,

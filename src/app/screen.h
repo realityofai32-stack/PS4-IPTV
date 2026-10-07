@@ -27,6 +27,8 @@ public:
 
     virtual void onPause() {}    // another screen opened above
 
+    virtual void onAppExit() {}  // the app is closing (every screen on the stack, top first)
+
     virtual void handleInput(const InputEvent &event) = 0;
 
     // every logic frame while this screen is on top

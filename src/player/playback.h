@@ -77,7 +77,12 @@ public:
     void applyOptions(const stability::Options &options);
 
     struct OpenOptions {
-        double start = 0;     // seconds (VOD resume); passed to mpv as the per-file "start" option
+        // seconds (VOD resume), passed unchanged (millisecond precision) as mpv's per-file "start" option.
+        // mpv 0.34.1 turns it into an absolute seek (loadfile.c: queue_seek(MPSEEK_ABSOLUTE, start,
+        // MPSEEK_DEFAULT)); with hr-seek at its default an absolute seek is precise (playloop.c: demuxer seek
+        // to the keyframe before the target, frames before it decoded and dropped), so playback starts at
+        // the requested timestamp, not at the previous keyframe.
+        double start = 0;
         // Movies / episodes: called once the file is loaded (before playback starts) with mpv's tracks;
         // returns the audio track id (-1 = mpv's choice) and the subtitle track id (0 = none) to use.
         // Without a chooser (Live TV) subtitles stay off, exactly as pPlay does.
@@ -110,6 +115,9 @@ public:
     bool subtitlesDisabledByRenderer() const { return subtitleRenderFailed; }
 
     double position() const { return si.position; }
+
+    // mpv's time-pos right now (not the last 0.25 s sample); -1 when no file is playing
+    double queryPosition();
 
     double duration() const { return si.duration; }
 

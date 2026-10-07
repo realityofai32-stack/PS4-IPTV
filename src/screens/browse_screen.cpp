@@ -3,10 +3,16 @@
 // Opening a browser loads its catalog lazily through VodLibrary (saved copy first, provider refresh in the
 // background). The grid is virtualized (8 x 3 cells exist); posters come from ImageLoader (kind Poster):
 // the cells on screen first, then one row above and below once scrolling pauses.
+//
+// Above the grid: the full name of the selected category with its count and order, and the complete title
+// of the focused poster (captions under posters stay truncated). Options opens Sort / Refresh catalog /
+// Catalog info. The order applies inside the selected category and is kept per profile for Movies and
+// Series separately; "Recently added" and "Continue watching" keep their own order.
 
 #include <unordered_map>
 
 #include "common.h"
+#include "../platform/clock.h"
 #include "../core/format.h"
 #include "../platform/log.h"
 
@@ -21,10 +27,10 @@ namespace {
     const int FAVORITES_ROW = 3;
     const int FIRST_CATEGORY_ROW = 4;
 
-    const float TOP = 196;
-    const float LIST_H = 780;
+    const float TOP = 206;
+    const float LIST_H = 770;
     const float CAT_X = theme::SAFE_X;
-    const float CAT_W = 340;
+    const float CAT_W = 420;
     const float GRID_X = CAT_X + CAT_W + 32;
     const float GRID_W = theme::SCREEN_W - theme::SAFE_X - GRID_X;
     const int COLUMNS = 8;
@@ -39,6 +45,7 @@ namespace {
         using Item = Movie;
         using Catalog = MovieCatalog;
         static constexpr ContentType TYPE = ContentType::Movie;
+        static const int SEARCH_FILTER = 1;
 
         static const char *heading() { return "Movies"; }
 
@@ -69,8 +76,8 @@ namespace {
             add(fmt::rating(m.rating));
             const HistoryEntry *p = a.library().progressOf(TYPE, m.streamId);
             if (p && p->watched) {
-                add("Watched");
-            } else if (p && progress::canResume(p->position, p->duration, p->watched)) {
+                add("\xE2\x9C\x93 Watched");
+            } else if (p && progress::inProgress(p->position, p->duration, p->watched)) {
                 add(fmt::remaining(p->position, p->duration));
             }
             return s;
@@ -79,8 +86,8 @@ namespace {
         static float progressOf(App &a, const Item &m, bool &watched) {
             const HistoryEntry *p = a.library().progressOf(TYPE, m.streamId);
             watched = p && p->watched;
-            return p && progress::canResume(p->position, p->duration, p->watched)
-                   ? (float) progress::fraction(p->position, p->duration) : 0.0f;
+            return p && progress::inProgress(p->position, p->duration, p->watched)
+                   ? std::max(0.02f, (float) progress::fraction(p->position, p->duration)) : 0.0f;
         }
 
         static std::vector<std::string> continueIds(App &a) {
@@ -100,6 +107,7 @@ namespace {
         using Item = Series;
         using Catalog = SeriesCatalog;
         static constexpr ContentType TYPE = ContentType::Series;
+        static const int SEARCH_FILTER = 2;
 
         static const char *heading() { return "Series"; }
 
@@ -162,10 +170,14 @@ namespace {
                                     theme::textDim());
             statusLabel->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
             statusLabel->setMaxWidth(1100);
-            infoTitle = ui::label(this, "", theme::BODY, GRID_X, 132, ui::Weight::SemiBold);
-            infoTitle->setMaxWidth(900);
-            infoMeta = ui::label(this, "", theme::LABEL, GRID_X, 134 + 2, ui::Weight::Regular, theme::textDim());
-            infoMeta->setMaxWidth(700);
+            // above the grid: the selected category in full, then the focused title in full
+            categoryTitle = ui::label(this, "", theme::BODY, GRID_X, 120, ui::Weight::SemiBold, theme::accent());
+            categoryTitle->setMaxWidth(GRID_W - 300);
+            categoryMeta = ui::label(this, "", theme::LABEL, GRID_X, 123, ui::Weight::Regular, theme::textDim());
+            infoTitle = ui::label(this, "", theme::BODY, GRID_X, 160, ui::Weight::SemiBold);
+            infoMeta = ui::label(this, "", theme::LABEL, 0, 163, ui::Weight::Regular, theme::textDim());
+            infoMeta->setAlign(ui::Align::Right, GRID_X + ui::ListView::rowWidth(GRID_W));
+            infoMeta->setMaxWidth(420);
 
             categoryList = new ui::ListView(FloatRect(CAT_X, TOP, CAT_W, LIST_H), 58, 6, &categoriesAdapter);
             add(categoryList);
@@ -183,6 +195,7 @@ namespace {
             add(spinner);
 
             hints = screens::hintBar(this, {});
+            sortMode = app.settings().sortMode(app.session().profile.id, Traits::TYPE);
             categoryList->setSelected(ALL_ROW);
             setFocus(0);
             Traits::open(app);
@@ -204,6 +217,7 @@ namespace {
         void tick(double now) override {
             if (app.vod().generation() != vodGeneration) {
                 sync(false);
+                announceRefresh();
                 redraw();
             }
             if (app.images().generation() != imageGeneration) {
@@ -307,13 +321,12 @@ namespace {
                     return;
                 case PadButton::Triangle:
                     if (!e.repeat) {
-                        app.push(screens::makeSearch(app));
+                        app.push(screens::makeSearch(app, Traits::SEARCH_FILTER));
                     }
                     return;
                 case PadButton::Options:
                     if (!e.repeat) {
-                        Traits::refresh(app);
-                        app.toast(std::string("Refreshing the ") + Traits::noun() + " list" "\xE2\x80\xA6");
+                        openOptions();
                     }
                     return;
                 case PadButton::Circle:
@@ -345,7 +358,7 @@ namespace {
                 r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), Color::Transparent, theme::RADIUS_SMALL);
                 r.marker = ui::box(r.bg, FloatRect(0, 14, 4, h - 28), theme::accent(), 2);
                 r.name = ui::label(r.bg, "", theme::LABEL + 2, 20, ui::Label::centerOffset(theme::LABEL + 2, h));
-                r.name->setMaxWidth(w - 20 - 80);
+                r.name->setMaxWidth(w - 20 - 72);
                 r.count = ui::label(r.bg, "", theme::CAPTION, 0, ui::Label::centerOffset(theme::CAPTION, h),
                                     ui::Weight::Regular, theme::textMuted());
                 r.count->setAlign(ui::Align::Right, w - 16);
@@ -463,11 +476,35 @@ namespace {
             return it ? Traits::id(*it) : std::string();
         }
 
+        // the order chosen in Options, inside the category (Recently added / Continue watching keep theirs)
+        std::vector<int> sorted(std::vector<int> list) {
+            const auto &cat = Traits::catalog(app);
+            if (sortMode == SortMode::Provider || !cat.sortSupport().supports(sortMode)) {
+                return list;
+            }
+            double t0 = clockx::monotonic();
+            if (sortMode == SortMode::RecentlyWatched) {
+                std::vector<int64_t> activity(cat.size(), 0);
+                for (const auto &a: app.library().lastActivity(Traits::TYPE)) {
+                    int i = cat.indexOf(a.first);
+                    if (i >= 0) {
+                        activity[(size_t) i] = a.second;
+                    }
+                }
+                cat.sort(list, sortMode, &activity);
+            } else {
+                cat.sort(list, sortMode);
+            }
+            LOG_V("browse", "%s: %d items sorted (%s) in %.1f ms", Traits::heading(), (int) list.size(),
+                  sortModeKey(sortMode), (clockx::monotonic() - t0) * 1000);
+            return list;
+        }
+
         std::vector<int> itemsOf(int row) {
             const auto &cat = Traits::catalog(app);
             switch (row) {
                 case ALL_ROW:
-                    return cat.all();
+                    return sorted(cat.all());
                 case RECENT_ROW:
                     return cat.recent(RECENT_LIMIT);
                 case CONTINUE_ROW: {
@@ -480,10 +517,10 @@ namespace {
                     return out;
                 }
                 case FAVORITES_ROW:
-                    return cat.favorites(app.library().favorites(Traits::TYPE));
+                    return sorted(cat.favorites(app.library().favorites(Traits::TYPE)));
                 default:
                     if (row - FIRST_CATEGORY_ROW < (int) cat.categories().size()) {
-                        return cat.inCategory(cat.categories()[(size_t) (row - FIRST_CATEGORY_ROW)].id);
+                        return sorted(cat.inCategory(cat.categories()[(size_t) (row - FIRST_CATEGORY_ROW)].id));
                     }
                     return {};
             }
@@ -510,6 +547,11 @@ namespace {
                 }
             }
             grid->setSelected(index);
+            if (row >= FIRST_CATEGORY_ROW && row - FIRST_CATEGORY_ROW < (int) Traits::catalog(app).categories().size()) {
+                currentCategoryId = Traits::catalog(app).categories()[(size_t) (row - FIRST_CATEGORY_ROW)].id;
+            } else {
+                currentCategoryId.clear();
+            }
             refreshState();
             refreshInfo();
         }
@@ -522,8 +564,20 @@ namespace {
             if (catalogChanged || force) {
                 catalogSize = cat.size();
                 catalogSavedAt = cat.savedAt;
+                if (!cat.sortSupport().supports(sortMode)) {
+                    sortMode = SortMode::Provider;   // this catalog has no such metadata
+                }
                 continueCount = (int) itemsOf(CONTINUE_ROW).size();
                 int row = std::min(categoryList->selected(), categoriesAdapter.count() - 1);
+                if (catalogChanged && !currentCategoryId.empty()) {
+                    // a refreshed list may order its categories differently: stay in the same one
+                    row = ALL_ROW;
+                    for (size_t i = 0; i < cat.categories().size(); i++) {
+                        if (cat.categories()[i].id == currentCategoryId) {
+                            row = FIRST_CATEGORY_ROW + (int) i;
+                        }
+                    }
+                }
                 categoryList->setSelected(row);
                 selectCategory(row, true);
                 if (catalogChanged && !cat.empty()) {
@@ -567,16 +621,160 @@ namespace {
             statusLabel->setColor(!st.message.empty() ? theme::warning() : theme::textDim());
         }
 
+        static std::string withThousands(size_t n) {
+            std::string digits = std::to_string(n);
+            std::string out;
+            for (size_t i = 0; i < digits.size(); i++) {
+                if (i > 0 && (digits.size() - i) % 3 == 0) {
+                    out += ',';
+                }
+                out += digits[i];
+            }
+            return out;
+        }
+
         void refreshInfo() {
+            // the selected category, complete, with its count and order
+            int dummy = 0;
+            int row = currentRow < 0 ? ALL_ROW : currentRow;
+            categoryTitle->setText(row < categoriesAdapter.count() ? rowName(row, dummy) : "");
+            std::string meta = withThousands(visible.size()) + " " + Traits::noun();
+            bool ownOrder = row == RECENT_ROW || row == CONTINUE_ROW;
+            if (!ownOrder) {
+                meta += "   \xC2\xB7   " + std::string(sortModeName(sortMode, Traits::TYPE));
+            }
+            categoryMeta->setText(Traits::catalog(app).empty() ? "" : meta);
+            categoryMeta->setPosition(GRID_X + categoryTitle->width() + 24, 123);
+
             const Item *it = focus == 1 ? selectedItem() : nullptr;
             if (it == nullptr) {
                 infoTitle->setText("");
                 infoMeta->setText("");
                 return;
             }
+            // the focused title in full: a smaller size when it does not fit, then two lines' worth of room
+            std::string m = Traits::meta(app, *it);
+            infoMeta->setText(m);
+            float room = ui::ListView::rowWidth(GRID_W) - (m.empty() ? 0 : infoMeta->width() + 32);
+            infoTitle->setMaxWidth(0);
+            infoTitle->setCharSize(theme::BODY);
             infoTitle->setText(Traits::title(*it));
-            infoMeta->setText(Traits::meta(app, *it));
-            infoMeta->setPosition(GRID_X + infoTitle->width() + 28, 136);
+            if (infoTitle->width() > room) {
+                infoTitle->setCharSize(theme::LABEL);
+            }
+            infoTitle->setMaxWidth(room);
+        }
+
+        // ------------------------------------------------------------------ options
+        void openOptions() {
+            std::vector<std::string> options = {std::string("Sort: ") + sortModeName(sortMode, Traits::TYPE),
+                                                "Refresh catalog", "Catalog info"};
+            std::vector<std::string> details = {"Order inside the selected category",
+                                                "Download the provider list again (the current list stays meanwhile)",
+                                                "Provider, parsed, cached, visible and indexed counts"};
+            app.push(screens::makeMenu(app, std::string(Traits::heading()) + " options", options, -1,
+                                       guardedChoice([this](int c) {
+                                           if (c == 0) {
+                                               openSortMenu();
+                                           } else if (c == 1) {
+                                               refreshCatalog();
+                                           } else if (c == 2) {
+                                               showDiagnostics();
+                                           }
+                                       }), details));
+        }
+
+        template<typename F>
+        std::function<void(int)> guardedChoice(F f) {
+            std::weak_ptr<bool> w = aliveToken;
+            return [w, f](int c) {
+                if (w.lock()) {
+                    f(c);
+                }
+            };
+        }
+
+        void openSortMenu() {
+            const SortSupport &support = Traits::catalog(app).sortSupport();
+            std::vector<SortMode> modes;
+            std::vector<std::string> names;
+            int checked = 0;
+            for (int i = 0; i < (int) SortMode::Count; i++) {
+                SortMode m = (SortMode) i;
+                if (!support.supports(m)) {
+                    continue;   // only orders the provider metadata supports
+                }
+                if (m == sortMode) {
+                    checked = (int) modes.size();
+                }
+                modes.push_back(m);
+                names.push_back(sortModeName(m, Traits::TYPE));
+            }
+            app.push(screens::makeMenu(app, "Sort " + std::string(Traits::noun()), names, checked,
+                                       guardedChoice([this, modes](int c) {
+                                           if (c < 0 || c >= (int) modes.size() || modes[(size_t) c] == sortMode) {
+                                               return;
+                                           }
+                                           sortMode = modes[(size_t) c];
+                                           app.settings().setSortMode(app.session().profile.id, Traits::TYPE, sortMode);
+                                           std::string err;
+                                           if (!app.settings().save(&err)) {
+                                               LOG_E("settings", "save failed: %s", err.c_str());
+                                           }
+                                           selectCategory(currentRow < 0 ? ALL_ROW : currentRow, true);
+                                           grid->setSelected(0);   // the new order starts at its top
+                                           refreshInfo();
+                                           requestImages(true);
+                                       })));
+        }
+
+        void refreshCatalog() {
+            refreshRequested = true;
+            refreshSeen = Traits::status(app).refreshes;
+            Traits::refresh(app);
+            app.toast("Refreshing" "\xE2\x80\xA6");
+            refreshState();
+        }
+
+        // after a refresh started from Options: "Catalog updated" or what went wrong
+        void announceRefresh() {
+            const SectionStatus &st = Traits::status(app);
+            if (!refreshRequested || st.refreshes == refreshSeen || st.refreshing) {
+                return;
+            }
+            refreshRequested = false;
+            if (st.lastRefreshOk) {
+                app.toast("Catalog updated: " + withThousands(Traits::catalog(app).size()) + " " + Traits::noun(),
+                          ToastKind::Success);
+            } else {
+                app.toast("Refresh failed: " + st.lastRefreshError + ". The current list is kept.", ToastKind::Error);
+            }
+        }
+
+        void showDiagnostics() {
+            const auto &cat = Traits::catalog(app);
+            const CatalogDiagnostics &d = cat.diagnostics();
+            const SectionStatus &st = Traits::status(app);
+            auto n = [](int v) { return v < 0 ? std::string("-") : withThousands((size_t) v); };
+            std::string sep = "   \xC2\xB7   ";
+            std::string text;
+            if (cat.empty()) {
+                text = "The list is not loaded yet.";
+            } else {
+                text = "Provider " + n(d.parse.raw) + sep + "Parsed " + n(d.parse.parsed) + sep + "Cached " + n(d.cached)
+                       + "\nVisible " + n(d.visible) + sep + "Indexed " + n(d.indexed) + sep + "Uncategorized "
+                       + n(d.uncategorized) + sep + "Dropped " + n(d.dropped())
+                       + "\nDropped by reason: no id " + n(d.parse.rejectedMissingId) + ", repeated id "
+                       + n(d.parse.rejectedDuplicateId) + ", not an entry " + n(d.parse.rejectedNotObject)
+                       + "\nKept without: name " + n(d.parse.missingName) + ", category " + n(d.parse.missingCategory)
+                       + ", poster " + n(d.parse.missingPoster)
+                       + "\n" + n(d.categories) + " categories" + sep
+                       + (st.fromCache ? "saved list from " : "downloaded ") + clockx::localDate(cat.savedAt)
+                       + "\nParse " + std::to_string((int) d.parseMs) + " ms" + sep + "search index "
+                       + std::to_string((int) d.indexMs) + " ms, " + std::to_string((int) (d.indexBytes / 1024)) + " KB";
+            }
+            app.push(screens::makeDialog(app, std::string(Traits::heading()) + ": catalog info", text, {"Close"},
+                                         nullptr));
         }
 
         void setFocus(int f) {
@@ -585,13 +783,13 @@ namespace {
             grid->setFocused(focus == 1);
             if (focus == 0) {
                 hints->setHints({{ui::Glyph::Cross, "Open"}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, "Category"},
-                                 {ui::Glyph::Triangle, "Search"}, {ui::Glyph::Options, "Refresh"},
+                                 {ui::Glyph::Triangle, "Search"}, {ui::Glyph::Options, "Sort & refresh"},
                                  {ui::Glyph::Circle, "Back"}});
             } else {
                 hints->setHints({{ui::Glyph::Cross, "Details"}, {ui::Glyph::Square, "Favorite"},
                                  {ui::Glyph::L2, ""}, {ui::Glyph::R2, "Page"}, {ui::Glyph::L1, ""},
                                  {ui::Glyph::R1, "Category"}, {ui::Glyph::Triangle, "Search"},
-                                 {ui::Glyph::Circle, "Categories"}});
+                                 {ui::Glyph::Options, "Sort"}, {ui::Glyph::Circle, "Categories"}});
             }
             refreshInfo();
         }
@@ -632,6 +830,8 @@ namespace {
         ui::ListView *categoryList;
         ui::GridView *grid;
         ui::Label *statusLabel;
+        ui::Label *categoryTitle;
+        ui::Label *categoryMeta;
         ui::Label *infoTitle;
         ui::Label *infoMeta;
         ui::Label *stateText;
@@ -648,6 +848,11 @@ namespace {
         unsigned imageGeneration = 0;
         double lastMoveAt = 0;
         bool prefetchPending = true;
+        SortMode sortMode = SortMode::Provider;
+        std::string currentCategoryId;
+        bool refreshRequested = false;
+        unsigned refreshSeen = 0;
+        std::shared_ptr<bool> aliveToken = std::make_shared<bool>(true);
     };
 }
 

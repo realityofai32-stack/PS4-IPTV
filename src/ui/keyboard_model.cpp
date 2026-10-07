@@ -39,8 +39,22 @@ namespace {
     }
 }
 
-KeyboardModel::KeyboardModel(std::string initial, size_t maxLength) : value(std::move(initial)), maxLen(maxLength) {
+KeyboardModel::KeyboardModel(std::string initial, size_t maxLength, Layout kind)
+        : value(std::move(initial)), maxLen(maxLength) {
     // every row is COLUMNS units wide
+    if (kind == Layout::Search) {
+        std::vector<Key> s0 = chars("1234567890");
+        s0.push_back(special(KeyAction::Backspace, "BACKSPACE", 2));
+        std::vector<Key> s1 = chars("qwertyuiop'-");
+        std::vector<Key> s2 = chars("asdfghjkl:&.");
+        std::vector<Key> s3 = chars("zxcvbnm,()!?");
+        std::vector<Key> s4;
+        s4.push_back(special(KeyAction::Space, "SPACE", 6));
+        s4.push_back(special(KeyAction::Clear, "CLEAR", 3));
+        s4.push_back(special(KeyAction::Ok, "RESULTS", 3));
+        layout = {s0, s1, s2, s3, s4};
+        return;
+    }
     std::vector<Key> r0 = chars("1234567890");
     r0.push_back(special(KeyAction::Backspace, "BACKSPACE", 2));
     std::vector<Key> r1 = chars("qwertyuiop-_");
