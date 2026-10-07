@@ -1,0 +1,24 @@
+# Reference clones of upstream projects (pPlay, PacBrew recipes) - fetched, not vendored
+/external/
+
+# Project-local toolchain (LLVM, CMake, Ninja, PacBrew sysroot, OpenOrbis tools)
+/toolchain/
+
+# Build output
+/build/
+/build-*/
+*.pkg
+*.oelf
+eboot.bin
+
+# Local configuration - may contain IPTV credentials / authenticated URLs. NEVER commit.
+/config/test_stream.txt
+/config/*.local.*
+profiles.json
+favorites.json
+
+# Editor / OS
+.vs/
+*.user
+Thumbs.db
+.DS_Store
