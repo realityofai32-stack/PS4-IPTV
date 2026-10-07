@@ -3,7 +3,9 @@
 #ifndef PS4IPTV_UI_WIDGETS_H
 #define PS4IPTV_UI_WIDGETS_H
 
+#include <algorithm>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -83,9 +85,55 @@ namespace ui {
 
         static std::string initials(const std::string &name);
 
+        // stable colour for a name's initials tile
+        static c2d::Color color(const std::string &name);
+
     private:
         Label *letters;
         std::string current;
+    };
+
+    // Channel logo in a rounded tile: the image centred with its aspect ratio kept (never stretched), on a
+    // neutral tile so transparent logos stay readable. Without an image it shows the initials placeholder.
+    // The widget holds a reference to the texture it shows, so a texture leaving the image cache is only
+    // released once this widget shows something else.
+    class LogoView : public c2d::RectangleShape {
+    public:
+        // padding: space between the tile edge and the image box; maxUpscale: how far a small image may
+        // be enlarged to fill the box (1 = never)
+        LogoView(const c2d::FloatRect &rect, unsigned initialsSize, float padding, float maxUpscale);
+
+        // texture null: initials placeholder. imageSize: the image part of the (power-of-two) texture.
+        void set(const std::string &name, const std::shared_ptr<c2d::Texture> &texture,
+                 const c2d::Vector2i &imageSize);
+
+    private:
+        c2d::RectangleShape *image;
+        Label *initials;
+        std::shared_ptr<c2d::Texture> shown;
+        std::string currentName;
+        float padding;
+        float maxUpscale;
+        bool showingImage = false;
+    };
+
+    // Thin rounded vertical scrollbar: translucent track, thumb sized visible/total and positioned
+    // first/(total-visible). Hidden when everything fits.
+    class ScrollBar : public c2d::RectangleShape {
+    public:
+        static constexpr float WIDTH = 6;
+        static constexpr float GAP = 16;     // space between list content and the bar
+
+        ScrollBar(float x, float y, float height);
+
+        void setRange(int total, int visible, int first);
+
+        // brighter thumb while the list has focus
+        void setActive(bool active);
+
+    private:
+        c2d::RectangleShape *thumb;
+        bool active = true;
     };
 
     // three pulsing dots; call tick() each frame while visible
@@ -134,13 +182,21 @@ namespace ui {
 
         int visibleCount() const { return (int) rows.size(); }
 
+        // index of the first row on screen
+        int firstVisible() const { return first; }
+
+        // rows moved by a page jump (L2/R2): one screen minus one row of context
+        int pageSize() const { return std::max(1, (int) rows.size() - 1); }
+
+        // width available to rows (the scrollbar gutter is reserved on the right)
+        static float rowWidth(float listWidth) { return listWidth - ScrollBar::WIDTH - ScrollBar::GAP; }
+
     private:
         void layout();
 
         Adapter *adapter;
         std::vector<c2d::C2DObject *> rows;
-        c2d::RectangleShape *scrollTrack = nullptr;
-        c2d::RectangleShape *scrollThumb = nullptr;
+        ScrollBar *bar = nullptr;
         int sel = 0;
         int first = 0;
         bool focus = true;

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "scroll_math.h"
 #include "widgets.h"
 #include "../core/utf8.h"
 
@@ -235,19 +236,99 @@ namespace ui {
         return out.empty() ? "?" : out;
     }
 
-    void Monogram::setName(const std::string &name) {
-        if (name == current) {
-            return;
-        }
-        current = name;
-        letters->setText(initials(name));
+    Color Monogram::color(const std::string &name) {
         static const Color palette[] = {{58, 92, 160}, {120, 72, 150}, {40, 128, 120}, {160, 92, 52},
                                         {150, 60, 84}, {70, 110, 60}, {96, 96, 140}, {44, 110, 160}};
         uint32_t h = 2166136261u;
         for (unsigned char c: name) {
             h = (h ^ c) * 16777619u;
         }
-        setFillColor(palette[h % 8]);
+        return palette[h % 8];
+    }
+
+    void Monogram::setName(const std::string &name) {
+        if (name == current) {
+            return;
+        }
+        current = name;
+        letters->setText(initials(name));
+        setFillColor(color(name));
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    LogoView::LogoView(const FloatRect &rect, unsigned initialsSize, float pad, float upscale)
+            : RectangleShape(rect), padding(pad), maxUpscale(upscale) {
+        setCornersRadius(std::min(rect.width, rect.height) * 0.16f);
+        setCornerPointCount(8);
+        setFillColor(theme::logoTile());
+        image = new RectangleShape(FloatRect(0, 0, 1, 1));
+        image->setFillColor(Color::White);
+        image->setVisibility(Visibility::Hidden);
+        add(image);
+        initials = new Label("", initialsSize, Weight::SemiBold, Color::White);
+        initials->setAlign(Align::Center, rect.width);
+        initials->setMaxWidth(rect.width - 8);
+        initials->setPosition(0, Label::centerOffset(initialsSize, rect.height));
+        add(initials);
+    }
+
+    void LogoView::set(const std::string &name, const std::shared_ptr<Texture> &texture, const Vector2i &size) {
+        bool hasImage = texture != nullptr && size.x > 0 && size.y > 0;
+        if (name == currentName && hasImage == showingImage && (!hasImage || texture == shown)) {
+            return;   // unchanged: rows are rebound on every move, keep that free
+        }
+        currentName = name;
+        showingImage = hasImage;
+        if (!hasImage) {
+            // the hidden image shape still points at `shown`, which stays referenced until replaced
+            image->setVisibility(Visibility::Hidden);
+            initials->setText(Monogram::initials(name));
+            initials->setVisibility(Visibility::Visible);
+            setFillColor(Monogram::color(name));
+            return;
+        }
+        if (texture != shown) {
+            image->setTexture(texture.get(), true);
+            image->setTextureRect(IntRect(0, 0, size.x, size.y));
+            shown = texture;   // the previous texture is released only now
+        }
+        // fit the image box, aspect ratio kept, centred
+        float boxW = getSize().x - 2 * padding;
+        float boxH = getSize().y - 2 * padding;
+        float scale = std::min(std::min(boxW / (float) size.x, boxH / (float) size.y), maxUpscale);
+        float w = std::round((float) size.x * scale);
+        float h = std::round((float) size.y * scale);
+        image->setSize(w, h);
+        image->setPosition(std::round((getSize().x - w) / 2), std::round((getSize().y - h) / 2));
+        image->setVisibility(Visibility::Visible);
+        initials->setVisibility(Visibility::Hidden);
+        setFillColor(theme::logoTile());
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    ScrollBar::ScrollBar(float x, float y, float height) : RectangleShape(FloatRect(x, y, WIDTH, height)) {
+        setCornersRadius(WIDTH / 2);
+        setCornerPointCount(6);
+        setFillColor(theme::scrollTrack());
+        thumb = box(this, FloatRect(0, 0, WIDTH, WIDTH * 8), theme::scrollThumb(), WIDTH / 2);
+        thumb->setCornerPointCount(6);
+        setVisibility(Visibility::Hidden);
+    }
+
+    void ScrollBar::setRange(int total, int visible, int first) {
+        scroll::Thumb t = scroll::thumb(getSize().y, total, visible, first, 48);
+        setVisibility(t.visible ? Visibility::Visible : Visibility::Hidden);
+        if (t.visible) {
+            thumb->setSize(WIDTH, std::round(t.length));
+            thumb->setPosition(0, std::round(t.offset));
+        }
+    }
+
+    void ScrollBar::setActive(bool a) {
+        active = a;
+        thumb->setFillColor(active ? theme::scrollThumb() : theme::scrollThumbIdle());
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -283,14 +364,15 @@ namespace ui {
         setFillColor(Color::Transparent);
         int n = std::max(1, (int) ((rect.height + spacing) / (rowHeight + spacing)));
         for (int i = 0; i < n; i++) {
-            C2DObject *row = adapter->createRow(rect.width - 18, rowHeight);
+            C2DObject *row = adapter->createRow(rowWidth(rect.width), rowHeight);
             auto *t = (Transformable *) row;
             t->setPosition(0, (float) i * (rowHeight + spacing));
             add(row);
             rows.push_back(row);
         }
-        scrollTrack = box(this, FloatRect(rect.width - 6, 0, 6, rect.height), theme::surface(), 3);
-        scrollThumb = box(this, FloatRect(rect.width - 6, 0, 6, 40), theme::textMuted(), 3);
+        // the bar spans exactly the rows, not the leftover space below the last one
+        bar = new ScrollBar(rect.width - ScrollBar::WIDTH, 0, (float) n * rowHeight + (float) (n - 1) * spacing);
+        add(bar);
         reload();
     }
 
@@ -322,6 +404,7 @@ namespace ui {
     void ListView::setFocused(bool f) {
         if (f != focus) {
             focus = f;
+            bar->setActive(focus);
             layout();
         }
     }
@@ -330,13 +413,7 @@ namespace ui {
         int count = adapter->count();
         int visible = (int) rows.size();
         // keep one row of context above/below the selection while scrolling
-        int margin = visible >= 5 ? 1 : 0;
-        if (sel < first + margin) {
-            first = std::max(0, sel - margin);
-        } else if (sel > first + visible - 1 - margin) {
-            first = sel - (visible - 1 - margin);
-        }
-        first = std::max(0, std::min(first, std::max(0, count - visible)));
+        first = scroll::firstVisible(sel, first, visible, count, visible >= 5 ? 1 : 0);
 
         for (int i = 0; i < visible; i++) {
             int index = first + i;
@@ -349,15 +426,6 @@ namespace ui {
             }
         }
 
-        bool scrollable = count > visible;
-        scrollTrack->setVisibility(scrollable ? Visibility::Visible : Visibility::Hidden);
-        scrollThumb->setVisibility(scrollable ? Visibility::Visible : Visibility::Hidden);
-        if (scrollable) {
-            float h = getSize().y;
-            float thumb = std::max(40.0f, h * (float) visible / (float) count);
-            float pos = (h - thumb) * (float) first / (float) (count - visible);
-            scrollThumb->setSize(6, thumb);
-            scrollThumb->setPosition(getSize().x - 6, pos);
-        }
+        bar->setRange(count, visible, first);
     }
 }

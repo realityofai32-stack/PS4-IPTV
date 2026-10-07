@@ -9,6 +9,7 @@
 #include "cross2d/c2d.h"
 #include "screen.h"
 #include "xtream_service.h"
+#include "../images/image_loader.h"
 #include "../iptv/catalog.h"
 #include "../iptv/models.h"
 #include "../network/jobs.h"
@@ -35,6 +36,7 @@ struct Session {
     iptv::LiveCatalog live;
     bool liveLoaded = false;
     std::string liveNotice;                      // e.g. "showing the saved list"
+    std::string learnedLiveFormat;               // Auto format: "ts"/"m3u8" that played after a fallback
 };
 
 enum class ToastKind {
@@ -89,6 +91,8 @@ public:
 
     Playback &playback() { return player; }
 
+    ImageLoader &images() { return imageLoader; }
+
     // persists favorites/history; logs and toasts on failure
     void saveLibrary();
 
@@ -120,6 +124,7 @@ private:
     XtreamService xtreamService;
     LibraryStore libraryStore;
     Playback player;
+    ImageLoader imageLoader;
     Session currentSession;
     InputManager input;
     void *ownPad = nullptr;          // pad opened by us when libcross2d had none at startup

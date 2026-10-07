@@ -119,7 +119,8 @@ void Playback::open(const std::string &url, const std::string &format) {
     lastStats = 0;
     lastProgress = -1;
     lastPos = -1;
-    pausedForCache = false;
+    lastFrames = 0;
+    cachePaused = false;
     firstNetworkError.clear();
     redact::addUrl(url);
 
@@ -173,7 +174,42 @@ void Playback::seekRelative(double seconds) {
     }
 }
 
+void Playback::applyOptions(const stability::Options &options) {
+    if (!available()) {
+        return;
+    }
+    for (const auto &o: options) {
+        int res = mpv_set_property_string(mpv->getHandle(), o.first.c_str(), o.second.c_str());
+        if (res < 0) {
+            LOG_E("player", "option %s=%s rejected: %d (%s)", o.first.c_str(), o.second.c_str(), res,
+                  mpv_error_string(res));
+        } else {
+            LOG_V("player", "option %s=%s", o.first.c_str(), o.second.c_str());
+        }
+    }
+}
+
+stability::FailKind Playback::failKind() const {
+    switch (err) {
+        case PlaybackError::Http403:
+            return stability::FailKind::Refused;
+        case PlaybackError::HttpClient:
+        case PlaybackError::HttpsUnsupported:
+        case PlaybackError::UnsupportedCodec:
+        case PlaybackError::Renderer:
+        case PlaybackError::Audio:
+        case PlaybackError::Demux:
+            return stability::FailKind::Fatal;
+        default:
+            return stability::FailKind::Retryable;   // network, HTTP 5xx, other
+    }
+}
+
 void Playback::setFramesRendered(unsigned long frames) {
+    if (frames > lastFrames && st != PlaybackState::Idle && st != PlaybackState::Error) {
+        lastFrames = frames;
+        lastProgress = now;   // a new video frame is progress
+    }
     if (frames > 0 && firstFrameAt < 0 && st != PlaybackState::Idle && st != PlaybackState::Error) {
         firstFrameAt = now;
         LOG_I("player", "first video frame after %.2fs: %s %dx%d %s, audio %s %dHz %dch (ao %s)", now - openedAt,
@@ -231,11 +267,11 @@ void Playback::update(double t) {
     }
 
     if (st == PlaybackState::Buffering || st == PlaybackState::Playing) {
-        if (now - lastStats >= 1.0) {
+        if (now - lastStats >= 0.25) {   // progress / cache state for stall detection
             lastStats = now;
             pollStats();
         }
-        if (st == PlaybackState::Buffering && firstFrameAt >= 0 && !pausedForCache && lastProgress >= now - 1.5) {
+        if (st == PlaybackState::Buffering && firstFrameAt >= 0 && !cachePaused && lastProgress >= now - 1.5) {
             st = PlaybackState::Playing;
         }
     }
@@ -251,12 +287,21 @@ void Playback::pollStats() {
             lastProgress = now;
             lastPos = d;
         }
+        // radio channels never render a video frame: audio playing counts as started
+        if (firstFrameAt < 0 && d > 0.5 && si.videoCodec.empty() && !si.audioOutput.empty()) {
+            firstFrameAt = now;
+            LOG_I("player", "audio-only stream playing after %.2fs: %s %dHz %dch", now - openedAt,
+                  si.audioCodec.c_str(), si.sampleRate, si.channels);
+        }
     }
     if (mpv_get_property(h, "demuxer-cache-duration", MPV_FORMAT_DOUBLE, &d) >= 0) {
         si.cacheSeconds = d;
     }
     if (mpv_get_property(h, "frame-drop-count", MPV_FORMAT_INT64, &i) >= 0) {
         si.droppedFrames = (long long) i;
+    }
+    if (mpv_get_property(h, "cache-speed", MPV_FORMAT_INT64, &i) >= 0) {
+        si.cacheSpeed = (long long) i;
     }
     if (si.fps <= 0 && mpv_get_property(h, "estimated-vf-fps", MPV_FORMAT_DOUBLE, &d) >= 0) {
         si.fps = d;
@@ -293,9 +338,9 @@ void Playback::onLog(const mpv_event_log_message *msg) {
         if (contains(text, "HTTP error 403")) {
             fail(PlaybackError::Http403, "Provider temporarily refused the stream (HTTP 403).", text);
         } else if (contains(text, "HTTP error 404")) {
-            fail(PlaybackError::HttpOther, "Stream unavailable (HTTP 404).", text);
+            fail(PlaybackError::HttpClient, "Stream unavailable (HTTP 404).", text);
         } else if (contains(text, "HTTP error 401")) {
-            fail(PlaybackError::HttpOther, "Stream access denied (HTTP 401).", text);
+            fail(PlaybackError::HttpClient, "Stream access denied (HTTP 401).", text);
         } else {
             fail(PlaybackError::HttpOther, "Stream unavailable (" + text.substr(text.find("HTTP error")) + ").", text);
         }
@@ -341,8 +386,8 @@ void Playback::onProperty(const mpv_event_property *prop) {
     } else if (name == "current-ao") {
         si.audioOutput = str();
     } else if (name == "paused-for-cache") {
-        pausedForCache = n && n->format == MPV_FORMAT_FLAG && n->u.flag;
-        if (pausedForCache && st == PlaybackState::Playing) {
+        cachePaused = n && n->format == MPV_FORMAT_FLAG && n->u.flag;
+        if (cachePaused && st == PlaybackState::Playing) {
             st = PlaybackState::Buffering;
         }
     } else if (name == "seekable") {

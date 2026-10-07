@@ -31,8 +31,10 @@ namespace screens {
     // Live TV browser; startOnFavorites opens the Favorites category
     Screen *makeLive(App &app, bool startOnFavorites = false);
 
-    // full-screen live playback; channels = indices into the live catalog used for zapping
-    Screen *makeLivePlayer(App &app, const std::vector<int> &channels, int index);
+    // full-screen live playback; channels = indices into the live catalog used for zapping.
+    // onExit(streamId) runs when the user leaves, with the channel that was playing last (focus restore).
+    Screen *makeLivePlayer(App &app, const std::vector<int> &channels, int index,
+                           std::function<void(const std::string &)> onExit = nullptr);
 
     Screen *makeSearch(App &app);
 

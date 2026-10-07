@@ -1,0 +1,91 @@
+PS4 IPTV - HARDWARE CHECKPOINT 1.5  (v0.1.0, title IPTV00002)
+=============================================================
+
+Goal: Live TV polish and robustness on the physical PS4 - real channel logos, hold-to-scroll, scrollbars,
+Settings redesign, playback stability presets, stall detection and automatic reconnect.
+Movies and Series are NOT in this build.
+
+This PKG contains NO credentials. Your profile, favorites and settings from Checkpoint 1 are kept.
+The text test screen no longer opens at launch (Settings > Text rendering test still has it).
+
+0. INSTALL  IV0001-IPTV00002_00-IPTV000020001000.pkg over the existing "PS4 IPTV".
+   Launch: it signs in automatically and opens Home. Open Live TV.
+
+1. LIVE TV SCREEN APPEARANCE                                              PHOTO 1
+   - Categories left, channels centre, details right; captions "CATEGORIES" and "<category> · <count>".
+   - Rows the same height, numbers / logos / names aligned in columns.
+   - Focused row: blue tint + blue outline. The open category keeps a thin blue marker while you are in
+     the channel list.
+
+2. REAL CHANNEL LOGOS                                                     PHOTO 2
+   - Logos appear in the rows within a few seconds (first time: downloaded; later: from the console).
+   - Right panel: the selected channel's logo, large, not stretched, on a grey tile.
+   RECORD: roughly how long until the visible logos appeared the first time? Second visit (relaunch)?
+
+3. MISSING-LOGO FALLBACK
+   - Channels without a logo (your list has ~26) keep the coloured initials tile - no black/empty boxes,
+     no garbage. Scroll through "All channels" and look for any broken tile.        PHOTO if any
+
+4. HOLD D-PAD DOWN FOR 10 s (All channels)
+   - First press moves at once; after ~0.4 s it repeats, then speeds up (about 10/s, then 15/s, then 20/s).
+   - Release: it stops immediately (no extra rows).
+   RECORD: smooth? did it ever stutter or skip? speed: too slow / good / too fast?
+
+5. HOLD D-PAD UP FOR 10 s - same as 4, upwards.
+
+6. LEFT STICK
+   - Hold the stick down/up: same repeat as the d-pad. Small pushes / resting the thumb: no movement.
+   - Let it spring back to the centre: stops at once. Down then straight up: changes direction at once.
+   RECORD: any drifting or double steps?
+
+7. L2 / R2: jump one page (8 rows) up/down; holding repeats.
+8. L1 / R1: previous / next category, also while in the channel list. Go to a category, pick a channel,
+   switch away and back: the same channel is selected again.
+
+9. SETTINGS (Home > Settings)                                             PHOTO 3
+   - Thin rounded scrollbar on the right of the list (no arrows); the thumb moves when you scroll down.
+   - Values in one right-aligned column; On/Off settings are switches; choices show small dots.
+   - Left/Right or X changes a value; the right panel explains the focused setting.
+   - New: Live stream format (Auto / Prefer TS / Prefer HLS), Playback stability (Fast / Balanced /
+     Maximum stability), Retry on stall (On/Off). "Clear image cache" shows its size and works.
+   - The same scrollbar style also appears in Live TV lists (and Profiles / Search when they scroll).
+
+10. TS PLAYBACK      Settings: Live stream format = Prefer TS, Playback stability = Balanced.
+    Play a channel: picture + sound. Triangle: info panel shows Type MPEG-TS, Stability Balanced,
+    State playing, Buffer (seconds) and Network (KB/s).                       PHOTO 4
+11. HLS PLAYBACK     Prefer HLS: same channel; Type HLS. RECORD: start time vs TS.
+12. BALANCED         Back to Auto + Balanced. Start time: RECORD (about 1-3 s more than before is expected).
+13. MAXIMUM STABILITY  Start time RECORD (several seconds longer is expected); Buffer in the info panel
+    should climb towards ~8 s and more.
+14. WEAK NETWORK (if practical): during playback, move the PS4/router apart, block the router briefly,
+    or unplug the network cable for ~5 s and plug it back.
+    Expected: "Buffering..." pill at the bottom of the picture; picture resumes by itself when data
+    returns. RECORD what you saw and how long it took.
+15. AUTOMATIC RECONNECT: unplug for ~30 s (longer than the stall limit), then reconnect.
+    Expected: "Reconnecting..." panel with "attempt X of Y" and a countdown, then playback resumes, or
+    after the bounded number of attempts "Stream unavailable" with X Retry / Circle Back - never an
+    endless loop. RECORD.
+16. HTTP 403: zap quickly with Down/Up several times (your provider refuses for ~30-60 s).
+    Expected: "Provider temporarily refused the stream (HTTP 403)" + "Retrying in NN s..." counting down;
+    the UI stays responsive; X retries now; Circle cancels and returns to the list, on the channel you
+    were on. RECORD: did it recover by itself, and after how long?
+17. REPEATED STOP/OPEN: Circle / X on a channel 10 times. No crash, no stuck "Opening...".
+18. IDLE: leave the Live TV screen untouched for 60 s. No flicker, no freeze, buttons react at once.
+19. TEXT: all text everywhere still correct (Turkish characters, Settings descriptions, player panels).
+20. NO HITCH WHILE LOGOS LOAD: Settings > Clear image cache, go to Live TV > All channels and hold Down
+    immediately while logos are still downloading. Scrolling must stay smooth.   RECORD
+
+IF SOMETHING GOES WRONG
+   - Note the step and take a photo. Log: /data/PS4IPTV/logs/log.txt (GoldHEN FTP, port 2121). Useful
+     lines: "player" (status changes, reconnects, applied options), "images" (logo failures by hash -
+     never the URL), "input". Passwords and stream URLs are redacted.
+   - Logo cache: /data/PS4IPTV/cache/images/ (hashed .img files, max 48 MB).
+
+WHAT THE RESULTS MEAN
+   Logos never appear, initials only ......... HTTPS/TLS to the logo host, or decode (log "images").
+   Some logos broken/garbled ................. texture upload path (photo + log).
+   Scrolling stutters only while logos load .. texture creation on the main thread (tell me how bad).
+   Repeat too slow/fast ...................... timings are one table (platform/input_logic.h): give numbers.
+   Stick drifts / double steps ............... deadzone/hysteresis thresholds.
+   "option ... rejected" in the log .......... an mpv option was refused by the PS4 build (should not happen).
+   Endless reconnecting ...................... recovery bound broken (should be impossible: log "player").

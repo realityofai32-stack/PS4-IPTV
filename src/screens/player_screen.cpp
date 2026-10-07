@@ -1,4 +1,12 @@
 // Live TV playback screen on the proven pPlay backend (player/playback + pplay VideoTexture).
+//
+// Before every open the selected stability preset's mpv options are applied (player/stability.h). A
+// stability::Recovery state machine watches playback progress every frame and decides when to show
+// "Buffering...", when to reconnect (bounded, with back-off), when to try the other stream format, how
+// long to wait after HTTP 403, and when to give up. Circle always leaves (cancelling any pending retry);
+// X retries at once.
+
+#include <cmath>
 
 #include "common.h"
 #include "../iptv/xtream.h"
@@ -13,13 +21,39 @@ namespace {
 
     const double OVERLAY_TIMEOUT = 5.0;
     const double ZAP_DEBOUNCE = 0.65;
-    const double RETRY_403_DELAY = 20.0;   // the provider in testing released a slot after 30-60 s
-    const int RETRY_403_MAX = 3;
+    const float CENTRE_W = 1160;
+    const float CENTRE_H = 300;
+    const float PILL_W = 460;
+    const float PILL_H = 72;
+
+    stability::FormatSetting formatSetting(StreamFormat f) {
+        return f == StreamFormat::Ts ? stability::FormatSetting::PreferTs
+                                     : f == StreamFormat::Hls ? stability::FormatSetting::PreferHls
+                                                              : stability::FormatSetting::Auto;
+    }
+
+    const char *statusName(stability::Status s) {
+        switch (s) {
+            case stability::Status::Opening:
+                return "opening";
+            case stability::Status::Playing:
+                return "playing";
+            case stability::Status::Buffering:
+                return "buffering";
+            case stability::Status::Reconnecting:
+                return "reconnecting";
+            case stability::Status::Refused:
+                return "waiting (HTTP 403)";
+            default:
+                return "failed";
+        }
+    }
 
     class LivePlayerScreen : public Screen {
     public:
-        LivePlayerScreen(App &a, std::vector<int> channelList, int start)
-                : Screen(a), list(std::move(channelList)), index(start) {
+        LivePlayerScreen(App &a, std::vector<int> channelList, int start,
+                         std::function<void(const std::string &)> exitCallback)
+                : Screen(a), list(std::move(channelList)), index(start), onExit(std::move(exitCallback)) {
             setFillColor(Color::Black);
             video = new VideoTexture(app.playback().backend(), {theme::SCREEN_W, theme::SCREEN_H});
             add(video);
@@ -46,27 +80,40 @@ namespace {
                              {ui::Glyph::Square, "Favorite"}, {ui::Glyph::Triangle, "Info"},
                              {ui::Glyph::Circle, "Back"}});
 
-            // centre: opening / error
-            centre = ui::box(this, FloatRect((theme::SCREEN_W - 1100) / 2, 380, 1100, 300), Color(12, 16, 22, 230),
-                             theme::RADIUS);
-            centreTitle = ui::label(centre, "", theme::HEADING, 0, 60, ui::Weight::SemiBold);
-            centreTitle->setAlign(ui::Align::Center, 1100);
-            centreTitle->setMaxWidth(1000);
-            centreText = ui::label(centre, "", theme::BODY, 0, 130, ui::Weight::Regular, theme::textDim());
-            centreText->setAlign(ui::Align::Center, 1100);
-            centreText->setMaxWidth(1000);
-            centreText->setMaxLines(3);
+            // centre: opening / reconnecting / HTTP 403 countdown / failure
+            centre = ui::box(this, FloatRect((theme::SCREEN_W - CENTRE_W) / 2, 380, CENTRE_W, CENTRE_H),
+                             Color(12, 16, 22, 230), theme::RADIUS);
+            centreTitle = ui::label(centre, "", theme::HEADING, 0, 52, ui::Weight::SemiBold);
+            centreTitle->setAlign(ui::Align::Center, CENTRE_W);
+            centreTitle->setMaxWidth(CENTRE_W - 80);
+            centreText = ui::label(centre, "", theme::BODY, 0, 118, ui::Weight::Regular, theme::textDim());
+            centreText->setAlign(ui::Align::Center, CENTRE_W);
+            centreText->setMaxWidth(CENTRE_W - 80);
+            centreText->setMaxLines(2);
+            centreHint = ui::label(centre, "", theme::LABEL, 0, 222, ui::Weight::Regular, theme::textMuted());
+            centreHint->setAlign(ui::Align::Center, CENTRE_W);
             spinner = new ui::Spinner(18);
-            spinner->setPosition((1100 - 18 * 3.6f) / 2, 230);
+            spinner->setPosition((CENTRE_W - 18 * 3.6f) / 2, 230);
             centre->add(spinner);
 
+            // small status pill over the picture: "Buffering..."
+            pill = ui::box(this, FloatRect((theme::SCREEN_W - PILL_W) / 2, 760, PILL_W, PILL_H),
+                           Color(12, 16, 22, 210), PILL_H / 2);
+            pillText = ui::label(pill, "", theme::BODY, 84, ui::Label::centerOffset(theme::BODY, PILL_H),
+                                 ui::Weight::SemiBold);
+            pillText->setMaxWidth(PILL_W - 110);
+            pillSpinner = new ui::Spinner(12);
+            pillSpinner->setPosition(30, (PILL_H - 12) / 2);
+            pill->add(pillSpinner);
+            pill->setVisibility(Visibility::Hidden);
+
             // technical info
-            info = ui::box(this, FloatRect(theme::SCREEN_W - theme::SAFE_X - 620, 230, 620, 480),
+            info = ui::box(this, FloatRect(theme::SCREEN_W - theme::SAFE_X - 660, 220, 660, 560),
                            Color(12, 16, 22, 230), theme::RADIUS);
             ui::label(info, "Stream information", theme::HEADING, 36, 30, ui::Weight::SemiBold);
             infoText = ui::label(info, "", theme::LABEL, 36, 96, ui::Weight::Regular, theme::textDim());
-            infoText->setMaxWidth(560);
-            infoText->setMaxLines(12);
+            infoText->setMaxWidth(600);
+            infoText->setMaxLines(15);
             info->setVisibility(app.settings().get().showTechnicalInfo ? Visibility::Visible : Visibility::Hidden);
         }
 
@@ -92,32 +139,14 @@ namespace {
                 pendingIndex = -1;
                 startChannel(target, false);
             }
-            // automatic, spaced retry after HTTP 403
-            if (retryAt > 0 && now >= retryAt) {
-                retryAt = 0;
-                retries403++;
-                LOG_I("player", "HTTP 403 retry %d/%d", retries403, RETRY_403_MAX);
-                open();
+            if (pendingIndex < 0) {
+                supervise(now);
             }
-            // TS failed before the first frame: try HLS once (not for 403/https)
-            if (pb.failedBeforeFirstFrame() && !triedFallback && format == "ts"
-                && app.settings().get().streamFormat == StreamFormat::Auto && pb.error() != PlaybackError::Http403
-                && pb.error() != PlaybackError::HttpsUnsupported) {
-                triedFallback = true;
-                LOG_I("player", "MPEG-TS failed (%s): trying HLS", pb.errorDetail().c_str());
-                format = "m3u8";
-                open();
-            }
-            if (pb.state() == PlaybackState::Error && pb.error() == PlaybackError::Http403 && retryAt <= 0
-                && retries403 < RETRY_403_MAX && !retryScheduled) {
-                retryScheduled = true;
-                retryAt = now + RETRY_403_DELAY;
-            }
-            if (pb.hasVideoFrame() && !historyRecorded) {
+            if (pb.started() && !historyRecorded) {
                 historyRecorded = true;
                 recordHistory();
             }
-            if (overlayVisible && now - lastInput > OVERLAY_TIMEOUT && pb.state() == PlaybackState::Playing
+            if (overlayVisible && now - lastInput > OVERLAY_TIMEOUT && recovery.status() == stability::Status::Playing
                 && pendingIndex < 0) {
                 setOverlay(false);
             }
@@ -129,23 +158,37 @@ namespace {
 
         void handleInput(const InputEvent &e) override {
             lastInput = app.now();
-            Playback &pb = app.playback();
             switch (e.button) {
                 case PadButton::Circle:
-                    app.pop();
-                    return;
-                case PadButton::Cross:
                     if (e.repeat) {
                         return;
                     }
-                    if (pb.state() == PlaybackState::Error || pb.state() == PlaybackState::Ended) {
-                        retries403 = 0;
-                        retryAt = 0;
+                    // leaving cancels any pending reconnect / HTTP 403 retry (the destructor stops playback)
+                    if (recovery.waitingToReopen()) {
+                        LOG_I("player", "retry canceled by the user");
+                    }
+                    if (onExit) {
+                        onExit(channel(pendingIndex >= 0 ? pendingIndex : index).streamId);
+                    }
+                    app.pop();
+                    return;
+                case PadButton::Cross: {
+                    if (e.repeat) {
+                        return;
+                    }
+                    stability::Status s = recovery.status();
+                    bool stalledNoRetry = s == stability::Status::Buffering && !recovery.reason().empty()
+                                          && !app.settings().get().retryOnStall;
+                    if (pendingIndex < 0 && (s == stability::Status::Failed || s == stability::Status::Refused
+                                             || s == stability::Status::Reconnecting || stalledNoRetry)) {
+                        LOG_I("player", "retry requested by the user (%s)", statusName(s));
+                        recovery.retryNow(app.now());
                         open();
                     } else {
                         setOverlay(!overlayVisible);
                     }
                     return;
+                }
                 case PadButton::Up:
                 case PadButton::L1:
                     zap(-1);  // previous channel
@@ -156,7 +199,7 @@ namespace {
                     return;
                 case PadButton::Square:
                     if (!e.repeat) {
-                        bool on = app.library().toggleFavorite(ContentType::Live, channel().streamId);
+                        bool on = app.library().toggleFavorite(ContentType::Live, channel(index).streamId);
                         app.saveLibrary();
                         app.toast(on ? "Added to favorites" : "Removed from favorites");
                         setOverlay(true);
@@ -165,6 +208,7 @@ namespace {
                 case PadButton::Triangle:
                     if (!e.repeat) {
                         info->setVisibility(info->isVisible() ? Visibility::Hidden : Visibility::Visible);
+                        refresh(app.now());
                     }
                     return;
                 default:
@@ -174,8 +218,8 @@ namespace {
         }
 
     private:
-        const LiveChannel &channel() const {
-            return app.session().live.channels()[(size_t) list[(size_t) index]];
+        const LiveChannel &channel(int i) const {
+            return app.session().live.channels()[(size_t) list[(size_t) i]];
         }
 
         std::string categoryName(const std::string &id) const {
@@ -201,39 +245,97 @@ namespace {
 
         void startChannel(int i, bool first) {
             index = i;
-            triedFallback = false;
-            retries403 = 0;
-            retryAt = 0;
             historyRecorded = false;
             const Settings &s = app.settings().get();
-            const AccountInfo &acc = app.session().account;
-            bool tsAllowed = acc.outputFormats.empty();
-            bool hlsAllowed = acc.outputFormats.empty();
-            for (const auto &f: acc.outputFormats) {
-                tsAllowed |= f == "ts";
-                hlsAllowed |= f == "m3u8";
-            }
-            format = s.streamFormat == StreamFormat::Hls || (!tsAllowed && hlsAllowed) ? "m3u8" : "ts";
-            LOG_I("player", "%s channel %s (%s), format %s", first ? "open" : "zap", channel().streamId.c_str(),
-                  channel().name.c_str(), format.c_str());
+            plan = stability::planFormats(formatSetting(s.streamFormat), app.session().account.outputFormats,
+                                          app.session().learnedLiveFormat);
+            format = plan.first;
+            preset = s.stability;
+            recovery.begin(stability::policy(preset), s.retryOnStall, !plan.fallback.empty(), app.now());
+            LOG_I("player", "%s channel %s (%s): format %s%s%s, stability %s, auto-retry %s", first ? "open" : "zap",
+                  channel(index).streamId.c_str(), channel(index).name.c_str(), format.c_str(),
+                  plan.fallback.empty() ? "" : " then ", plan.fallback.c_str(), stabilityName(preset),
+                  s.retryOnStall ? "on" : "off");
             open();
             setOverlay(true);
         }
 
         void open() {
-            retryScheduled = false;
-            std::string url = xtream::liveUrl(app.session().profile, channel().streamId, format);
-            app.playback().open(url, format == "ts" ? "MPEG-TS" : "HLS");
+            Playback &pb = app.playback();
+            pb.applyOptions(stability::mpvOptions(preset));
+            std::string url = xtream::liveUrl(app.session().profile, channel(index).streamId, format);
+            pb.open(url, format == "ts" ? "MPEG-TS" : "HLS");
             video->resetFrameStats();
             refresh(app.now());
+        }
+
+        // feeds the recovery state machine and performs what it decides
+        void supervise(double now) {
+            Playback &pb = app.playback();
+            stability::Observation o;
+            o.hadFrame = pb.started();
+            switch (pb.state()) {
+                case PlaybackState::Error:
+                    o.phase = stability::Phase::Failed;
+                    o.failKind = pb.failKind();
+                    break;
+                case PlaybackState::Ended:
+                    o.phase = stability::Phase::Ended;
+                    break;
+                case PlaybackState::Buffering:
+                case PlaybackState::Playing:
+                case PlaybackState::Paused:
+                    if (pb.started()) {
+                        o.phase = stability::Phase::Running;
+                        o.sinceProgress = pb.state() == PlaybackState::Paused ? 0 : pb.sinceProgress(now);
+                        o.pausedForCache = pb.pausedForCache();
+                        o.dataArriving = pb.info().cacheSpeed > 0;
+                        break;
+                    }
+                    [[fallthrough]];   // loaded, but no picture yet
+                default:
+                    o.phase = stability::Phase::Opening;
+                    o.sinceOpen = pb.openSeconds(now);
+                    break;
+            }
+            stability::Status before = recovery.status();
+            stability::Action action = recovery.update(o, now);
+            stability::Status after = recovery.status();
+            if (after != before) {
+                LOG_I("player", "status %s -> %s (attempt %d/%d%s%s)", statusName(before), statusName(after),
+                      recovery.attempts(), recovery.maxAttempts(), recovery.reason().empty() ? "" : ", ",
+                      recovery.reason().c_str());
+            }
+            // release the stream while waiting: frees the provider's connection slot before the re-open
+            if ((recovery.waitingToReopen() || after == stability::Status::Failed) && pb.state() != PlaybackState::Idle
+                && pb.state() != PlaybackState::Error && pb.state() != PlaybackState::Ended) {
+                pb.stop();
+            }
+            if (action == stability::Action::ReopenOtherFormat) {
+                format = format == plan.first ? plan.fallback : plan.first;
+                LOG_I("player", "no picture with %s: trying %s once", format == "ts" ? "HLS" : "MPEG-TS",
+                      format == "ts" ? "MPEG-TS" : "HLS");
+                open();
+            } else if (action == stability::Action::Reopen) {
+                LOG_I("player", "reconnecting (%s, attempt %d/%d)", format.c_str(), recovery.attempts(),
+                      recovery.maxAttempts());
+                open();
+            }
+            // Auto mode remembers a format that only worked as the fallback, for the next channels
+            if (pb.started() && recovery.fallbackUsed() && format != plan.first
+                && app.settings().get().streamFormat == StreamFormat::Auto
+                && app.session().learnedLiveFormat != format) {
+                app.session().learnedLiveFormat = format;
+                LOG_I("player", "auto format: %s works for this provider, using it first from now on", format.c_str());
+            }
         }
 
         void recordHistory() {
             HistoryEntry h;
             h.type = ContentType::Live;
-            h.id = channel().streamId;
-            h.name = channel().name;
-            h.icon = channel().icon;
+            h.id = channel(index).streamId;
+            h.name = channel(index).name;
+            h.icon = channel(index).icon;
             h.watchedAt = clockx::unixNow();
             app.library().addHistory(h);
             app.saveLibrary();
@@ -248,17 +350,22 @@ namespace {
         void refresh(double now) {
             Playback &pb = app.playback();
             int shown = pendingIndex >= 0 ? pendingIndex : index;
-            const LiveChannel &c = app.session().live.channels()[(size_t) list[(size_t) shown]];
+            const LiveChannel &c = channel(shown);
             title->setText((c.num > 0 ? std::to_string(c.num) + "   " : std::string()) + c.name);
             subtitle->setText(categoryName(c.categoryId));
             clock->setText(clockx::localTime());
             fav->setText(app.library().isFavorite(ContentType::Live, c.streamId) ? "\xE2\x98\x85 Favorite" : "");
 
             const StreamInfo &si = pb.info();
+            stability::Status rs = recovery.status();
+            int secondsLeft = (int) std::ceil(recovery.secondsLeft(now));
+            std::string attempt = std::to_string(recovery.attempts()) + " of " + std::to_string(recovery.maxAttempts());
+            bool zapping = pendingIndex >= 0;
+
             std::string st;
-            if (pendingIndex >= 0) {
+            if (zapping) {
                 st = "Switching channel" "\xE2\x80\xA6";
-            } else if (pb.state() == PlaybackState::Playing) {
+            } else if (rs == stability::Status::Playing) {
                 st = "LIVE";
                 if (si.height > 0) {
                     st += "   \xC2\xB7   " + std::to_string(si.height) + "p";
@@ -266,47 +373,73 @@ namespace {
                 if (!pb.hasAudio()) {
                     st += "   \xC2\xB7   no audio";
                 }
+            } else if (rs == stability::Status::Buffering) {
+                st = "Buffering" "\xE2\x80\xA6";
+            } else if (rs == stability::Status::Reconnecting) {
+                st = "Reconnecting" "\xE2\x80\xA6";
+            } else if (rs == stability::Status::Refused) {
+                st = "Retrying in " + std::to_string(secondsLeft) + " s" "\xE2\x80\xA6";
+            } else if (rs == stability::Status::Failed) {
+                st = "Stream unavailable";
             } else {
-                st = Playback::stateText(pb.state());
+                st = "Opening" "\xE2\x80\xA6";
             }
             status->setText(st);
-            status->setColor(pb.state() == PlaybackState::Error ? theme::danger() : theme::text());
+            status->setColor(rs == stability::Status::Failed ? theme::danger() : theme::text());
 
-            // centre panel: opening/buffering/errors
-            bool opening = pb.state() == PlaybackState::Opening || (pb.state() == PlaybackState::Buffering
-                                                                    && !pb.hasVideoFrame());
-            bool error = pb.state() == PlaybackState::Error;
-            bool ended = pb.state() == PlaybackState::Ended;
-            centre->setVisibility(opening || error || ended ? Visibility::Visible : Visibility::Hidden);
-            spinner->setVisibility(opening ? Visibility::Visible : Visibility::Hidden);
-            if (opening) {
+            // centre panel: opening (no picture yet), reconnecting, HTTP 403 countdown, failure
+            bool centreShown = !zapping && (rs == stability::Status::Opening || rs == stability::Status::Reconnecting
+                                           || rs == stability::Status::Refused || rs == stability::Status::Failed);
+            centre->setVisibility(centreShown ? Visibility::Visible : Visibility::Hidden);
+            bool spinning = centreShown && (rs == stability::Status::Opening || rs == stability::Status::Reconnecting);
+            spinner->setVisibility(spinning ? Visibility::Visible : Visibility::Hidden);
+            centreHint->setVisibility(spinning ? Visibility::Hidden : Visibility::Visible);
+            centreTitle->setColor(rs == stability::Status::Failed ? theme::danger() : theme::text());
+            if (spinning) {
                 spinner->tick(now);
+            }
+            if (rs == stability::Status::Opening) {
                 centreTitle->setText(c.name);
                 double secs = pb.openSeconds(now);
-                centreText->setText(secs > 20 ? "The server is slow to respond" "\xE2\x80\xA6" " still trying."
-                                              : format == "ts" ? "Opening" "\xE2\x80\xA6" : "Opening (HLS)" "\xE2\x80\xA6");
-            } else if (error) {
-                centreTitle->setText(pb.errorMessage());
-                std::string t;
-                if (pb.error() == PlaybackError::Http403 && retryAt > 0) {
-                    t = "Retrying automatically in " + std::to_string((int) (retryAt - now) + 1)
-                        + " s. Press X to retry now, or Circle to go back.";
-                } else if (pb.error() == PlaybackError::Http403) {
-                    t = "Wait a moment and press X to retry. The provider may still count your previous stream.";
-                } else {
-                    t = "Press X to retry, or Circle to go back.";
-                }
-                centreText->setText(t);
-            } else if (ended) {
-                centreTitle->setText("The stream ended");
-                centreText->setText("Press X to reconnect, or Circle to go back.");
+                centreText->setText(secs > 15 ? "The server is slow to respond" "\xE2\x80\xA6" " still trying."
+                                              : format == "ts" ? "Opening" "\xE2\x80\xA6"
+                                                               : "Opening (HLS)" "\xE2\x80\xA6");
+            } else if (rs == stability::Status::Reconnecting) {
+                centreTitle->setText("Reconnecting" "\xE2\x80\xA6");
+                centreText->setText(secondsLeft > 0 ? "Connection lost. Next attempt in " + std::to_string(secondsLeft)
+                                                      + " s  (attempt " + attempt + ")"
+                                                    : "Attempt " + attempt + (format == "ts" ? "" : "  (HLS)"));
+            } else if (rs == stability::Status::Refused) {
+                centreTitle->setText("Provider temporarily refused the stream (HTTP 403)");
+                centreText->setText("Retrying in " + std::to_string(secondsLeft) + " s" "\xE2\x80\xA6"
+                                    "  (attempt " + attempt + ")");
+                centreHint->setText("X  Retry now          Circle  Cancel");
+            } else if (rs == stability::Status::Failed) {
+                bool stopped = pb.state() == PlaybackState::Error;
+                centreTitle->setText(stopped && !pb.errorMessage().empty() ? pb.errorMessage() : "Stream unavailable");
+                centreText->setText(recovery.attempts() > 0 ? "Automatic reconnect gave up after "
+                                                              + std::to_string(recovery.attempts()) + " attempts."
+                                                            : pb.state() == PlaybackState::Ended
+                                                              ? "The stream ended." : "");
+                centreHint->setText("X  Retry          Circle  Back");
+            }
+
+            // buffering pill over the (frozen) picture
+            bool pillShown = !zapping && rs == stability::Status::Buffering;
+            pill->setVisibility(pillShown ? Visibility::Visible : Visibility::Hidden);
+            if (pillShown) {
+                bool manual = !app.settings().get().retryOnStall && !recovery.reason().empty();
+                pillText->setText(manual ? "Buffering" "\xE2\x80\xA6" "  X reconnects" : "Buffering" "\xE2\x80\xA6");
+                pillSpinner->tick(now);
             }
 
             if (info->isVisible()) {
-                char buf[1024];
+                char buf[1400];
                 snprintf(buf, sizeof(buf),
                          "Type          %s\nResolution    %s\nFrame rate    %s\nVideo codec   %s\nPixel format  %s\n"
-                         "Audio codec   %s\nAudio         %s\nOutput        %s\nBuffer        %.1f s\nDropped       %lld",
+                         "Audio codec   %s\nAudio         %s\nOutput        %s\nBuffer        %.1f s\n"
+                         "Network       %s\nDropped       %lld\nStability     %s\nState         %s\n"
+                         "Recovery      %s",
                          si.format.c_str(),
                          si.width > 0 ? (std::to_string(si.width) + " x " + std::to_string(si.height)).c_str() : "-",
                          si.fps > 0 ? diag::format("%.2f fps", si.fps).c_str() : "-",
@@ -318,20 +451,25 @@ namespace {
                                                           : (std::to_string(si.channels) + " channels").c_str()).c_str()
                                            : "-",
                          si.audioOutput.empty() ? "-" : ("PS4 audio (" + si.audioOutput + ")").c_str(),
-                         si.cacheSeconds, si.droppedFrames);
+                         si.cacheSeconds,
+                         si.cacheSpeed > 0 ? diag::format("%lld KB/s", si.cacheSpeed / 1000).c_str() : "-",
+                         si.droppedFrames, stabilityName(preset), statusName(rs),
+                         (std::to_string(recovery.attempts()) + " / " + std::to_string(recovery.maxAttempts())
+                          + (recovery.fallbackUsed() ? ", format fallback used" : "")
+                          + (recovery.reason().empty() ? "" : ", last: " + recovery.reason())).c_str());
                 infoText->setText(buf);
             }
         }
 
         std::vector<int> list;
         int index;
+        std::function<void(const std::string &)> onExit;
         int pendingIndex = -1;
         double zapAt = 0;
         std::string format = "ts";
-        bool triedFallback = false;
-        int retries403 = 0;
-        double retryAt = 0;
-        bool retryScheduled = false;
+        stability::FormatPlan plan;
+        StabilityPreset preset = StabilityPreset::Balanced;
+        stability::Recovery recovery;
         bool historyRecorded = false;
         bool overlayVisible = true;
         double lastInput = 0;
@@ -341,6 +479,7 @@ namespace {
         RectangleShape *top;
         RectangleShape *bottom;
         RectangleShape *centre;
+        RectangleShape *pill;
         RectangleShape *info;
         ui::Label *title;
         ui::Label *subtitle;
@@ -349,14 +488,18 @@ namespace {
         ui::Label *status;
         ui::Label *centreTitle;
         ui::Label *centreText;
+        ui::Label *centreHint;
+        ui::Label *pillText;
         ui::Label *infoText;
         ui::Spinner *spinner;
+        ui::Spinner *pillSpinner;
         ui::HintBar *hints;
     };
 }
 
 namespace screens {
-    Screen *makeLivePlayer(App &app, const std::vector<int> &channels, int index) {
-        return new LivePlayerScreen(app, channels, index);
+    Screen *makeLivePlayer(App &app, const std::vector<int> &channels, int index,
+                           std::function<void(const std::string &)> onExit) {
+        return new LivePlayerScreen(app, channels, index, std::move(onExit));
     }
 }

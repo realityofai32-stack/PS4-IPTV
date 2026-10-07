@@ -41,6 +41,14 @@ namespace theme {
     inline c2d::Color warning() { return {255, 184, 48}; }
     inline c2d::Color danger() { return {255, 92, 99}; }
     inline c2d::Color scrim() { return {6, 8, 12, 200}; }
+    // focused list row: accent-tinted surface (with an accent outline)
+    inline c2d::Color rowFocus() { return {34, 62, 104}; }
+    // tile behind channel logos: lighter than the rows, so dark and transparent logos stay readable
+    inline c2d::Color logoTile() { return {54, 64, 82}; }
+    // scrollbar: thin translucent track, rounded thumb
+    inline c2d::Color scrollTrack() { return {255, 255, 255, 20}; }
+    inline c2d::Color scrollThumb() { return {255, 255, 255, 150}; }
+    inline c2d::Color scrollThumbIdle() { return {255, 255, 255, 80}; }
 
     inline c2d::Color withAlpha(c2d::Color c, uint8_t a) {
         c.a = a;

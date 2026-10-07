@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "stability.h"
 #include "pplay/mpv.h"
 
 enum class PlaybackState {
@@ -23,7 +24,8 @@ enum class PlaybackState {
 enum class PlaybackError {
     None,
     Http403,          // provider refused (often: previous connection still counted)
-    HttpOther,
+    HttpClient,       // 401 / 404: retrying does not help
+    HttpOther,        // other HTTP errors (5xx...)
     HttpsUnsupported,
     Network,          // DNS / connect / timeout
     Demux,
@@ -46,6 +48,7 @@ struct StreamInfo {
     int channels = 0;
     std::string audioOutput;   // "sdl" when the PS4 audio output is open
     double cacheSeconds = 0;
+    long long cacheSpeed = 0;  // bytes/s arriving from the network (mpv cache-speed)
     long long droppedFrames = 0;
     double position = 0;
     double duration = 0;       // 0 for live
@@ -66,6 +69,9 @@ public:
     std::string initError() const;
 
     Mpv *backend() { return mpv; }
+
+    // Sets mpv options (stability preset) on the handle; each result is logged. Call before open().
+    void applyOptions(const stability::Options &options);
 
     // `format` is shown in the info overlay ("TS", "HLS", "mkv"...). URL is never logged unredacted.
     void open(const std::string &url, const std::string &format);
@@ -92,7 +98,8 @@ public:
 
     const StreamInfo &info() const { return si; }
 
-    bool hasVideoFrame() const { return firstFrameAt >= 0; }
+    // the first video frame was shown (audio-only streams: audio has been playing for half a second)
+    bool started() const { return firstFrameAt >= 0; }
 
     bool hasAudio() const { return !si.audioOutput.empty(); }
 
@@ -100,6 +107,14 @@ public:
 
     // true when the run failed before any frame was shown (format fallback is possible)
     bool failedBeforeFirstFrame() const { return st == PlaybackState::Error && firstFrameAt < 0; }
+
+    // seconds since playback last advanced (time-pos moved or a new video frame was rendered)
+    double sinceProgress(double now) const { return lastProgress < 0 ? 0 : now - lastProgress; }
+
+    bool pausedForCache() const { return cachePaused; }
+
+    // how the recovery logic should treat the current error
+    stability::FailKind failKind() const;
 
     // user-facing text for a state
     static const char *stateText(PlaybackState s);
@@ -130,7 +145,8 @@ private:
     double lastStats = 0;
     double lastProgress = -1;
     double lastPos = -1;
-    bool pausedForCache = false;
+    unsigned long lastFrames = 0;
+    bool cachePaused = false;
     std::string lastShader;
     std::string firstNetworkError;
 };
