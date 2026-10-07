@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstring>
 
 #include "playback.h"
@@ -31,6 +32,11 @@ namespace {
         const mpv_node *v = mapGet(n, key);
         return v && v->format == MPV_FORMAT_INT64 ? v->u.int64 : v && v->format == MPV_FORMAT_DOUBLE
                                                                   ? (int64_t) v->u.double_ : 0;
+    }
+
+    bool mapFlag(const mpv_node *n, const char *key) {
+        const mpv_node *v = mapGet(n, key);
+        return v && v->format == MPV_FORMAT_FLAG && v->u.flag;
     }
 
     std::string mapStr(const mpv_node *n, const char *key) {
@@ -103,6 +109,10 @@ std::string Playback::initError() const {
 }
 
 void Playback::open(const std::string &url, const std::string &format) {
+    open(url, format, OpenOptions());
+}
+
+void Playback::open(const std::string &url, const std::string &format, const OpenOptions &options) {
     if (!available()) {
         fail(PlaybackError::Other, "Player initialization failed", initError());
         return;
@@ -122,6 +132,9 @@ void Playback::open(const std::string &url, const std::string &format) {
     lastFrames = 0;
     cachePaused = false;
     firstNetworkError.clear();
+    trackItems.clear();
+    chooser = options.chooseTracks;
+    subtitleRenderFailed = false;
     redact::addUrl(url);
 
     if (url.compare(0, 8, "https://") == 0) {
@@ -131,15 +144,18 @@ void Playback::open(const std::string &url, const std::string &format) {
     }
 
     mpv_handle *h = mpv->getHandle();
-    // pPlay Player::load(): no subtitles unless slang is configured
-    char *slang = mpv_get_property_string(h, "slang");
-    if (slang == nullptr || strlen(slang) == 0) {
-        mpv_set_option_string(h, "sid", "no");
-    }
-    mpv_free(slang);
+    // pPlay Player::load() turns subtitles off unless slang is configured. Here they always start off: for
+    // movies/episodes the chooser picks the tracks once the file is loaded (mpv then switches at runtime).
+    mpv_set_option_string(h, "sid", "no");
+    mpv_set_option_string(h, "aid", "auto");
 
     st = PlaybackState::Opening;
-    int res = mpv->load(url, Mpv::LoadType::Replace, "pause=yes,speed=1");
+    std::string loadOptions = "pause=yes,speed=1";   // pPlay: start paused, resume on MPV_EVENT_FILE_LOADED
+    if (options.start > 1) {
+        loadOptions += diag::format(",start=%.1f", options.start);
+        LOG_I("player", "resuming at %.1fs", options.start);
+    }
+    int res = mpv->load(url, Mpv::LoadType::Replace, loadOptions);
     if (res != 0) {
         fail(PlaybackError::Other, "Playback error", diag::format("loadfile: %d (%s)", res, mpv_error_string(res)));
     }
@@ -165,6 +181,7 @@ void Playback::setPaused(bool paused) {
     } else {
         mpv->resume();
         st = PlaybackState::Playing;
+        lastProgress = now;   // the pause was not a stall
     }
 }
 
@@ -202,6 +219,89 @@ stability::FailKind Playback::failKind() const {
             return stability::FailKind::Fatal;
         default:
             return stability::FailKind::Retryable;   // network, HTTP 5xx, other
+    }
+}
+
+void Playback::seekTo(double seconds) {
+    if (!available() || !si.seekable || (st != PlaybackState::Playing && st != PlaybackState::Paused
+                                         && st != PlaybackState::Buffering)) {
+        return;
+    }
+    std::string target = diag::format("%.1f", seconds < 0 ? 0.0 : seconds);
+    const char *cmd[] = {"seek", target.c_str(), "absolute+keyframes", nullptr};
+    int res = mpv_command(mpv->getHandle(), cmd);
+    if (res < 0) {
+        LOG_W("player", "seek to %s failed: %d (%s)", target.c_str(), res, mpv_error_string(res));
+    }
+    lastProgress = now;   // re-buffering after a seek starts the stall clock again
+}
+
+void Playback::readTracks() {
+    trackItems.clear();
+    mpv_node node;
+    if (mpv_get_property(mpv->getHandle(), "track-list", MPV_FORMAT_NODE, &node) < 0) {
+        return;
+    }
+    if (node.format == MPV_FORMAT_NODE_ARRAY) {
+        for (int i = 0; i < node.u.list->num; i++) {
+            const mpv_node *t = &node.u.list->values[i];
+            std::string type = mapStr(t, "type");
+            if (type != "audio" && type != "sub") {
+                continue;
+            }
+            tracks::Track tr;
+            tr.kind = type == "audio" ? tracks::Kind::Audio : tracks::Kind::Subtitle;
+            tr.id = (int) mapInt(t, "id");
+            tr.lang = mapStr(t, "lang");
+            tr.title = mapStr(t, "title");
+            tr.codec = mapStr(t, "codec");
+            tr.channels = (int) mapInt(t, "demux-channel-count");
+            tr.isDefault = mapFlag(t, "default");
+            tr.forced = mapFlag(t, "forced");
+            tr.external = mapFlag(t, "external");
+            tr.selected = mapFlag(t, "selected");
+            trackItems.push_back(tr);
+        }
+    }
+    mpv_free_node_contents(&node);
+    int audio = 0;
+    int subs = 0;
+    for (const auto &t: trackItems) {
+        (t.kind == tracks::Kind::Audio ? audio : subs)++;
+        LOG_I("player", "track %s %d: lang '%s' codec %s ch %d%s%s", t.kind == tracks::Kind::Audio ? "audio" : "sub",
+              t.id, t.lang.c_str(), t.codec.c_str(), t.channels, t.isDefault ? " default" : "",
+              t.forced ? " forced" : "");
+    }
+    LOG_I("player", "%d audio / %d subtitle track(s)", audio, subs);
+}
+
+void Playback::markSelected(tracks::Kind kind, int id) {
+    for (auto &t: trackItems) {
+        if (t.kind == kind) {
+            t.selected = t.id == id;
+        }
+    }
+}
+
+void Playback::selectAudio(int id) {
+    if (!available() || id <= 0) {
+        return;
+    }
+    int res = mpv->setAid(id);   // pPlay wrapper: "no-osd set aid <id>"
+    LOG_I("player", "audio track %d: %d (%s)", id, res, mpv_error_string(res));
+    if (res >= 0) {
+        markSelected(tracks::Kind::Audio, id);
+    }
+}
+
+void Playback::selectSubtitle(int id) {
+    if (!available()) {
+        return;
+    }
+    int res = mpv->setSid(id > 0 ? id : -1);   // -1: "no-osd set sid no"
+    LOG_I("player", "subtitle track %d: %d (%s)", id, res, mpv_error_string(res));
+    if (res >= 0) {
+        markSelected(tracks::Kind::Subtitle, id);
     }
 }
 
@@ -253,6 +353,14 @@ void Playback::update(double t) {
                 break;
             case MPV_EVENT_FILE_LOADED:
                 if (st == PlaybackState::Opening) {
+                    readTracks();
+                    if (chooser) {
+                        std::pair<int, int> pick = chooser(trackItems);
+                        if (pick.first > 0) {
+                            selectAudio(pick.first);
+                        }
+                        selectSubtitle(pick.second);
+                    }
                     mpv->resume();  // pPlay Player::onLoadEvent()
                     st = PlaybackState::Buffering;
                     LOG_I("player", "file loaded after %.2fs", now - openedAt);
@@ -283,7 +391,7 @@ void Playback::pollStats() {
     int64_t i;
     if (mpv_get_property(h, "time-pos", MPV_FORMAT_DOUBLE, &d) >= 0) {
         si.position = d;
-        if (lastPos < 0 || d > lastPos + 0.01) {
+        if (lastPos < 0 || std::fabs(d - lastPos) > 0.01) {   // backwards too: a seek is progress
             lastProgress = now;
             lastPos = d;
         }
@@ -327,6 +435,14 @@ void Playback::onLog(const mpv_event_log_message *msg) {
     }
     // message texts and levels verified against mpv 0.34.1 / FFmpeg 5.0 sources (see the playback test)
     if (contains(text, "precompiled shader not found")) {
+        const tracks::Track *sub = tracks::selected(trackItems, tracks::Kind::Subtitle);
+        if (sub != nullptr && firstFrameAt >= 0) {
+            // the picture was fine until subtitles were drawn: keep playing, without subtitles
+            LOG_W("player", "subtitle rendering not available (%s): subtitles turned off", lastShader.c_str());
+            subtitleRenderFailed = true;
+            selectSubtitle(0);
+            return;
+        }
         fail(PlaybackError::Renderer, "This video format is not supported on PS4 yet.",
              "precompiled mpv shader missing: " + lastShader);
         return;

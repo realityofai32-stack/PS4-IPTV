@@ -8,7 +8,10 @@
 #include <string>
 #include <vector>
 
+#include <functional>
+
 #include "stability.h"
+#include "tracks.h"
 #include "pplay/mpv.h"
 
 enum class PlaybackState {
@@ -73,14 +76,42 @@ public:
     // Sets mpv options (stability preset) on the handle; each result is logged. Call before open().
     void applyOptions(const stability::Options &options);
 
+    struct OpenOptions {
+        double start = 0;     // seconds (VOD resume); passed to mpv as the per-file "start" option
+        // Movies / episodes: called once the file is loaded (before playback starts) with mpv's tracks;
+        // returns the audio track id (-1 = mpv's choice) and the subtitle track id (0 = none) to use.
+        // Without a chooser (Live TV) subtitles stay off, exactly as pPlay does.
+        std::function<std::pair<int, int>(const std::vector<tracks::Track> &)> chooseTracks;
+    };
+
     // `format` is shown in the info overlay ("TS", "HLS", "mkv"...). URL is never logged unredacted.
-    void open(const std::string &url, const std::string &format);
+    void open(const std::string &url, const std::string &format, const OpenOptions &options);
+
+    void open(const std::string &url, const std::string &format);   // Live TV: no start, no subtitles
 
     void stop();
 
     void setPaused(bool paused);
 
     void seekRelative(double seconds);
+
+    // keyframe seek to an absolute position (fast with software decoding)
+    void seekTo(double seconds);
+
+    // tracks of the current file (empty until it is loaded)
+    const std::vector<tracks::Track> &trackList() const { return trackItems; }
+
+    // runtime switching through mpv's aid / sid properties (no reload)
+    void selectAudio(int id);
+
+    void selectSubtitle(int id);   // 0 = off
+
+    // set when a subtitle could not be drawn (missing precompiled shader): subtitles were turned off
+    bool subtitlesDisabledByRenderer() const { return subtitleRenderFailed; }
+
+    double position() const { return si.position; }
+
+    double duration() const { return si.duration; }
 
     // call every frame: drains mpv events, polls stats (1 Hz), watchdog
     void update(double now);
@@ -149,6 +180,13 @@ private:
     bool cachePaused = false;
     std::string lastShader;
     std::string firstNetworkError;
+    std::vector<tracks::Track> trackItems;
+    std::function<std::pair<int, int>(const std::vector<tracks::Track> &)> chooser;
+    bool subtitleRenderFailed = false;
+
+    void readTracks();
+
+    void markSelected(tracks::Kind kind, int id);
 };
 
 #endif // PS4IPTV_PLAYER_PLAYBACK_H

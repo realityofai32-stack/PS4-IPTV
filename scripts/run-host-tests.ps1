@@ -38,7 +38,7 @@ $s = "$RepoRoot\src"
 $h = "$RepoRoot\tests\host"
 Invoke-TestBuild 'app_tests' @(
     "$h\test_main.cpp", "$h\test_core.cpp", "$h\test_iptv.cpp", "$h\test_storage.cpp", "$h\test_jobs.cpp",
-    "$h\test_live.cpp", "$h\test_text.cpp", "$h\test_input.cpp", "$h\test_images.cpp", "$h\test_playback.cpp", "$h\test_vod.cpp",
+    "$h\test_live.cpp", "$h\test_text.cpp", "$h\test_input.cpp", "$h\test_images.cpp", "$h\test_playback.cpp", "$h\test_vod.cpp", "$h\test_tracks.cpp",
     "$h\stb_impl.cpp",
     "$s\core\utf8.cpp", "$s\core\json.cpp", "$s\core\url.cpp", "$s\iptv\xtream.cpp", "$s\iptv\catalog.cpp",
     "$s\storage\library_store.cpp", "$s\storage\catalog_cache.cpp",
@@ -46,7 +46,8 @@ Invoke-TestBuild 'app_tests' @(
     "$s\storage\profile_store.cpp", "$s\storage\settings_store.cpp", "$s\ui\keyboard_model.cpp",
     "$s\platform\input_logic.cpp", "$s\ui\scroll_math.cpp", "$s\player\stability.cpp",
     "$s\images\image_key.cpp", "$s\images\disk_cache.cpp", "$s\images\image_decode.cpp",
-    "$s\images\image_scheduler.cpp", "$s\images\image_pipeline.cpp")
+    "$s\images\image_scheduler.cpp", "$s\images\image_pipeline.cpp", "$s\core\format.cpp",
+    "$s\player\tracks.cpp")
 
 # playback test app
 $t = "$RepoRoot\tests\playback-test"

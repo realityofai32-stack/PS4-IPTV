@@ -6,6 +6,7 @@
 #include <string>
 
 #include "../player/stability.h"
+#include "../player/tracks.h"
 
 // Live stream format (see stability::planFormats)
 enum class StreamFormat {
@@ -22,6 +23,13 @@ struct Settings {
     bool autoPlayNextEpisode = false;
     bool showTechnicalInfo = false;
     bool loadImages = true;
+    // movies / episodes
+    std::string audioLanguage;                    // ISO 639-2 code, "" = Auto (the file's default track)
+    tracks::SubtitleMode subtitleMode = tracks::SubtitleMode::Auto;
+    std::string subtitleLanguage;                 // "" = same as the audio preference
+    int subtitleSize = 1;                         // 0 small, 1 medium, 2 large
+    int subtitlePosition = 0;                     // 0 bottom, 1 raised
+    bool subtitleShadow = false;
     std::string language = "en";
 };
 
