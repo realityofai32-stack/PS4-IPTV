@@ -1,0 +1,59 @@
+PS4 IPTV
+Copyright (C) 2026 PS4 IPTV contributors
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General
+Public License as published by the Free Software Foundation, either version 3 of the License, or (at your
+option) any later version. See LICENSE.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+PS4 IPTV does not provide, host or link to any content. It is a player for services the user is entitled to
+access.
+
+----------------------------------------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+----------------------------------------------------------------------------------------------------------
+
+Source in this repository derived from or linked with:
+
+pPlay                       Copyright (C) Cpasjuste                      GPL-3.0
+  https://github.com/Cpasjuste/pplay (commit 0399546)
+  The PS4 playback integration (mpv wrapper and video texture) is derived from pPlay src/player/.
+
+libcross2d                  Copyright (C) Cpasjuste                      GPL-3.0
+  https://github.com/Cpasjuste/libcross2d (as pinned by pPlay)
+
+Linked from PacBrew PS4 portlibs (https://github.com/PacBrew/pacbrew-packages):
+
+mpv 0.34.1 + PS4 patch      mpv developers, Cpasjuste                    GPL-2.0-or-later (built as GPL)
+FFmpeg 5.0                  FFmpeg developers                            LGPL-2.1-or-later (GPL parts enabled)
+SDL 2.0.18 PS4 port         Sam Lantinga, PacBrew                         zlib
+libass 0.14.0               libass developers                            ISC
+FreeType 2.10.1             The FreeType Project                         FreeType License (FTL)
+GNU FriBidi 1.0.4           FriBidi developers                           LGPL-2.1-or-later
+libpng 1.6.37               libpng authors                               libpng license
+zlib 1.3.1                  Jean-loup Gailly, Mark Adler                 zlib
+bzip2 1.0.6                 Julian Seward                                bzip2 license (BSD-style)
+Opus 1.3                    Xiph.Org Foundation and contributors          BSD-3-Clause
+libsamplerate 0.1.9         Erik de Castro Lopo                          BSD-2-Clause
+libconfig 1.7.3             Mark Lindner                                 LGPL-2.1-or-later
+libcurl 7.80.0              Daniel Stenberg and contributors              curl license (MIT/X derivative)
+Mbed TLS 2.16.6             Arm Limited                                  Apache-2.0
+musl libc (PacBrew fork)    musl contributors                            MIT
+LLVM libc++ / libc++abi /
+libunwind / compiler-rt 12  LLVM project                                 Apache-2.0 WITH LLVM-exception
+OpenOrbis PS4 Toolchain     OpenOrbis team                               GPL-3.0 (headers, crt, link script, stubs)
+
+Bundled assets:
+
+Inter 4.1 typeface          Rasmus Andersson                             SIL Open Font License 1.1
+  third_party/inter/LICENSE.txt
+Mozilla CA certificate bundle (curl.se/ca/cacert.pem)                    MPL-2.0
+
+The PS4 system modules sce_module/libc.prx and sce_module/libSceFios2.prx and sce_sys/about/right.sprx are
+copied at build time from the pPlay repository's data/ps4/romfs directory; they are not part of this
+repository.
+
+Build tools (not distributed): LLVM/Clang 12.0.1, CMake, Ninja, pkgconf, Go (create-gp4),
+OpenOrbis create-fself / create-gp4, LibOrbisPkg PkgTool.Core (LGPL-3.0).

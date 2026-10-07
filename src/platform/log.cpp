@@ -4,11 +4,11 @@
 #include <cstdio>
 #include <cstring>
 #include <deque>
+#include <chrono>
 #include <mutex>
-#include <sys/stat.h>
-#include <sys/time.h>
 
 #include "log.h"
+#include "fs.h"
 #include "redact.h"
 
 #ifdef __PS4__
@@ -33,9 +33,8 @@ namespace {
     bool g_verbose = false;
 
     double now() {
-        struct timeval tv{};
-        gettimeofday(&tv, nullptr);
-        return (double) tv.tv_sec + (double) tv.tv_usec / 1000000.0;
+        using namespace std::chrono;
+        return (double) duration_cast<microseconds>(system_clock::now().time_since_epoch()).count() / 1000000.0;
     }
 
     const char *levelTag(diag::Level level) {
@@ -56,21 +55,6 @@ namespace {
         return diag::format("%s(%s) failed: errno %d (%s)", operation, path.c_str(), e, strerror(e));
     }
 
-    bool ensureDir(const std::string &dir, std::string &error) {
-        struct stat st{};
-        if (stat(dir.c_str(), &st) == 0) {
-            if (S_ISDIR(st.st_mode)) {
-                return true;
-            }
-            error = dir + " exists but is not a directory";
-            return false;
-        }
-        if (mkdir(dir.c_str(), 0777) != 0 && errno != EEXIST) {
-            error = errnoText("mkdir", dir);
-            return false;
-        }
-        return true;
-    }
 }
 
 namespace diag {
@@ -95,7 +79,7 @@ namespace diag {
         g_status.path = base + "/log.txt";
 
         std::string error;
-        if (!ensureDir(base, error)) {
+        if (!fs::ensureDir(base, &error)) {
             g_status.ok = false;
             g_status.detail = error;
             return;

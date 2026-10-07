@@ -14,6 +14,7 @@ eboot.bin
 # Local configuration - may contain IPTV credentials / authenticated URLs. NEVER commit.
 /config/test_stream.txt
 /config/test_streams.txt
+/config/forbidden_strings.txt
 test_streams.txt
 !/config/test_streams.example.txt
 /config/*.local.*
@@ -25,3 +26,7 @@ favorites.json
 *.user
 Thumbs.db
 .DS_Store
+
+# guard/verification scratch folders (may briefly contain extracted PKG data)
+/build/guard-test-*/
+/build/verify-extract-*/

@@ -12,6 +12,12 @@
 #include <string>
 #include <vector>
 
+#if defined(__GNUC__) || defined(__clang__)
+#define PS4IPTV_PRINTF(fmt, args) __attribute__((format(printf, fmt, args)))
+#else
+#define PS4IPTV_PRINTF(fmt, args)
+#endif
+
 namespace diag {
 
     enum class Level {
@@ -42,14 +48,14 @@ namespace diag {
 
     void write(Level level, const std::string &component, const std::string &message);
 
-    void writef(Level level, const char *component, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+    void writef(Level level, const char *component, const char *fmt, ...) PS4IPTV_PRINTF(3, 4);
 
     std::vector<std::string> recent(size_t maxLines);
 
     // Copies the current log file to dest (e.g. a USB stick). Returns false with a reason on failure.
     bool copyLogTo(const std::string &dest, std::string &error);
 
-    std::string format(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+    std::string format(const char *fmt, ...) PS4IPTV_PRINTF(1, 2);
 }
 
 #define LOG_E(component, ...) diag::writef(diag::Level::Error, component, __VA_ARGS__)

@@ -1,0 +1,9 @@
+# normalize text, never touch binaries
+* text=auto
+*.ttf binary
+*.png binary
+*.prx binary
+*.sprx binary
+*.pkg binary
+*.pem text eol=lf
+*.ps1 text eol=crlf

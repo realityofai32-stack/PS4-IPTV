@@ -33,9 +33,9 @@ function Build-Exe([string] $name, [string[]] $sources) {
 $s = "$RepoRoot\src"
 $h = "$RepoRoot\tests\host"
 Build-Exe 'app_tests' @(
-    "$h\test_main.cpp", "$h\test_core.cpp", "$h\test_iptv.cpp", "$h\test_storage.cpp",
+    "$h\test_main.cpp", "$h\test_core.cpp", "$h\test_iptv.cpp", "$h\test_storage.cpp", "$h\test_jobs.cpp",
     "$s\core\utf8.cpp", "$s\core\json.cpp", "$s\core\url.cpp", "$s\iptv\xtream.cpp",
-    "$s\platform\fs.cpp", "$s\platform\redact.cpp",
+    "$s\platform\fs.cpp", "$s\platform\redact.cpp", "$s\platform\log.cpp", "$s\network\jobs.cpp",
     "$s\storage\profile_store.cpp", "$s\storage\settings_store.cpp", "$s\ui\keyboard_model.cpp")
 
 # playback test app
