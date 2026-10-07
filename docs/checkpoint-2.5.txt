@@ -1,0 +1,108 @@
+PS4 IPTV - HARDWARE CHECKPOINT 2.5: CATALOG INTEGRITY + SEARCH + SORTING + EXACT RESUME + CONTINUE WATCHING
+==========================================================================================================
+Build 87c48a3 (v0.1.0, title IPTV00002). PKG sha256 ff135395add7fc21...a121cdbe7
+
+What changed since Checkpoint 2 (nothing else):
+  - Movies/Series: every provider item kept (audited: 19,797 / 2,337, 0 dropped), Uncategorized row when needed,
+    wider category column, full category name + full focused title above the grid,
+    OPTIONS menu: Sort / Refresh catalog / Catalog info.
+  - Search rebuilt: keyboard on the left, results while you type, All / Movies / Series / Live TV filters.
+  - Resume continues at EXACTLY the saved position (no -5 s). Circle / pause save the position at that moment.
+  - Continue Watching fixed (see "Why it failed" at the end). 5 s of playback is enough; 93 % = watched.
+  - Series detail: main button Play S01E01 / Resume S01E03 · 24:16 / Next S01E04, progress per episode row.
+  - Movie / episode overlay hides after 4 s while playing.
+
+This PKG contains NO credentials. Install over the existing "PS4 IPTV": profile, favorites, settings and your
+watch history are kept (history.json is converted to the new format on first launch).
+ONE-TIME: the saved Movies / Series lists use a new verified format, so the first open of Movies and of Series
+downloads the list again (like the very first time). After that they open at once again.
+
+Test titles (from Checkpoint 2): M1 "Primate 2026", M3 "Bülbülü Öldürmek - 1962", S1 "The Handmaid's Tale".
+
+0. INSTALL + LIVE TV REGRESSION
+   - Launch: Home as before. Your Checkpoint 2 Continue Watching items may now appear (they were hidden before).
+   - Live TV: logos, channel list, hold Down (smooth repeat), play 2-3 channels, zap. Same as before?
+
+1. MOVIES - CATALOG INFO (Home > Movies, wait for the grid, then OPTIONS > Catalog info)        PHOTO 1
+   Expected (your provider today):
+     Provider 19,797 · Parsed 19,797 · Cached 19,797
+     Visible 19,797 · Indexed 19,797 · Uncategorized 0 · Dropped 0
+   RECORD: seconds until the grid appears on this first (re-)download.
+   Then SERIES > OPTIONS > Catalog info: 2,337 everywhere, Dropped 0.                          PHOTO 2
+
+2. CATEGORY NAMES + FULL TITLE                                                                  PHOTO 3
+   - The category column is wider: "FİLM: En Yeniler 2026" / "...2025" / "...2024" are readable.
+   - Above the grid: the selected category in full + "625 movies · Provider order".
+   - Move over posters: the second line shows the COMPLETE title (long titles use a smaller font) and
+     year · rating on the right.
+
+3. SORTING (Movies > FİLM: Aksiyon 1 > OPTIONS > Sort)                                          PHOTO 4
+   - Offered: Provider order, A → Z, Z → A, Newest added, Oldest added, Year: Newest, Year: Oldest,
+     Rating: High to low, Recently watched.
+   - A → Z: the category is alphabetical (Ç sorts with C, Ş with S). Switch category: still A → Z inside it.
+   - Rating: High to low, Year: Newest - check the first posters make sense.
+   - Back to Home, open Movies again: the order is remembered. Series has its own order
+     (Series says "Recently updated" instead of "Newest added": the provider has no added date for series).
+
+4. REFRESH CATALOG (Movies > OPTIONS > Refresh catalog)
+   - Toast "Refreshing...", the grid stays usable, then "Catalog updated: 19,797 movies". Never a blank grid.
+
+5. SEARCH (Home > Search, or Triangle in Movies/Series)                                         PHOTO 5
+   Type with the on-screen keyboard (X types, Square deletes, Triangle space, R2 or Right edge = results,
+   L1/R1 = filter). Results appear ~0.2 s after you stop typing. Try:
+     sehir · olum · bulbulu oldurmek · handmaid tale · handmaids tale · primate · primate 2026
+     how i met your mother · braking bad (typo) · trt 1 (Filter: Live TV) · zzzz ("No results for ...")
+   RECORD: does typing ever stutter / freeze? Is the expected title first or near the top?
+   Results show the type ("Movie · 2026 · ★ 6.4", "Series · 2017 · Drama", "Live TV · ...") and poster/logo.
+
+6. EXACT RESUME - MOVIE (M1)                                                                    PHOTO 6
+   - Play M1, let it run, press Circle when the overlay shows e.g. 0:17:42 (any time is fine: note it).
+   - Movie detail button: "▶ Resume 17:42" - the SAME time you noted (not 5 s earlier).
+   - Home: Continue Watching shows M1 at once (no restart), the line next to the heading shows its time.
+   - Resume: the overlay starts at 17:42 (picture may take a second longer: the player decodes from the
+     previous keyframe up to the exact time). RECORD: the time shown right after resuming.
+
+7. LAST SECONDS NOT LOST
+   - Play any movie, wait until the overlay has hidden (4 s), watch ~20 more seconds, press X (pause),
+     note the time, press Circle. Resume: it continues at the paused time.
+
+8. SHORT PLAYBACK
+   - Start a new movie, wait ~6 s of picture, Circle: it appears in Continue Watching.
+   - Start another for only 2-3 s: Recently Watched only, not Continue Watching.
+
+9. EPISODES (S1 > Season 1 > S01E03)                                                            PHOTO 7
+   - Play, Circle at some time (e.g. 24:16). You are back on the SAME season and the SAME episode row.
+   - The row shows a progress bar with "24:16 / 57:00"; the main button "▶ Resume S01E03 · 24:16".
+   - Home Continue Watching: S1 cover, "The Handmaid's Tale", "S01E03 · ...", focused line with the time.
+   - Resume from Home: starts at 24:16.
+
+10. WATCHED / NEXT
+   - In S01E03 press R2 until the last minute and let it end (or Circle after 93 %).
+   - The row shows "✓ Watched", S01E03 leaves Continue Watching, the main button says "Next S01E04".
+   - S01E04 has no progress until you actually play it.
+
+11. PAUSE IS NOT STOP
+   - Pause a movie for ~60 s, resume: plays on, no "Reconnecting".
+
+12. OVERLAY 4 SECONDS
+   - Playing: overlay hides 4 s after the last button. Any button / seek shows it again for 4 s.
+   - Paused: stays. OPTIONS panel: stays. Buffering / reconnecting messages: stay.
+
+13. AUDIO / SUBTITLES REGRESSION (M1, OPTIONS)
+   - Audio Türkçe <-> English without restart; subtitles Türkçe / English / Off; ş ğ İ ı ç ö ü correct.
+
+14. RESTART
+   - Home > Circle > Exit (or close the app), launch again: Continue Watching items and their exact times are
+     still there. (Closing with the PS button kills the app: a movie still PLAYING then keeps the position of
+     the last automatic save, at most 15 s old. Circle / pause / Exit always save the exact second.)
+
+15. LIVE DOES NOT CROWD OUT VOD
+   - Zap through 10+ channels, back to Home: Continue Watching unchanged; Recently Watched shows at most
+     3 channels while movies/episodes can fill it.
+
+REPORT BACK: photos 1-7, the records in 1/5/6, and anything that differs from the expected text.
+
+Why Continue Watching failed in Checkpoint 2 (fixed): progress was stored inside the 200-entry Recently
+Watched list (Live zapping could push it out), the row required 30 s of playback, and for a series the most
+recently played episode decided for the whole series - a finished or barely opened episode hid another
+episode still in progress. Progress is now its own store (per profile, type + id), separate from history.
