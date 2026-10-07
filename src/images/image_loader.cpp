@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <cstring>
 
 #include "image_loader.h"
@@ -6,14 +7,11 @@
 #include "../platform/clock.h"
 #include "../platform/log.h"
 
-const images::Box ImageLoader::ROW_BOX = {96, 52};
-const images::Box ImageLoader::DETAIL_BOX = {340, 190};
-
 namespace {
     const int MAX_UPLOADS_PER_FRAME = 2;         // texture creation is cheap, but never a burst per frame
-    const size_t MEMORY_ENTRIES = 160;
-    const int64_t MEMORY_BYTES = 24ll * 1024 * 1024;
-    const size_t MAX_IMAGE_BYTES = 2u * 1024 * 1024;
+    const size_t MEMORY_ENTRIES = 320;
+    const int64_t MEMORY_BYTES = 48ll * 1024 * 1024;   // GPU bytes of all cached textures
+    const size_t MAX_IMAGE_BYTES = 3u * 1024 * 1024;
 
     int pow2(int v) {
         int p = 8;
@@ -25,6 +23,8 @@ namespace {
 
     // A power-of-two RGBA page with the image in its top-left corner, uploaded once. Same texture type
     // and CPU->GPU path (lock, write the CPU copy, unlock = glTexSubImage2D) as the glyph atlas pages.
+    // Afterwards the CPU copy is released: these textures are never locked again (GLTexture's destructor
+    // only frees `pixels` when it is set).
     std::shared_ptr<c2d::Texture> makeTexture(const images::Image &img, int64_t &bytes) {
         if (!img.valid()) {
             return nullptr;
@@ -44,8 +44,25 @@ namespace {
             memcpy(dst + (size_t) y * (size_t) pitch, &img.rgba[(size_t) y * (size_t) img.w * 4], (size_t) img.w * 4);
         }
         tex->unlock();
-        bytes += (int64_t) tw * th * 4 * 2;   // GPU texture + libcross2d's CPU copy
+        free(tex->pixels);
+        tex->pixels = nullptr;
+        bytes += (int64_t) tw * th * 4;
         return std::shared_ptr<c2d::Texture>(tex);
+    }
+
+    char kindChar(ImageKind k) {
+        return (char) ('0' + (int) k);
+    }
+}
+
+std::vector<images::Box> ImageLoader::boxes(ImageKind kind) {
+    switch (kind) {
+        case ImageKind::Poster:
+            return {{140, 210}};
+        case ImageKind::PosterLarge:
+            return {{340, 510}};
+        default:
+            return {{96, 52}, {340, 190}};
     }
 }
 
@@ -53,6 +70,8 @@ ImageLoader::ImageLoader(JobSystem &j, const std::string &cacheDir)
         : jobs(j), memory(MEMORY_ENTRIES, MEMORY_BYTES) {
     images::DiskCache::Config cfg;
     cfg.dir = cacheDir;
+    cfg.maxBytes = 96ll * 1024 * 1024;     // posters are larger than logos
+    cfg.trimTo = 80ll * 1024 * 1024;
     cfg.maxFileBytes = MAX_IMAGE_BYTES;
     disk = std::make_shared<images::DiskCache>(cfg);
 }
@@ -82,36 +101,50 @@ const std::string &ImageLoader::normalized(const std::string &raw) {
     return normalizedUrls.emplace(raw, images::normalizeUrl(raw)).first->second;
 }
 
-void ImageLoader::want(const std::vector<std::string> &urls) {
+std::string ImageLoader::key(ImageKind kind, const std::string &raw) {
+    const std::string &u = normalized(raw);
+    return u.empty() ? std::string() : kindChar(kind) + u;
+}
+
+void ImageLoader::want(const std::vector<ImageRequest> &requests) {
     std::vector<std::string> list;
     if (on) {
-        list.reserve(urls.size());
-        for (const auto &u: urls) {
-            if (!u.empty()) {
-                list.push_back(normalized(u));
+        list.reserve(requests.size());
+        for (const auto &r: requests) {
+            if (!r.url.empty()) {
+                list.push_back(key(r.kind, r.url));
             }
         }
     }
     scheduler.want(list, now);
 }
 
-std::shared_ptr<LogoImages> ImageLoader::get(const std::string &url) {
+void ImageLoader::want(const std::vector<std::string> &logoUrls) {
+    std::vector<ImageRequest> requests;
+    requests.reserve(logoUrls.size());
+    for (const auto &u: logoUrls) {
+        requests.push_back({ImageKind::Logo, u});
+    }
+    want(requests);
+}
+
+std::shared_ptr<ImageSet> ImageLoader::get(ImageKind kind, const std::string &url) {
     if (!on || url.empty()) {
         return nullptr;
     }
-    const std::string &u = normalized(url);
-    if (u.empty()) {
+    std::string k = key(kind, url);
+    if (k.empty()) {
         return nullptr;
     }
-    std::shared_ptr<LogoImages> *v = memory.get(u);
+    std::shared_ptr<ImageSet> *v = memory.get(k);
     return v ? *v : nullptr;
 }
 
 bool ImageLoader::update(double t) {
     now = t;
     if (on) {
-        for (std::string url = scheduler.next(); !url.empty(); url = scheduler.next()) {
-            start(url);
+        for (std::string k = scheduler.next(); !k.empty(); k = scheduler.next()) {
+            start(k);
         }
     }
     bool changed = false;
@@ -124,12 +157,15 @@ bool ImageLoader::update(double t) {
     return changed;
 }
 
-void ImageLoader::start(const std::string &url) {
+void ImageLoader::start(const std::string &k) {
     auto pending = std::make_shared<Pending>();
-    pending->url = url;
+    pending->key = k;
+    pending->kind = (ImageKind) (k[0] - '0');
+    pending->url = k.substr(1);
     std::shared_ptr<images::DiskCache> cache = disk;
     std::weak_ptr<bool> weak = alive;
-    jobs.submit(JobPriority::Low, "logo", [pending, cache](const CancelToken &token) {
+    std::vector<images::Box> variantBoxes = boxes(pending->kind);
+    jobs.submit(JobPriority::Low, "image", [pending, cache, variantBoxes](const CancelToken &token) {
         images::Fetcher fetch = [&token](const std::string &u) {
             http::Request req;
             req.url = u;
@@ -153,7 +189,7 @@ void ImageLoader::start(const std::string &url) {
             }
             return f;
         };
-        pending->outcome = images::loadImage(pending->url, *cache, fetch, clockx::unixNow(), {ROW_BOX, DETAIL_BOX});
+        pending->outcome = images::loadImage(pending->url, *cache, fetch, clockx::unixNow(), variantBoxes);
     }, [this, weak, pending]() {
         if (weak.lock()) {
             decoded.push_back(pending);
@@ -163,35 +199,34 @@ void ImageLoader::start(const std::string &url) {
 
 void ImageLoader::finish(const std::shared_ptr<Pending> &p) {
     const images::LoadOutcome &o = p->outcome;
-    std::string key = images::cacheKey(p->url);   // logged instead of the URL
-    if (o.result != images::Scheduler::Result::Ok || o.variants.size() != 2) {
-        scheduler.finished(p->url, o.result == images::Scheduler::Result::Ok ? images::Scheduler::Result::Permanent
+    std::string hash = images::cacheKey(p->url);   // logged instead of the URL
+    if (o.result != images::Scheduler::Result::Ok || o.variants.empty()) {
+        scheduler.finished(p->key, o.result == images::Scheduler::Result::Ok ? images::Scheduler::Result::Permanent
                                                                              : o.result, now);
-        failed++;
-        LOG_I("images", "logo %s unavailable (%s): %s", key.c_str(),
+        LOG_I("images", "image %s unavailable (%s): %s", hash.c_str(),
               o.result == images::Scheduler::Result::RetryLater ? "retry later" : "placeholder", o.detail.c_str());
         return;
     }
-    auto logo = std::make_shared<LogoImages>();
+    auto set = std::make_shared<ImageSet>();
     int64_t bytes = 0;
-    logo->small = makeTexture(o.variants[0], bytes);
-    logo->smallSize = {o.variants[0].w, o.variants[0].h};
-    logo->large = makeTexture(o.variants[1], bytes);
-    logo->largeSize = {o.variants[1].w, o.variants[1].h};
-    if (!logo->small || !logo->large) {
-        scheduler.finished(p->url, images::Scheduler::Result::RetryLater, now);
-        failed++;
-        LOG_W("images", "logo %s: texture creation failed", key.c_str());
-        return;
+    for (const auto &v: o.variants) {
+        ImageVariant iv;
+        iv.texture = makeTexture(v, bytes);
+        iv.size = {v.w, v.h};
+        if (!iv.texture) {
+            scheduler.finished(p->key, images::Scheduler::Result::RetryLater, now);
+            LOG_W("images", "image %s: texture creation failed", hash.c_str());
+            return;
+        }
+        set->variants.push_back(iv);
     }
-    for (const auto &evicted: memory.put(p->url, logo, bytes)) {
+    for (const auto &evicted: memory.put(p->key, set, bytes)) {
         scheduler.forget(evicted);
     }
-    scheduler.finished(p->url, images::Scheduler::Result::Ok, now);
-    loaded++;
+    scheduler.finished(p->key, images::Scheduler::Result::Ok, now);
     gen++;
-    LOG_V("images", "logo %s ready: %s%s (memory %d logos, %lld KiB)", key.c_str(), o.detail.c_str(),
-          o.fromDisk ? " from disk" : "", (int) memory.size(), (long long) (memory.bytes() / 1024));
+    LOG_V("images", "image %s kind %d ready: %s%s (memory %d images, %lld KiB)", hash.c_str(), (int) p->kind,
+          o.detail.c_str(), o.fromDisk ? " from disk" : "", (int) memory.size(), (long long) (memory.bytes() / 1024));
 }
 
 void ImageLoader::clearCache(std::function<void(int64_t)> done) {

@@ -14,6 +14,27 @@ namespace {
     }
 }
 
+namespace progress {
+    bool isWatched(double position, double duration) {
+        return duration > 0 && position >= duration * WATCHED_FRACTION;
+    }
+
+    bool canResume(double position, double duration, bool watched) {
+        return !watched && position >= MIN_RESUME_SECONDS && !isWatched(position, duration);
+    }
+
+    double resumeFrom(double position) {
+        return position > 10 ? position - 5 : 0;
+    }
+
+    double fraction(double position, double duration) {
+        if (duration <= 0 || position <= 0) {
+            return 0;
+        }
+        return position >= duration ? 1.0 : position / duration;
+    }
+}
+
 LibraryStore::LibraryStore(std::string dataDir) : dir(std::move(dataDir)) {}
 
 void LibraryStore::setProfile(const std::string &profileId) {
@@ -62,6 +83,66 @@ void LibraryStore::clearHistory() {
     hist[profile].clear();
 }
 
+const HistoryEntry *LibraryStore::progressOf(iptv::ContentType type, const std::string &id) const {
+    for (const auto &e: history()) {
+        if (e.type == type && e.id == id) {
+            return &e;
+        }
+    }
+    return nullptr;
+}
+
+void LibraryStore::updateProgress(const HistoryEntry &entry) {
+    addHistory(entry);
+}
+
+void LibraryStore::resetProgress(iptv::ContentType type, const std::string &id) {
+    for (auto &e: hist[profile]) {
+        if (e.type == type && e.id == id) {
+            e.position = 0;
+            e.watched = false;
+        }
+    }
+}
+
+std::vector<const HistoryEntry *> LibraryStore::continueWatching(size_t limit) const {
+    std::vector<const HistoryEntry *> out;
+    std::set<std::string> seriesSeen;
+    for (const auto &e: history()) {
+        if (out.size() >= limit) {
+            break;
+        }
+        if (e.type == iptv::ContentType::Live) {
+            continue;
+        }
+        if (e.type == iptv::ContentType::Series && !e.seriesId.empty()) {
+            // only the most recent episode of a series decides (a finished episode hides the series)
+            if (!seriesSeen.insert(e.seriesId).second) {
+                continue;
+            }
+        }
+        if (progress::canResume(e.position, e.duration, e.watched)) {
+            out.push_back(&e);
+        }
+    }
+    return out;
+}
+
+std::vector<const HistoryEntry *> LibraryStore::recentlyWatched(size_t limit) const {
+    std::vector<const HistoryEntry *> out;
+    std::set<std::string> seriesSeen;
+    for (const auto &e: history()) {
+        if (out.size() >= limit) {
+            break;
+        }
+        if (e.type == iptv::ContentType::Series && !e.seriesId.empty() && !seriesSeen.insert(e.seriesId).second) {
+            continue;
+        }
+        out.push_back(&e);
+    }
+    return out;
+}
+
 void LibraryStore::removeProfile(const std::string &profileId) {
     favs.erase(profileId);
     hist.erase(profileId);
@@ -102,6 +183,16 @@ std::string LibraryStore::serializeHistory() const {
             o.set("watchedAt", json::Value::makeInt(e.watchedAt));
             o.set("position", json::Value::makeNumber(e.position));
             o.set("duration", json::Value::makeNumber(e.duration));
+            if (e.type != iptv::ContentType::Live) {
+                o.set("watched", json::Value::makeBool(e.watched));
+                o.set("ext", json::Value::makeString(e.extension));
+            }
+            if (!e.seriesId.empty()) {
+                o.set("seriesId", json::Value::makeString(e.seriesId));
+                o.set("seriesName", json::Value::makeString(e.seriesName));
+                o.set("season", json::Value::makeInt(e.season));
+                o.set("episode", json::Value::makeInt(e.episode));
+            }
             arr.push(std::move(o));
         }
         profiles.set(p.first, std::move(arr));
@@ -159,6 +250,16 @@ bool LibraryStore::deserializeHistory(const std::string &text, std::string *erro
             e.watchedAt = o["watchedAt"].asInt(0);
             e.position = o["position"].asDouble(0);
             e.duration = o["duration"].asDouble(0);
+            e.watched = o["watched"].asBool(false);
+            e.extension = o["ext"].asString();
+            e.seriesId = o["seriesId"].asString();
+            e.seriesName = o["seriesName"].asString();
+            e.season = (int) o["season"].asInt(0);
+            e.episode = (int) o["episode"].asInt(0);
+            if (e.type == iptv::ContentType::Live) {
+                e.position = 0;   // resume never applies to Live TV
+                e.duration = 0;
+            }
             if (!e.id.empty() && list.size() < HISTORY_LIMIT) {
                 list.push_back(e);
             }

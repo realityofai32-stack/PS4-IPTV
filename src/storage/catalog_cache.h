@@ -25,6 +25,9 @@ public:
     // false when missing, unreadable or written by another format version
     bool load(const std::string &profileId, const std::string &name, std::string &body, int64_t &savedAt) const;
 
+    // deletes one saved response (e.g. after it failed to parse)
+    void remove(const std::string &profileId, const std::string &name) const;
+
     void clearProfile(const std::string &profileId) const;
 
     void clearAll() const;

@@ -43,6 +43,92 @@ namespace iptv {
         bool archive = false;
     };
 
+    // get_vod_streams entry (kept compact: catalogs hold tens of thousands of these)
+    struct Movie {
+        std::string streamId;
+        std::string name;          // as sent by the provider, e.g. "Orumcek Adam 7 2026"
+        std::string title;         // name without a trailing year: "Orumcek Adam 7"
+        std::string categoryId;
+        std::string icon;          // stream_icon (poster)
+        std::string extension;     // container_extension ("mkv"); playback URL suffix
+        float rating = 0;          // 0..10, 0 = unknown
+        int year = 0;              // from the name, 0 = unknown
+        int64_t added = 0;
+    };
+
+    // get_series entry
+    struct Series {
+        std::string seriesId;
+        std::string name;
+        std::string title;
+        std::string categoryId;
+        std::string cover;
+        std::string plot;
+        std::string cast;
+        std::string director;
+        std::string genre;
+        std::string releaseDate;
+        float rating = 0;
+        int year = 0;
+        int runtimeMinutes = 0;    // episode_run_time
+        int64_t lastModified = 0;
+    };
+
+    // ffprobe-style stream summary the panel stores per movie/episode (may be empty)
+    struct MediaSummary {
+        int width = 0;
+        int height = 0;
+        std::string videoCodec;    // "h264"
+        std::string audioCodec;    // "ac3"
+        int audioChannels = 0;
+        std::string audioLanguage; // of the one audio stream the panel reports
+        int bitrateKbps = 0;
+    };
+
+    // get_vod_info: detail fields. Standard Xtream fields are read when present; many panels (incl. the one
+    // used in testing) only send duration, rating, images and stream info.
+    struct MovieInfo {
+        std::string streamId;
+        std::string plot;
+        std::string genre;
+        std::string director;
+        std::string cast;
+        std::string releaseDate;
+        std::string coverBig;
+        std::string backdrop;
+        std::string tmdbId;
+        float rating = 0;
+        int durationSeconds = 0;
+        MediaSummary media;
+    };
+
+    struct Episode {
+        std::string id;            // stream id for /series/<u>/<p>/<id>.<ext>
+        int season = 0;
+        int number = 0;            // episode_num
+        std::string title;         // cleaned ("" when the provider title was only "<series> S01-E01")
+        std::string extension;
+        std::string image;         // info.movie_image
+        std::string plot;
+        int durationSeconds = 0;
+        float rating = 0;
+        MediaSummary media;
+    };
+
+    struct Season {
+        int number = 0;
+        std::string name;          // provider name, e.g. "1. Sezon"
+        std::string cover;
+        std::vector<Episode> episodes;   // sorted by episode number
+    };
+
+    // get_series_info
+    struct SeriesInfo {
+        std::string seriesId;
+        Series series;             // "info" (same fields as the list entry)
+        std::vector<Season> seasons;   // only seasons that have episodes, sorted by number
+    };
+
     enum class AuthStatus {
         Ok,
         InvalidCredentials,

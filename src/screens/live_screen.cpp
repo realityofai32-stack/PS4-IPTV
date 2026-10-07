@@ -77,7 +77,7 @@ namespace {
         const char *name() const override { return "live"; }
 
         void onPause() override {
-            app.images().want({});   // no logo downloads competing with the stream
+            app.images().want(std::vector<std::string>());   // no logo downloads competing with the stream
         }
 
         void onResume() override {
@@ -294,8 +294,8 @@ namespace {
                     if (r.bg != obj) {
                         continue;
                     }
-                    std::shared_ptr<LogoImages> img = screen->app.images().get(c.icon);
-                    r.logo->set(c.name, img ? img->small : nullptr, img ? img->smallSize : Vector2i());
+                    std::shared_ptr<ImageSet> img = screen->app.images().get(c.icon);
+                    r.logo->set(c.name, img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
                     r.num->setText(c.num > 0 ? std::to_string(c.num) : "");
                     r.name->setText(c.name);
                     r.name->setWeight(focused ? ui::Weight::SemiBold : ui::Weight::Regular);
@@ -359,8 +359,8 @@ namespace {
             if (!show) {
                 return;
             }
-            std::shared_ptr<LogoImages> img = app.images().get(c->icon);
-            detailLogo->set(c->name, img ? img->large : nullptr, img ? img->largeSize : Vector2i());
+            std::shared_ptr<ImageSet> img = app.images().get(c->icon);
+            detailLogo->set(c->name, img ? img->at(1).texture : nullptr, img ? img->at(1).size : Vector2i());
             detailName->setText(c->name);
             float y = 28 + DETAIL_LOGO_H + 30;
             detailName->setPosition(28, y);

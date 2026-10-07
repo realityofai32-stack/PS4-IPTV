@@ -34,7 +34,7 @@ void Screen::redraw() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
-             profileStore(APP_DATA_DIR), settingsStore(APP_DATA_DIR), xtreamService(jobSystem),
+             profileStore(APP_DATA_DIR), settingsStore(APP_DATA_DIR), xtreamService(jobSystem), vodLibrary(xtreamService, APP_DATA_DIR),
              libraryStore(APP_DATA_DIR), imageLoader(jobSystem, APP_DATA_DIR "cache/images") {
     LOG_I("app", "renderer: %s", available ? "OK (SDL2 + OpenGL ES 2 / Piglet)" : "FAILED");
     romfsPath = getIo()->getRomFsPath();

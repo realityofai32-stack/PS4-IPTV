@@ -57,6 +57,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
         "${PPLAY_DIR}/src"
         ${MPV_INCLUDE_DIRS} ${ASS_INCLUDE_DIRS} ${FFMPEG_INCLUDE_DIRS} ${BZIP2_INCLUDE_DIR})
 target_compile_options(${PROJECT_NAME} PRIVATE -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)
+# same language level as libcross2d (CMAKE_CXX_STANDARD 17) and the host tests (/std:c++17)
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS ON)
 # text rendering test screen at launch (hardware Checkpoint 1 diagnostics; confirmed OK, still in Settings)
 option(PS4IPTV_TEXT_TEST_AT_START "Show the text rendering test screen at launch" OFF)
 if (PS4IPTV_TEXT_TEST_AT_START)

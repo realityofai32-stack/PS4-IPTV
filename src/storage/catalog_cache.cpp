@@ -65,6 +65,15 @@ bool CatalogCache::load(const std::string &profileId, const std::string &name, s
     return true;
 }
 
+void CatalogCache::remove(const std::string &profileId, const std::string &name) const {
+    if (!safeName(profileId) || !safeName(name)) {
+        return;
+    }
+    std::string base = fs::join(dir(profileId), name);
+    fs::removeFile(base + ".meta");
+    fs::removeFile(base + ".json");
+}
+
 void CatalogCache::clearProfile(const std::string &profileId) const {
     if (!safeName(profileId)) {
         return;

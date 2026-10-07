@@ -1,3 +1,8 @@
+#include <algorithm>
+#include <cctype>
+#include <cstdio>
+#include <map>
+
 #include "xtream.h"
 #include "../core/json.h"
 #include "../core/url.h"
@@ -190,6 +195,352 @@ namespace xtream {
             error = "response is not a channel list: " + error;
         }
         return ok;
+    }
+
+    // ------------------------------------------------------------------ Movies / Series
+
+    namespace {
+        bool isDigit(char c) {
+            return c >= '0' && c <= '9';
+        }
+
+        int yearFromDate(const std::string &date) {
+            // "2026-09-20", "2019", "20.09.2019"
+            for (size_t i = 0; i + 4 <= date.size(); i++) {
+                if (isDigit(date[i]) && isDigit(date[i + 1]) && isDigit(date[i + 2]) && isDigit(date[i + 3])
+                    && (i + 4 == date.size() || !isDigit(date[i + 4])) && (i == 0 || !isDigit(date[i - 1]))) {
+                    int y = std::stoi(date.substr(i, 4));
+                    if (y >= 1900 && y <= 2099) {
+                        return y;
+                    }
+                }
+            }
+            return 0;
+        }
+
+        float clampRating(double r) {
+            return r > 0 && r <= 10 ? (float) r : 0.0f;
+        }
+
+        void readMedia(const json::Value &info, MediaSummary &m) {
+            const json::Value &v = info["video"];
+            if (v.isObject()) {
+                m.width = (int) v["width"].asInt(0);
+                m.height = (int) v["height"].asInt(0);
+                m.videoCodec = v["codec_name"].asString();
+            }
+            const json::Value &a = info["audio"];
+            if (a.isObject()) {
+                m.audioCodec = a["codec_name"].asString();
+                m.audioChannels = (int) a["channels"].asInt(0);
+                m.audioLanguage = a["tags"]["language"].asString();
+            }
+            m.bitrateKbps = (int) info["bitrate"].asInt(0);
+        }
+
+        int durationOf(const json::Value &info) {
+            int64_t secs = info["duration_secs"].asInt(0);
+            if (secs > 0) {
+                return (int) secs;
+            }
+            // "02:25:00"
+            std::string d = info["duration"].asString();
+            int h = 0, mi = 0, s = 0;
+            if (sscanf(d.c_str(), "%d:%d:%d", &h, &mi, &s) == 3) {
+                return h * 3600 + mi * 60 + s;
+            }
+            return 0;
+        }
+
+        std::string firstString(const json::Value &v) {
+            // backdrop_path: string or array of strings
+            if (v.isArray()) {
+                return v.size() > 0 ? url::trim(v.at(0).asString()) : "";
+            }
+            return url::trim(v.asString());
+        }
+
+        void readSeriesFields(const json::Value &o, Series &s) {
+            s.name = url::trim(o["name"].asString(s.name));
+            s.cover = url::trim(o["cover"].asString(s.cover));
+            s.plot = cleanText(o["plot"].asString());
+            s.cast = cleanText(o["cast"].asString());
+            s.director = cleanText(o["director"].asString());
+            s.genre = cleanText(o["genre"].asString());
+            s.releaseDate = cleanText(o["releaseDate"].asString(o["release_date"].asString()));
+            s.rating = clampRating(o["rating"].asDouble(0));
+            s.runtimeMinutes = (int) o["episode_run_time"].asInt(0);
+            s.lastModified = o["last_modified"].asInt(0);
+            if (!o["category_id"].asString().empty()) {
+                s.categoryId = o["category_id"].asString();
+            }
+        }
+
+        void finishSeries(Series &s) {
+            if (s.name.empty()) {
+                s.name = "Series " + s.seriesId;
+            }
+            int fromName = 0;
+            splitTitleYear(s.name, s.title, fromName);
+            s.year = yearFromDate(s.releaseDate);
+            if (s.year == 0) {
+                s.year = fromName;
+            }
+        }
+    }
+
+    std::string cleanText(const std::string &s) {
+        std::string t = url::trim(s);
+        std::string l = url::lower(t);
+        if (l == "-" || l == "n/a" || l == "null" || l == "none" || l == "--") {
+            return "";
+        }
+        return t;
+    }
+
+    void splitTitleYear(const std::string &name, std::string &title, int &year) {
+        title = url::trim(name);
+        year = 0;
+        std::string t = title;
+        bool paren = !t.empty() && t.back() == ')';
+        if (paren) {
+            t.pop_back();
+        }
+        if (t.size() < 6) {
+            return;
+        }
+        std::string tail = t.substr(t.size() - 4);
+        if (!isDigit(tail[0]) || !isDigit(tail[1]) || !isDigit(tail[2]) || !isDigit(tail[3])) {
+            return;
+        }
+        int y = std::stoi(tail);
+        if (y < 1900 || y > 2099) {
+            return;
+        }
+        std::string rest = t.substr(0, t.size() - 4);
+        if (paren) {
+            if (rest.empty() || rest.back() != '(') {
+                return;
+            }
+            rest.pop_back();
+        } else if (rest.back() != ' ' && rest.back() != '-' && rest.back() != '.') {
+            return;   // "Blade Runner2049" style: digits glued to a word are part of the title
+        }
+        while (!rest.empty() && (rest.back() == ' ' || rest.back() == '-' || rest.back() == '.')) {
+            rest.pop_back();
+        }
+        if (rest.empty()) {
+            return;   // the name is only a year
+        }
+        title = rest;
+        year = y;
+    }
+
+    std::string cleanEpisodeTitle(const std::string &raw, const std::string &seriesName) {
+        std::string t = url::trim(raw);
+        // remove "S01-E01" / "S01E01" / "s1 e1"
+        std::string l = url::lower(t);
+        for (size_t i = 0; i < l.size(); i++) {
+            if (l[i] != 's' || i + 1 >= l.size() || !isDigit(l[i + 1]) || (i > 0 && isalnum((unsigned char) l[i - 1]))) {
+                continue;
+            }
+            size_t j = i + 1;
+            while (j < l.size() && isDigit(l[j])) {
+                j++;
+            }
+            size_t k = j;
+            while (k < l.size() && (l[k] == '-' || l[k] == ' ' || l[k] == '.' || l[k] == '_')) {
+                k++;
+            }
+            if (k < l.size() && l[k] == 'e' && k + 1 < l.size() && isDigit(l[k + 1])) {
+                size_t e = k + 1;
+                while (e < l.size() && isDigit(l[e])) {
+                    e++;
+                }
+                t.erase(i, e - i);
+                l.erase(i, e - i);
+                break;
+            }
+        }
+        // remove the series name at the start
+        std::string name = url::lower(url::trim(seriesName));
+        if (!name.empty() && l.compare(0, name.size(), name) == 0) {
+            t.erase(0, name.size());
+        }
+        auto sep = [](char c) { return c == ' ' || c == '-' || c == ':' || c == '|' || c == '.' || c == '_'; };
+        while (!t.empty() && sep(t.front())) {
+            t.erase(t.begin());
+        }
+        while (!t.empty() && sep(t.back())) {
+            t.pop_back();
+        }
+        return t;
+    }
+
+    bool parseVodStreams(const std::string &body, std::vector<Movie> &out, std::string &error) {
+        out.clear();
+        bool ok = json::forEachObject(body, [&out](const json::FlatObject &o) {
+            Movie m;
+            m.streamId = o.get("stream_id");
+            if (m.streamId.empty()) {
+                return true;  // malformed entry: skip
+            }
+            m.name = url::trim(o.get("name"));
+            if (m.name.empty()) {
+                m.name = "Movie " + m.streamId;
+            }
+            splitTitleYear(m.name, m.title, m.year);
+            m.categoryId = o.get("category_id");
+            m.icon = url::trim(o.get("stream_icon"));
+            m.extension = url::trim(o.get("container_extension"));
+            m.rating = clampRating(o.getDouble("rating", 0));
+            m.added = o.getInt("added", 0);
+            out.push_back(std::move(m));
+            return true;
+        }, &error);
+        if (!ok) {
+            error = "response is not a movie list: " + error;
+        }
+        return ok;
+    }
+
+    bool parseSeriesList(const std::string &body, std::vector<Series> &out, std::string &error) {
+        out.clear();
+        bool ok = json::forEachObject(body, [&out](const json::FlatObject &o) {
+            Series s;
+            s.seriesId = o.get("series_id");
+            if (s.seriesId.empty()) {
+                return true;
+            }
+            s.name = url::trim(o.get("name"));
+            s.categoryId = o.get("category_id");
+            s.cover = url::trim(o.get("cover"));
+            s.plot = cleanText(o.get("plot"));
+            s.cast = cleanText(o.get("cast"));
+            s.director = cleanText(o.get("director"));
+            s.genre = cleanText(o.get("genre"));
+            s.releaseDate = cleanText(o.has("releaseDate") ? o.get("releaseDate") : o.get("release_date"));
+            s.rating = clampRating(o.getDouble("rating", 0));
+            s.runtimeMinutes = (int) o.getInt("episode_run_time", 0);
+            s.lastModified = o.getInt("last_modified", 0);
+            finishSeries(s);
+            out.push_back(std::move(s));
+            return true;
+        }, &error);
+        if (!ok) {
+            error = "response is not a series list: " + error;
+        }
+        return ok;
+    }
+
+    bool parseVodInfo(const std::string &body, MovieInfo &out, std::string &error) {
+        out = MovieInfo();
+        json::Value root;
+        if (!json::parse(body, root, &error)) {
+            error = "response is not JSON: " + error;
+            return false;
+        }
+        if (!root.isObject()) {
+            error = "unexpected movie info response";
+            return false;
+        }
+        out.streamId = root["movie_data"]["stream_id"].asString();
+        const json::Value &info = root["info"];   // some panels send [] when there is no info
+        if (!info.isObject()) {
+            return true;
+        }
+        out.plot = cleanText(info["plot"].asString(info["description"].asString()));
+        out.genre = cleanText(info["genre"].asString());
+        out.director = cleanText(info["director"].asString());
+        out.cast = cleanText(info["cast"].asString(info["actors"].asString()));
+        out.releaseDate = cleanText(info["releasedate"].asString(info["release_date"].asString()));
+        out.coverBig = url::trim(info["cover_big"].asString(info["movie_image"].asString()));
+        out.backdrop = firstString(info["backdrop_path"]);
+        out.tmdbId = info["tmdb_id"].asString();
+        out.rating = clampRating(info["rating"].asDouble(0));
+        out.durationSeconds = durationOf(info);
+        readMedia(info, out.media);
+        return true;
+    }
+
+    bool parseSeriesInfo(const std::string &body, SeriesInfo &out, std::string &error) {
+        out = SeriesInfo();
+        json::Value root;
+        if (!json::parse(body, root, &error)) {
+            error = "response is not JSON: " + error;
+            return false;
+        }
+        if (!root.isObject()) {
+            error = "unexpected series info response";
+            return false;
+        }
+        const json::Value &info = root["info"];
+        if (info.isObject()) {
+            readSeriesFields(info, out.series);
+        }
+        // episodes: {"1": [...], "2": [...]} or [[...], [...]] or a flat [...]
+        std::vector<const json::Value *> episodes;
+        const json::Value &eps = root["episodes"];
+        auto collect = [&episodes](const json::Value &list) {
+            if (list.isArray()) {
+                for (const auto &e: list.items()) {
+                    if (e.isObject()) {
+                        episodes.push_back(&e);
+                    } else if (e.isArray()) {
+                        for (const auto &x: e.items()) {
+                            if (x.isObject()) {
+                                episodes.push_back(&x);
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        if (eps.isObject()) {
+            for (const auto &m: eps.members()) {
+                collect(m.second);
+            }
+        } else {
+            collect(eps);
+        }
+        std::map<int, Season> seasons;
+        for (const json::Value *pe: episodes) {
+            const json::Value &e = *pe;
+            Episode ep;
+            ep.id = e["id"].asString();
+            if (ep.id.empty()) {
+                continue;
+            }
+            ep.season = (int) e["season"].asInt(0);
+            ep.number = (int) e["episode_num"].asInt(0);
+            ep.extension = url::trim(e["container_extension"].asString());
+            ep.title = cleanEpisodeTitle(e["title"].asString(), out.series.name);
+            const json::Value &ei = e["info"];
+            if (ei.isObject()) {
+                ep.image = url::trim(ei["movie_image"].asString());
+                ep.plot = cleanText(ei["plot"].asString());
+                ep.durationSeconds = durationOf(ei);
+                ep.rating = clampRating(ei["rating"].asDouble(0));
+                readMedia(ei, ep.media);
+            }
+            seasons[ep.season].episodes.push_back(std::move(ep));
+        }
+        for (const auto &s: root["seasons"].items()) {
+            int n = (int) s["season_number"].asInt(-1);
+            auto it = seasons.find(n);
+            if (it != seasons.end()) {
+                it->second.name = cleanText(s["name"].asString());
+                it->second.cover = url::trim(s["cover"].asString());
+            }
+        }
+        for (auto &s: seasons) {
+            s.second.number = s.first;
+            std::stable_sort(s.second.episodes.begin(), s.second.episodes.end(),
+                             [](const Episode &a, const Episode &b) { return a.number < b.number; });
+            out.seasons.push_back(std::move(s.second));
+        }
+        finishSeries(out.series);
+        return true;
     }
 
     std::string authStatusText(AuthStatus status) {

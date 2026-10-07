@@ -40,6 +40,10 @@ namespace iptv {
     }
 
     std::vector<int> LiveCatalog::search(const std::string &query, size_t limit) const {
+        return rankedSearch(folded, query, limit);
+    }
+
+    std::vector<int> rankedSearch(const std::vector<std::u32string> &folded, const std::string &query, size_t limit) {
         std::u32string q = utf8::foldForSearch(query);
         while (!q.empty() && q.back() == U' ') {
             q.pop_back();

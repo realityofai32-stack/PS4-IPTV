@@ -8,6 +8,7 @@
 
 #include "cross2d/c2d.h"
 #include "screen.h"
+#include "vod_library.h"
 #include "xtream_service.h"
 #include "../images/image_loader.h"
 #include "../iptv/catalog.h"
@@ -85,6 +86,9 @@ public:
 
     XtreamService &xtream() { return xtreamService; }
 
+    // Movies / Series catalogs (lazy) and their detail caches
+    VodLibrary &vod() { return vodLibrary; }
+
     Session &session() { return currentSession; }
 
     LibraryStore &library() { return libraryStore; }
@@ -122,6 +126,7 @@ private:
     ProfileStore profileStore;
     SettingsStore settingsStore;
     XtreamService xtreamService;
+    VodLibrary vodLibrary;
     LibraryStore libraryStore;
     Playback player;
     ImageLoader imageLoader;

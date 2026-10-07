@@ -154,15 +154,16 @@ TEST(library_favorites_and_history) {
     CHECK(s.isFavorite(ContentType::Live, "1"));
     CHECK(!s.isFavorite(ContentType::Movie, "1"));
     s.toggleFavorite(ContentType::Movie, "m9");
-    for (int i = 0; i < 130; i++) {
+    const int limit = (int) LibraryStore::HISTORY_LIMIT;
+    for (int i = 0; i < limit + 30; i++) {
         HistoryEntry e;
-        e.id = std::to_string(i % 110);
+        e.id = std::to_string(i % (limit + 10));
         e.name = "ch";
         e.watchedAt = i;
         s.addHistory(e);
     }
     CHECK_EQ(s.history().size(), LibraryStore::HISTORY_LIMIT);
-    CHECK(s.history()[0].id == "19" && s.history()[0].watchedAt == 129);  // latest first, deduplicated
+    CHECK(s.history()[0].id == "19" && s.history()[0].watchedAt == limit + 29);  // latest first, deduplicated
     s.setProfile("p2");
     CHECK(s.history().empty());
     CHECK(!s.isFavorite(ContentType::Live, "1"));

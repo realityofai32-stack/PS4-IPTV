@@ -32,6 +32,26 @@ namespace xtream {
     // get_live_streams (streamed: large lists never build a DOM). Malformed entries are skipped.
     bool parseLiveStreams(const std::string &body, std::vector<iptv::LiveChannel> &out, std::string &error);
 
+    // get_vod_streams / get_series (streamed). Malformed entries are skipped.
+    bool parseVodStreams(const std::string &body, std::vector<iptv::Movie> &out, std::string &error);
+
+    bool parseSeriesList(const std::string &body, std::vector<iptv::Series> &out, std::string &error);
+
+    // get_vod_info / get_series_info (small DOM responses). Missing fields stay empty.
+    bool parseVodInfo(const std::string &body, iptv::MovieInfo &out, std::string &error);
+
+    bool parseSeriesInfo(const std::string &body, iptv::SeriesInfo &out, std::string &error);
+
+    // "Orumcek Adam 7 2026" -> ("Orumcek Adam 7", 2026); "(2019)" / "- 2019" suffixes too. A name that is
+    // only a year keeps it as the title.
+    void splitTitleYear(const std::string &name, std::string &title, int &year);
+
+    // provider placeholder values ("-", "N/A", "null") become ""
+    std::string cleanText(const std::string &s);
+
+    // "American Hostage S01-E01" (series "American Hostage") -> ""; "Show S01E02 - Pilot" -> "Pilot"
+    std::string cleanEpisodeTitle(const std::string &title, const std::string &seriesName);
+
     // User-facing text for an auth status.
     std::string authStatusText(iptv::AuthStatus status);
 }

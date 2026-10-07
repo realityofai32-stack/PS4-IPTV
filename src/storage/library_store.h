@@ -14,19 +14,42 @@
 struct HistoryEntry {
     iptv::ContentType type = iptv::ContentType::Live;
     std::string id;           // stream id (live/movie) or episode id (series)
-    std::string name;
-    std::string icon;
-    std::string extra;        // e.g. series id or container extension
+    std::string name;         // channel / movie title / episode title
+    std::string icon;         // logo / poster / series cover
+    std::string extra;        // free-form (unused by the app today)
     int64_t watchedAt = 0;
-    double position = 0;      // seconds (VOD only)
+    double position = 0;      // seconds (movies and episodes only, never Live TV)
     double duration = 0;
+    bool watched = false;     // reached the end (see progress::isWatched)
+    std::string extension;    // container extension for the playback URL
+    std::string seriesId;     // episodes
+    std::string seriesName;
+    int season = 0;
+    int episode = 0;
 };
+
+// resume / watched rules (movies and episodes)
+namespace progress {
+    const double WATCHED_FRACTION = 0.93;   // ~93 % counts as watched (credits)
+    const double MIN_RESUME_SECONDS = 30;   // less than this: start from the beginning
+
+    bool isWatched(double position, double duration);
+
+    // true when playback should offer to continue from `position`
+    bool canResume(double position, double duration, bool watched);
+
+    // where to resume: a few seconds before the saved position, for context
+    double resumeFrom(double position);
+
+    // 0..1 for progress bars (0 when unknown)
+    double fraction(double position, double duration);
+}
 
 class LibraryStore {
 
 public:
 
-    static const size_t HISTORY_LIMIT = 100;
+    static const size_t HISTORY_LIMIT = 200;
 
     explicit LibraryStore(std::string dataDir);
 
@@ -48,6 +71,21 @@ public:
     const std::vector<HistoryEntry> &history() const;
 
     void clearHistory();
+
+    // movie / episode progress of the active profile (nullptr when never played)
+    const HistoryEntry *progressOf(iptv::ContentType type, const std::string &id) const;
+
+    // records a progress update (moves the entry to the front, like addHistory)
+    void updateProgress(const HistoryEntry &entry);
+
+    // forget the position and watched state, keep the history entry
+    void resetProgress(iptv::ContentType type, const std::string &id);
+
+    // started, not finished movies and episodes, newest first; one entry (the latest episode) per series
+    std::vector<const HistoryEntry *> continueWatching(size_t limit) const;
+
+    // everything played recently, newest first; one entry per series
+    std::vector<const HistoryEntry *> recentlyWatched(size_t limit) const;
 
     void removeProfile(const std::string &profileId);
 

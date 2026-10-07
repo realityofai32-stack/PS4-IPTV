@@ -172,6 +172,7 @@ namespace {
             s.account = o.result.account;
             s.httpsWarning = o.httpsWarning;
             app.library().setProfile(profile.id);
+            app.vod().reset();   // Movies/Series of this profile load when first opened
             setStep(0, State::Done, o.result.account.expiresAt > 0
                                     ? "Active until " + clockx::localDate(o.result.account.expiresAt) : "Active");
             loadLive();

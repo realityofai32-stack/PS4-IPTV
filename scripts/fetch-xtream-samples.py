@@ -27,6 +27,10 @@ def credentials():
 
 def fetch(base, user, pw, action):
     q = {'username': user, 'password': pw}
+    if ':' in action:  # e.g. get_vod_info:vod_id=123
+        action, extra = action.split(':', 1)
+        key, value = extra.split('=', 1)
+        q[key] = value
     if action:
         q['action'] = action
     url = base + '/player_api.php?' + urllib.parse.urlencode(q)
@@ -44,7 +48,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     for action in actions:
         status, ctype, data = fetch(base, user, pw, action)
-        name = (action or 'auth') + '.json'
+        name = (action.split(':')[0] or 'auth') + '.json'
         with open(os.path.join(OUT, name), 'wb') as f:
             f.write(data)
         doc = json.loads(data)
