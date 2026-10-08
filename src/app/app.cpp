@@ -27,7 +27,7 @@ Session::Session() {
 
 Screen::Screen(App &a, bool isModal) : RectangleShape(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H)),
                                        app(a), modal(isModal) {
-    setFillColor(isModal ? theme::scrim() : Color::Transparent);
+    setFillColor(isModal ? theme::scrim() : theme::none());
 }
 
 Screen::~Screen() {
@@ -46,7 +46,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
              libraryStore(APP_DATA_DIR), imageLoader(jobSystem, APP_DATA_DIR "cache/images") {
     LOG_I("app", "renderer: %s", available ? "OK (SDL2 + OpenGL ES 2 / Piglet)" : "FAILED");
     romfsPath = getIo()->getRomFsPath();
-    setClearColor(theme::bgTop());
+    setClearColor(theme::background());
     getInput()->setRepeatDelay(0);  // repeat/acceleration is handled by InputManager
 
     clockx::init();
@@ -144,10 +144,10 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     }
 
     screenLayer = new RectangleShape(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H));
-    screenLayer->setFillColor(Color::Transparent);
+    screenLayer->setFillColor(theme::none());
     add(screenLayer);
 
-    toastBox = ui::box(this, FloatRect(0, 0, 900, 76), theme::surfaceRaised(), 38);
+    toastBox = ui::box(this, FloatRect(0, 0, 900, 76), theme::surfaceElevated(), 38);
     toastBox->setOrigin(Origin::Bottom);
     toastBox->setPosition(theme::SCREEN_W / 2, theme::SCREEN_H - 120);
     toastText = ui::label(toastBox, "", theme::BODY, 0, ui::Label::centerOffset(theme::BODY, 76),
@@ -326,9 +326,9 @@ void App::requestRedrawAt(double when) {
 
 void App::toast(const std::string &message, ToastKind kind) {
     toastText->setText(message);
-    toastBox->setFillColor(kind == ToastKind::Error ? Color(120, 36, 44) : kind == ToastKind::Success
-                                                                         ? Color(26, 92, 70)
-                                                                         : theme::surfaceRaised());
+    toastBox->setFillColor(kind == ToastKind::Error ? theme::dangerSurface() : kind == ToastKind::Success
+                                                                         ? theme::successSurface()
+                                                                         : theme::surfaceElevated());
     toastBox->setVisibility(Visibility::Visible);
     toastUntil = now() + 3.5;
     requestRedraw();

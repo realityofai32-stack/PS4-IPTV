@@ -210,15 +210,15 @@ namespace {
             ui::background(this);
             screens::header(this, tr(Traits::headingKey()));
             statusLabel = ui::label(this, "", theme::LABEL, 0, theme::SAFE_Y + 16, ui::Weight::Regular,
-                                    theme::textDim());
+                                    theme::textSecondary());
             statusLabel->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
             statusLabel->setMaxWidth(1100);
             // above the grid: the selected category in full, then the focused title in full
-            categoryTitle = ui::label(this, "", theme::BODY, GRID_X, 120, ui::Weight::SemiBold, theme::accent());
+            categoryTitle = ui::label(this, "", theme::BODY, GRID_X, 120, ui::Weight::SemiBold, theme::accentText());
             categoryTitle->setMaxWidth(GRID_W - 300);
-            categoryMeta = ui::label(this, "", theme::LABEL, GRID_X, 123, ui::Weight::Regular, theme::textDim());
+            categoryMeta = ui::label(this, "", theme::LABEL, GRID_X, 123, ui::Weight::Regular, theme::textSecondary());
             infoTitle = ui::label(this, "", theme::BODY, GRID_X, 160, ui::Weight::SemiBold);
-            infoMeta = ui::label(this, "", theme::LABEL, 0, 163, ui::Weight::Regular, theme::textDim());
+            infoMeta = ui::label(this, "", theme::LABEL, 0, 163, ui::Weight::Regular, theme::textSecondary());
             infoMeta->setAlign(ui::Align::Right, GRID_X + ui::ListView::rowWidth(GRID_W));
             infoMeta->setMaxWidth(420);
 
@@ -398,7 +398,7 @@ namespace {
 
             C2DObject *createRow(float w, float h) override {
                 Row r;
-                r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), Color::Transparent, theme::RADIUS_SMALL);
+                r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::none(), theme::RADIUS_SMALL);
                 r.marker = ui::box(r.bg, FloatRect(0, 14, 4, h - 28), theme::accent(), 2);
                 r.name = ui::label(r.bg, "", theme::LABEL + 2, 20, ui::Label::centerOffset(theme::LABEL + 2, h));
                 r.name->setMaxWidth(w - 20 - 72);
@@ -417,12 +417,12 @@ namespace {
                     int n = 0;
                     r.name->setText(screen->rowName(index, n));
                     r.count->setText(n >= 0 ? std::to_string(n) : "");
-                    r.bg->setFillColor(focused ? theme::rowFocus() : selected ? theme::surface() : Color::Transparent);
+                    r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surface() : theme::none());
                     r.bg->setOutlineColor(theme::accent());
                     r.bg->setOutlineThickness(focused ? 3 : 0);
                     r.marker->setVisibility(selected && !focused ? Visibility::Visible : Visibility::Hidden);
                     r.name->setWeight(selected ? ui::Weight::SemiBold : ui::Weight::Regular);
-                    r.name->setColor(focused ? Color::White : selected ? theme::text() : theme::textDim());
+                    r.name->setColor(focused ? theme::textStrong() : selected ? theme::textPrimary() : theme::textSecondary());
                 }
             }
 
@@ -444,10 +444,10 @@ namespace {
             C2DObject *createCell(float w, float h) override {
                 Cell c;
                 c.root = new RectangleShape(FloatRect(0, 0, w, h));
-                c.root->setFillColor(Color::Transparent);
+                c.root->setFillColor(theme::none());
                 c.poster = new ui::PosterView(FloatRect(0, 0, w, POSTER_H), theme::CAPTION);
                 c.root->add(c.poster);
-                c.title = ui::label(c.root, "", theme::CAPTION, 0, POSTER_H + 8, ui::Weight::Regular, theme::textDim());
+                c.title = ui::label(c.root, "", theme::CAPTION, 0, POSTER_H + 8, ui::Weight::Regular, theme::textSecondary());
                 c.title->setAlign(ui::Align::Center, w);
                 c.title->setMaxWidth(w);
                 cells.push_back(c);
@@ -469,7 +469,7 @@ namespace {
                     c.poster->setDownloaded(Traits::downloaded(screen->app, it));
                     c.poster->setFocused(focused);
                     c.title->setText(Traits::title(it));
-                    c.title->setColor(focused ? Color::White : theme::textDim());
+                    c.title->setColor(focused ? theme::textStrong() : theme::textSecondary());
                     c.title->setWeight(focused ? ui::Weight::SemiBold : ui::Weight::Regular);
                 }
             }
@@ -661,7 +661,7 @@ namespace {
                 status = st.message;
             }
             statusLabel->setText(status);
-            statusLabel->setColor(!st.message.empty() ? theme::warning() : theme::textDim());
+            statusLabel->setColor(!st.message.empty() ? theme::warning() : theme::textSecondary());
         }
 
         static std::string withThousands(size_t n) {

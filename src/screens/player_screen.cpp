@@ -113,17 +113,17 @@ namespace {
         LivePlayerScreen(App &a, std::vector<int> channelList, int start,
                          std::function<void(const std::string &)> exitCallback)
                 : Screen(a), list(std::move(channelList)), index(start), onExit(std::move(exitCallback)) {
-            setFillColor(Color::Black);
+            setFillColor(theme::videoBackground());
             app.setPlaybackActive(true);   // downloads pause while a stream is decoded
             app.session().livePlayers++;   // a refreshed playlist waits: `list` holds indices into the catalog
             video = new VideoTexture(app.playback().backend(), {theme::SCREEN_W, theme::SCREEN_H});
             add(video);
 
             // top overlay
-            top = ui::box(this, FloatRect(0, 0, theme::SCREEN_W, 190), Color(0, 0, 0, 170), 0);
+            top = ui::box(this, FloatRect(0, 0, theme::SCREEN_W, 190), theme::overlay(), 0);
             title = ui::label(top, "", theme::TITLE, theme::SAFE_X, 44, ui::Weight::SemiBold);
             title->setMaxWidth(1300);
-            subtitle = ui::label(top, "", theme::LABEL, theme::SAFE_X, 110, ui::Weight::Regular, theme::textDim());
+            subtitle = ui::label(top, "", theme::LABEL, theme::SAFE_X, 110, ui::Weight::Regular, theme::textSecondary());
             subtitle->setMaxWidth(1300);
             clock = ui::label(top, "", theme::HEADING, 0, 48, ui::Weight::SemiBold);
             clock->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
@@ -131,7 +131,7 @@ namespace {
             fav->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
 
             // bottom overlay
-            bottom = ui::box(this, FloatRect(0, theme::SCREEN_H - 170, theme::SCREEN_W, 170), Color(0, 0, 0, 170), 0);
+            bottom = ui::box(this, FloatRect(0, theme::SCREEN_H - 170, theme::SCREEN_W, 170), theme::overlay(), 0);
             status = ui::label(bottom, "", theme::BODY, theme::SAFE_X, 24, ui::Weight::SemiBold);
             status->setMaxWidth(1700);
             hints = new ui::HintBar();
@@ -143,11 +143,11 @@ namespace {
 
             // centre: opening / reconnecting / HTTP 403 countdown / failure
             centre = ui::box(this, FloatRect((theme::SCREEN_W - CENTRE_W) / 2, 380, CENTRE_W, CENTRE_H),
-                             Color(12, 16, 22, 230), theme::RADIUS);
+                             theme::overlayPanel(), theme::RADIUS);
             centreTitle = ui::label(centre, "", theme::HEADING, 0, 52, ui::Weight::SemiBold);
             centreTitle->setAlign(ui::Align::Center, CENTRE_W);
             centreTitle->setMaxWidth(CENTRE_W - 80);
-            centreText = ui::label(centre, "", theme::BODY, 0, 118, ui::Weight::Regular, theme::textDim());
+            centreText = ui::label(centre, "", theme::BODY, 0, 118, ui::Weight::Regular, theme::textSecondary());
             centreText->setAlign(ui::Align::Center, CENTRE_W);
             centreText->setMaxWidth(CENTRE_W - 80);
             centreText->setMaxLines(2);
@@ -159,7 +159,7 @@ namespace {
 
             // small status pill over the picture: "Buffering..."
             pill = ui::box(this, FloatRect((theme::SCREEN_W - PILL_W) / 2, 760, PILL_W, PILL_H),
-                           Color(12, 16, 22, 210), PILL_H / 2);
+                           theme::overlayPanel(), PILL_H / 2);
             pillText = ui::label(pill, "", theme::BODY, 84, ui::Label::centerOffset(theme::BODY, PILL_H),
                                  ui::Weight::SemiBold);
             pillText->setMaxWidth(PILL_W - 110);
@@ -170,9 +170,9 @@ namespace {
 
             // technical info
             info = ui::box(this, FloatRect(theme::SCREEN_W - theme::SAFE_X - 660, 220, 660, 560),
-                           Color(12, 16, 22, 230), theme::RADIUS);
+                           theme::overlayPanel(), theme::RADIUS);
             ui::label(info, tr("info.title"), theme::HEADING, 36, 30, ui::Weight::SemiBold);
-            infoText = ui::label(info, "", theme::LABEL, 36, 96, ui::Weight::Regular, theme::textDim());
+            infoText = ui::label(info, "", theme::LABEL, 36, 96, ui::Weight::Regular, theme::textSecondary());
             infoText->setMaxWidth(600);
             infoText->setMaxLines(15);
             info->setVisibility(app.settings().get().showTechnicalInfo ? Visibility::Visible : Visibility::Hidden);
@@ -458,7 +458,7 @@ namespace {
                 st = tr("player.opening");
             }
             status->setText(st);
-            status->setColor(rs == stability::Status::Failed ? theme::danger() : theme::text());
+            status->setColor(rs == stability::Status::Failed ? theme::danger() : theme::textPrimary());
 
             // centre panel: opening (no picture yet), reconnecting, HTTP 403 countdown, failure
             bool centreShown = !zapping && (rs == stability::Status::Opening || rs == stability::Status::Reconnecting
@@ -467,7 +467,7 @@ namespace {
             bool spinning = centreShown && (rs == stability::Status::Opening || rs == stability::Status::Reconnecting);
             spinner->setVisibility(spinning ? Visibility::Visible : Visibility::Hidden);
             centreHint->setVisibility(spinning ? Visibility::Hidden : Visibility::Visible);
-            centreTitle->setColor(rs == stability::Status::Failed ? theme::danger() : theme::text());
+            centreTitle->setColor(rs == stability::Status::Failed ? theme::danger() : theme::textPrimary());
             if (spinning) {
                 spinner->tick(now);
             }

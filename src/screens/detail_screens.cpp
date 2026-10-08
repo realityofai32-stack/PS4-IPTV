@@ -115,18 +115,18 @@ namespace {
             title = ui::label(this, movie.title, theme::TITLE, x, 120, ui::Weight::SemiBold);
             title->setMaxWidth(w);
             title->setMaxLines(2);
-            meta = ui::label(this, "", theme::BODY, x, 0, ui::Weight::Regular, theme::textDim());
+            meta = ui::label(this, "", theme::BODY, x, 0, ui::Weight::Regular, theme::textSecondary());
             meta->setMaxWidth(w);
             tech = ui::label(this, "", theme::LABEL, x, 0, ui::Weight::Regular, theme::textMuted());
             tech->setMaxWidth(w);
-            credits = ui::label(this, "", theme::LABEL, x, 0, ui::Weight::Regular, theme::textDim());
+            credits = ui::label(this, "", theme::LABEL, x, 0, ui::Weight::Regular, theme::textSecondary());
             credits->setMaxWidth(w);
             credits->setMaxLines(4);
-            plot = ui::label(this, "", theme::BODY, x, 0, ui::Weight::Regular, theme::text());
+            plot = ui::label(this, "", theme::BODY, x, 0, ui::Weight::Regular, theme::textPrimary());
             plot->setMaxWidth(w);
             plot->setMaxLines(6);
-            progressText = ui::label(this, "", theme::LABEL, x, 760, ui::Weight::SemiBold, theme::textDim());
-            barTrack = ui::box(this, FloatRect(x, 800, 600, 8), Color(255, 255, 255, 50), 4);
+            progressText = ui::label(this, "", theme::LABEL, x, 760, ui::Weight::SemiBold, theme::textSecondary());
+            barTrack = ui::box(this, FloatRect(x, 800, 600, 8), theme::progressTrack(), 4);
             barFill = ui::box(barTrack, FloatRect(0, 0, 8, 8), theme::accent(), 4);
             for (int i = 0; i < BUTTONS; i++) {
                 buttons[i] = new ui::Button("", FloatRect(x + (float) i * 320, 850, 300, 84), i == 0);
@@ -390,7 +390,7 @@ namespace {
             credits->setText(c);
             if (info) {
                 plot->setText(info->plot.empty() ? "" : info->plot);
-                plot->setColor(theme::text());
+                plot->setColor(theme::textPrimary());
             } else {
                 plot->setText(error.empty() ? tr("detail.loading") : tr("detail.movie_unavailable", {error}));
                 plot->setColor(theme::textMuted());
@@ -414,7 +414,7 @@ namespace {
             } else {
                 progressText->setText(watched ? "\xE2\x9C\x93  " + tr("progress.watched") : "");
             }
-            progressText->setColor(watched ? theme::success() : theme::textDim());
+            progressText->setColor(watched ? theme::success() : theme::textSecondary());
             barTrack->setVisibility(resumable ? Visibility::Visible : Visibility::Hidden);
             if (resumable) {
                 barFill->setSize(std::max(8.0f, 600.0f * (float) progress::fraction(p->position, p->duration)), 8);
@@ -510,12 +510,12 @@ namespace {
             const float w = theme::SCREEN_W - theme::SAFE_X - S_TEXT_X;
             title = ui::label(this, series.title, theme::TITLE, S_TEXT_X, S_TOP, ui::Weight::SemiBold);
             title->setMaxWidth(w);
-            meta = ui::label(this, "", theme::BODY, S_TEXT_X, 0, ui::Weight::Regular, theme::textDim());
+            meta = ui::label(this, "", theme::BODY, S_TEXT_X, 0, ui::Weight::Regular, theme::textSecondary());
             meta->setMaxWidth(w);
             credits = ui::label(this, "", theme::LABEL, S_TEXT_X, 0, ui::Weight::Regular, theme::textMuted());
             credits->setMaxWidth(w);
             credits->setMaxLines(2);
-            plot = ui::label(this, "", theme::LABEL, S_TEXT_X, 0, ui::Weight::Regular, theme::textDim());
+            plot = ui::label(this, "", theme::LABEL, S_TEXT_X, 0, ui::Weight::Regular, theme::textSecondary());
             plot->setMaxWidth(w);
             plot->setMaxLines(3);
             for (int i = 0; i < 2; i++) {
@@ -526,7 +526,7 @@ namespace {
             }
             seasonLayer = new RectangleShape(FloatRect(theme::SAFE_X, S_SEASONS_Y, theme::SCREEN_W - 2 * theme::SAFE_X,
                                                        CHIP_H));
-            seasonLayer->setFillColor(Color::Transparent);
+            seasonLayer->setFillColor(theme::none());
             add(seasonLayer);
             episodes = new ui::ListView(FloatRect(theme::SAFE_X, S_EPISODES_Y, theme::SCREEN_W - 2 * theme::SAFE_X,
                                                   S_EPISODES_H), 92, 8, this);
@@ -605,7 +605,7 @@ namespace {
             EpisodeRow r;
             r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::surface(), theme::RADIUS_SMALL);
             r.code = ui::label(r.bg, "", theme::LABEL, 28, ui::Label::centerOffset(theme::LABEL, h) - 14,
-                               ui::Weight::SemiBold, theme::accent());
+                               ui::Weight::SemiBold, theme::accentText());
             r.name = ui::label(r.bg, "", theme::BODY, 170, ui::Label::centerOffset(theme::BODY, h) - 14);
             r.name->setMaxWidth(w - 170 - 320);
             r.detail = ui::label(r.bg, "", theme::CAPTION, 170, ui::Label::centerOffset(theme::BODY, h) + 22,
@@ -616,9 +616,9 @@ namespace {
             r.state->setAlign(ui::Align::Right, w - 28);
             // in progress: "24:16 / 57:00" above a bar
             r.time = ui::label(r.bg, "", theme::CAPTION, 0, ui::Label::centerOffset(theme::CAPTION, h) - 14,
-                               ui::Weight::SemiBold, theme::textDim());
+                               ui::Weight::SemiBold, theme::textSecondary());
             r.time->setAlign(ui::Align::Right, w - 28);
-            r.barTrack = ui::box(r.bg, FloatRect(w - 28 - 240, h / 2 + 14, 240, 6), Color(255, 255, 255, 50), 3);
+            r.barTrack = ui::box(r.bg, FloatRect(w - 28 - 240, h / 2 + 14, 240, 6), theme::progressTrack(), 3);
             r.barFill = ui::box(r.barTrack, FloatRect(0, 0, 6, 6), theme::accent(), 3);
             rows.push_back(r);
             return r.bg;
@@ -637,7 +637,7 @@ namespace {
                 r.code->setText(fmt::episodeCode(ep.season, ep.number));
                 r.name->setText(ep.title.empty() ? tr("episode.number", {std::to_string(ep.number)}) : ep.title);
                 r.name->setWeight(focused ? ui::Weight::SemiBold : ui::Weight::Regular);
-                r.name->setColor(focused ? Color::White : theme::text());
+                r.name->setColor(focused ? theme::textStrong() : theme::textPrimary());
                 r.detail->setText(join({fmt::duration(ep.durationSeconds),
                                         fmt::resolution(ep.media.width, ep.media.height)}));
                 // "✓ Watched", and the download: "↓ Downloaded" / "↓ 42%" / "↓ Queued"...
@@ -663,7 +663,7 @@ namespace {
                 if (partial) {
                     r.barFill->setSize(std::max(6.0f, 240.0f * (float) progress::fraction(p->position, total)), 6);
                 }
-                r.bg->setFillColor(focused ? theme::rowFocus() : selected ? theme::surfaceRaised() : theme::surface());
+                r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surfaceElevated() : theme::surface());
                 r.bg->setOutlineColor(theme::accent());
                 r.bg->setOutlineThickness(focused ? 3 : 0);
             }
@@ -1043,14 +1043,14 @@ namespace {
                 bool sel = i == seasonIndex;
                 bool foc = sel && focus == 1;
                 auto *chip = ui::box(seasonLayer, FloatRect((float) (i - first) * (CHIP_W + 16), 0, CHIP_W, CHIP_H),
-                                     foc ? theme::accent() : sel ? theme::surfaceRaised() : theme::surface(),
+                                     foc ? theme::accent() : sel ? theme::surfaceElevated() : theme::surface(),
                                      CHIP_H / 2);
-                chip->setOutlineColor(theme::withAlpha(Color::White, 220));
+                chip->setOutlineColor(theme::accent());
                 chip->setOutlineThickness(foc ? 3 : 0);
                 auto *l = ui::label(chip, s.number > 0 ? tr("detail.season_number", {std::to_string(s.number)}) : tr("detail.specials"),
                                     theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, CHIP_H),
                                     sel ? ui::Weight::SemiBold : ui::Weight::Regular,
-                                    foc ? Color::White : sel ? theme::text() : theme::textDim());
+                                    foc ? theme::textStrong() : sel ? theme::textPrimary() : theme::textSecondary());
                 l->setAlign(ui::Align::Center, CHIP_W);
             }
         }

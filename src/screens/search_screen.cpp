@@ -76,7 +76,7 @@ namespace {
                     float w = (float) k.span * KEY_UNIT + (float) (k.span - 1) * KEY_GAP;
                     KeyView v;
                     v.bg = ui::box(this, FloatRect(x, KEYS_Y + (float) r * (KEY_H + KEY_GAP), w, KEY_H),
-                                   theme::surfaceRaised(), 10);
+                                   theme::surfaceElevated(), 10);
                     bool special = k.action != KeyAction::Char;
                     unsigned size = special ? theme::CAPTION : theme::BODY;
                     v.label = ui::label(v.bg, keyboard.label(k), size, 0, ui::Label::centerOffset(size, KEY_H),
@@ -87,7 +87,7 @@ namespace {
                 keys.push_back(line);
             }
             float below = KEYS_Y + (float) rows.size() * (KEY_H + KEY_GAP) + 24;
-            catalogsText = ui::label(this, "", theme::LABEL, LEFT_X, below, ui::Weight::Regular, theme::textDim());
+            catalogsText = ui::label(this, "", theme::LABEL, LEFT_X, below, ui::Weight::Regular, theme::textSecondary());
             catalogsText->setMaxWidth(LEFT_W);
             catalogsText->setMaxLines(4);
 
@@ -102,7 +102,7 @@ namespace {
                                         ui::Weight::SemiBold);
                 chipText[i]->setAlign(ui::Align::Center, CHIP_W);
             }
-            summary = ui::label(this, "", theme::BODY, RIGHT_X, 214, ui::Weight::Regular, theme::textDim());
+            summary = ui::label(this, "", theme::BODY, RIGHT_X, 214, ui::Weight::Regular, theme::textSecondary());
             summary->setMaxWidth(RIGHT_W);
             list = new ui::ListView(FloatRect(RIGHT_X, LIST_Y, RIGHT_W, LIST_H), ROW_H, 8, this);
             add(list);
@@ -196,7 +196,7 @@ namespace {
                                 ui::Weight::SemiBold);
             r.title->setMaxWidth(w - 148 - 24);
             r.meta = ui::label(r.bg, "", theme::LABEL, 148, ui::Label::centerOffset(theme::LABEL, h) + 20,
-                               ui::Weight::Regular, theme::textDim());
+                               ui::Weight::Regular, theme::textSecondary());
             r.meta->setMaxWidth(w - 148 - 24);
             rows.push_back(r);
             return r.bg;
@@ -208,10 +208,10 @@ namespace {
                 if (r.bg != obj) {
                     continue;
                 }
-                r.bg->setFillColor(focused ? theme::rowFocus() : theme::surface());
+                r.bg->setFillColor(focused ? theme::focus() : theme::surface());
                 r.bg->setOutlineColor(theme::accent());
                 r.bg->setOutlineThickness(focused ? 3 : 0);
-                r.title->setColor(focused ? Color::White : theme::text());
+                r.title->setColor(focused ? theme::textStrong() : theme::textPrimary());
                 bool live = res.type == ContentType::Live;
                 r.poster->setVisibility(live ? Visibility::Hidden : Visibility::Visible);
                 r.logo->setVisibility(live ? Visibility::Visible : Visibility::Hidden);
@@ -544,10 +544,10 @@ namespace {
                     const Key &k = rows[(size_t) r][(size_t) c];
                     KeyView &v = keys[(size_t) r][(size_t) c];
                     bool focused = zone == 0 && r == keyboard.focusRow() && c == keyboard.focusCol();
-                    v.bg->setFillColor(focused ? theme::accent() : k.action == KeyAction::Ok ? Color(30, 74, 140)
-                                                                 : k.action == KeyAction::Char ? theme::surfaceRaised()
-                                                                 : theme::surfaceFocus());
-                    v.bg->setOutlineColor(Color::White);
+                    v.bg->setFillColor(focused ? theme::accent() : k.action == KeyAction::Ok ? theme::accentMuted()
+                                                                 : k.action == KeyAction::Char ? theme::surfaceElevated()
+                                                                 : theme::cardHover());
+                    v.bg->setOutlineColor(theme::textStrong());
                     v.bg->setOutlineThickness(focused ? 3 : 0);
                 }
             }
@@ -556,16 +556,16 @@ namespace {
         void refresh() {
             const std::string &q = keyboard.text();
             queryText->setText(q.empty() ? tr("search.placeholder") : q + (zone == 0 ? "|" : ""));
-            queryText->setColor(q.empty() ? theme::textMuted() : theme::text());
+            queryText->setColor(q.empty() ? theme::textMuted() : theme::textPrimary());
             field->setOutlineThickness(zone == 0 ? 2 : 0);
             refreshKeys();
 
             bool searched = !search::normalize(lastQuery).empty();
             for (int i = 0; i < 4; i++) {
                 bool sel = i == filter;
-                chips[i]->setFillColor(sel ? theme::accentDark() : theme::surface());
+                chips[i]->setFillColor(sel ? theme::accentMuted() : theme::surface());
                 chipText[i]->setText(searched ? tr(FILTER_KEYS[i]) + "  " + countText(totals[i]) : tr(FILTER_KEYS[i]));
-                chipText[i]->setColor(sel ? Color::White : theme::textDim());
+                chipText[i]->setColor(sel ? theme::textStrong() : theme::textSecondary());
             }
             int n = searched ? totals[filter] : 0;
             if (!searched) {

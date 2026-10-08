@@ -97,7 +97,7 @@ namespace {
                         std::function<void(const std::string &)> exitCallback)
                 : Screen(a), queue(std::move(items)), index(start), resumeOnStart(resumeFirst),
                   onExit(std::move(exitCallback)), tracker(a.library(), &clockx::unixNow) {
-            setFillColor(Color::Black);
+            setFillColor(theme::videoBackground());
             geometry = app.settings().get().defaultGeometry();
             app.setPlaybackActive(true);
             video = new VideoTexture(app.playback().backend(), {theme::SCREEN_W, theme::SCREEN_H});
@@ -527,38 +527,38 @@ namespace {
 
         // ------------------------------------------------------------------ overlay
         void buildOverlay() {
-            top = ui::box(this, FloatRect(0, 0, theme::SCREEN_W, 190), Color(0, 0, 0, 170), 0);
+            top = ui::box(this, FloatRect(0, 0, theme::SCREEN_W, 190), theme::overlay(), 0);
             title = ui::label(top, "", theme::TITLE, theme::SAFE_X, 44, ui::Weight::SemiBold);
             title->setMaxWidth(1400);
-            subtitle = ui::label(top, "", theme::BODY, theme::SAFE_X, 112, ui::Weight::Regular, theme::textDim());
+            subtitle = ui::label(top, "", theme::BODY, theme::SAFE_X, 112, ui::Weight::Regular, theme::textSecondary());
             subtitle->setMaxWidth(1400);
             clock = ui::label(top, "", theme::HEADING, 0, 48, ui::Weight::SemiBold);
             clock->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
 
-            bottom = ui::box(this, FloatRect(0, theme::SCREEN_H - 230, theme::SCREEN_W, 230), Color(0, 0, 0, 170), 0);
+            bottom = ui::box(this, FloatRect(0, theme::SCREEN_H - 230, theme::SCREEN_W, 230), theme::overlay(), 0);
             const float barW = theme::SCREEN_W - 2 * theme::SAFE_X;
-            barTrack = ui::box(bottom, FloatRect(theme::SAFE_X, 40, barW, 8), Color(255, 255, 255, 60), 4);
+            barTrack = ui::box(bottom, FloatRect(theme::SAFE_X, 40, barW, 8), theme::progressTrack(), 4);
             barFill = ui::box(barTrack, FloatRect(0, 0, 8, 8), theme::accent(), 4);
             barThumb = new CircleShape(11);
             barThumb->setPointCount(20);
-            barThumb->setFillColor(Color::White);
+            barThumb->setFillColor(theme::textStrong());
             barThumb->setOrigin(Origin::Center);
             barTrack->add(barThumb);
             timeLabel = ui::label(bottom, "", theme::BODY, theme::SAFE_X, 70, ui::Weight::SemiBold);
-            chips = ui::label(bottom, "", theme::LABEL, 0, 74, ui::Weight::Regular, theme::textDim());
+            chips = ui::label(bottom, "", theme::LABEL, 0, 74, ui::Weight::Regular, theme::textSecondary());
             chips->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
             chips->setMaxWidth(1100);
             hints = new ui::HintBar();
             hints->setPosition(theme::SAFE_X, 150);
             bottom->add(hints);
 
-            pausePill = ui::box(this, FloatRect((theme::SCREEN_W - 260) / 2, 460, 260, 90), Color(12, 16, 22, 210), 45);
+            pausePill = ui::box(this, FloatRect((theme::SCREEN_W - 260) / 2, 460, 260, 90), theme::overlayPanel(), 45);
             auto *pl = ui::label(pausePill, tr("player.paused"), theme::HEADING, 0, ui::Label::centerOffset(theme::HEADING, 90),
                                  ui::Weight::SemiBold);
             pl->setAlign(ui::Align::Center, 260);
             pausePill->setVisibility(Visibility::Hidden);
 
-            pill = ui::box(this, FloatRect((theme::SCREEN_W - 460) / 2, 700, 460, 72), Color(12, 16, 22, 210), 36);
+            pill = ui::box(this, FloatRect((theme::SCREEN_W - 460) / 2, 700, 460, 72), theme::overlayPanel(), 36);
             pillText = ui::label(pill, tr("player.buffering"), theme::BODY, 84, ui::Label::centerOffset(theme::BODY, 72),
                                  ui::Weight::SemiBold);
             pillSpinner = new ui::Spinner(12);
@@ -569,12 +569,12 @@ namespace {
 
         void buildCentre() {
             const float w = 1160;
-            centre = ui::box(this, FloatRect((theme::SCREEN_W - w) / 2, 380, w, 300), Color(12, 16, 22, 230),
+            centre = ui::box(this, FloatRect((theme::SCREEN_W - w) / 2, 380, w, 300), theme::overlayPanel(),
                              theme::RADIUS);
             centreTitle = ui::label(centre, "", theme::HEADING, 0, 52, ui::Weight::SemiBold);
             centreTitle->setAlign(ui::Align::Center, w);
             centreTitle->setMaxWidth(w - 80);
-            centreText = ui::label(centre, "", theme::BODY, 0, 118, ui::Weight::Regular, theme::textDim());
+            centreText = ui::label(centre, "", theme::BODY, 0, 118, ui::Weight::Regular, theme::textSecondary());
             centreText->setAlign(ui::Align::Center, w);
             centreText->setMaxWidth(w - 80);
             centreText->setMaxLines(2);
@@ -584,9 +584,9 @@ namespace {
             spinner->setPosition((w - 18 * 3.6f) / 2, 230);
             centre->add(spinner);
 
-            endPanel = ui::box(this, FloatRect((theme::SCREEN_W - w) / 2, 380, w, 300), Color(12, 16, 22, 235),
+            endPanel = ui::box(this, FloatRect((theme::SCREEN_W - w) / 2, 380, w, 300), theme::overlayPanel(),
                                theme::RADIUS);
-            endTitle = ui::label(endPanel, "", theme::LABEL, 0, 50, ui::Weight::SemiBold, theme::accent());
+            endTitle = ui::label(endPanel, "", theme::LABEL, 0, 50, ui::Weight::SemiBold, theme::accentText());
             endTitle->setAlign(ui::Align::Center, w);
             endText = ui::label(endPanel, "", theme::HEADING, 0, 100, ui::Weight::SemiBold);
             endText->setAlign(ui::Align::Center, w);
@@ -597,9 +597,9 @@ namespace {
         }
 
         void buildInfo() {
-            info = ui::box(this, FloatRect(theme::SAFE_X, 220, 660, 560), Color(12, 16, 22, 230), theme::RADIUS);
+            info = ui::box(this, FloatRect(theme::SAFE_X, 220, 660, 560), theme::overlayPanel(), theme::RADIUS);
             ui::label(info, tr("info.title"), theme::HEADING, 36, 30, ui::Weight::SemiBold);
-            infoText = ui::label(info, "", theme::LABEL, 36, 96, ui::Weight::Regular, theme::textDim());
+            infoText = ui::label(info, "", theme::LABEL, 36, 96, ui::Weight::Regular, theme::textSecondary());
             infoText->setMaxWidth(600);
             infoText->setMaxLines(15);
             info->setVisibility(app.settings().get().showTechnicalInfo ? Visibility::Visible : Visibility::Hidden);
@@ -683,7 +683,7 @@ namespace {
             bool spinning = centreShown && (rs == stability::Status::Opening || rs == stability::Status::Reconnecting);
             spinner->setVisibility(spinning ? Visibility::Visible : Visibility::Hidden);
             centreHint->setVisibility(spinning ? Visibility::Hidden : Visibility::Visible);
-            centreTitle->setColor(rs == stability::Status::Failed ? theme::danger() : theme::text());
+            centreTitle->setColor(rs == stability::Status::Failed ? theme::danger() : theme::textPrimary());
             if (spinning) {
                 spinner->tick(now);
             }
@@ -801,7 +801,7 @@ namespace {
 
         void buildPanel() {
             panel = ui::box(this, FloatRect(theme::SCREEN_W - PANEL_W, 0, PANEL_W, theme::SCREEN_H),
-                            Color(14, 18, 26, 240), 0);
+                            theme::panel(), 0);
             panelTitle = ui::label(panel, "", theme::TITLE, 48, 64, ui::Weight::SemiBold);
             panelList = new ui::ListView(FloatRect(40, 170, PANEL_W - 70, 760), 84, 8, this);
             panel->add(panelList);
@@ -817,9 +817,9 @@ namespace {
 
         C2DObject *createRow(float w, float h) override {
             PanelRow r;
-            r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), Color::Transparent, theme::RADIUS_SMALL);
+            r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::none(), theme::RADIUS_SMALL);
             r.check = ui::label(r.bg, "", theme::BODY, 20, ui::Label::centerOffset(theme::BODY, h) - 12,
-                                ui::Weight::SemiBold, theme::accent());
+                                ui::Weight::SemiBold, theme::accentText());
             r.name = ui::label(r.bg, "", theme::BODY, 64, ui::Label::centerOffset(theme::BODY, h) - 12);
             r.name->setMaxWidth(w - 64 - 24);
             r.detail = ui::label(r.bg, "", theme::CAPTION, 64, ui::Label::centerOffset(theme::BODY, h) + 22,
@@ -933,8 +933,8 @@ namespace {
                 r.check->setText(checked ? "\xE2\x9C\x93" : "");
                 r.name->setText(name);
                 r.detail->setText(detail);
-                r.name->setColor(focused ? Color::White : theme::text());
-                r.bg->setFillColor(focused ? theme::rowFocus() : Color::Transparent);
+                r.name->setColor(focused ? theme::textStrong() : theme::textPrimary());
+                r.bg->setFillColor(focused ? theme::focus() : theme::none());
                 r.bg->setOutlineColor(theme::accent());
                 r.bg->setOutlineThickness(focused ? 3 : 0);
             }

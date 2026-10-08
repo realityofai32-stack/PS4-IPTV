@@ -42,7 +42,7 @@ Invoke-TestBuild 'app_tests' @(
     "$h\test_main.cpp", "$h\test_core.cpp", "$h\test_iptv.cpp", "$h\test_storage.cpp", "$h\test_jobs.cpp",
     "$h\test_live.cpp", "$h\test_text.cpp", "$h\test_input.cpp", "$h\test_images.cpp", "$h\test_playback.cpp", "$h\test_vod.cpp", "$h\test_tracks.cpp",
     "$h\test_search.cpp", "$h\test_progress.cpp", "$h\test_catalog.cpp", "$h\test_downloads.cpp", "$h\test_i18n.cpp", "$h\test_display.cpp",
-    "$h\test_m3u.cpp", "$h\stb_impl.cpp",
+    "$h\test_m3u.cpp", "$h\test_theme.cpp", "$h\stb_impl.cpp",
     "$s\core\utf8.cpp", "$s\core\json.cpp", "$s\core\url.cpp", "$s\iptv\xtream.cpp", "$s\iptv\catalog.cpp",
     "$s\iptv\m3u.cpp",
     "$s\iptv\search_index.cpp", "$s\app\vod_progress.cpp", "$s\app\series_plan.cpp",

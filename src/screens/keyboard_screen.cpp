@@ -25,7 +25,7 @@ namespace {
             auto *panel = ui::box(this, FloatRect(px, py, PANEL_W, PANEL_H), theme::surface(), 24);
             ui::label(panel, title, theme::HEADING, 60, 40, ui::Weight::SemiBold);
 
-            auto *field = ui::box(panel, FloatRect(60, 104, PANEL_W - 120, 84), theme::bgTop(), theme::RADIUS_SMALL);
+            auto *field = ui::box(panel, FloatRect(60, 104, PANEL_W - 120, 84), theme::background(), theme::RADIUS_SMALL);
             field->setOutlineColor(theme::accent());
             field->setOutlineThickness(2);
             preview = ui::label(field, "", theme::HEADING, 24, ui::Label::centerOffset(theme::HEADING, 84));
@@ -43,7 +43,7 @@ namespace {
                     float w = (float) k.span * KEY_UNIT + (float) (k.span - 1) * KEY_GAP;
                     KeyView v;
                     v.bg = ui::box(panel, FloatRect(x, gy + (float) r * (KEY_H + KEY_GAP), w, KEY_H),
-                                   theme::surfaceRaised(), 12);
+                                   theme::surfaceElevated(), 12);
                     bool special = k.action != KeyAction::Char;
                     v.label = ui::label(v.bg, "", special ? theme::LABEL : theme::HEADING, 0,
                                         ui::Label::centerOffset(special ? theme::LABEL : theme::HEADING, KEY_H),
@@ -152,12 +152,12 @@ namespace {
                     bool focused = r == model.focusRow() && c == model.focusCol();
                     bool active = k.action == KeyAction::Shift && model.shift();
                     v.label->setText(model.label(k));
-                    Color bg = focused ? theme::accent() : active ? theme::accentDark()
-                                                                  : k.action == KeyAction::Ok ? Color(30, 74, 140)
-                                                                  : k.action == KeyAction::Char ? theme::surfaceRaised()
-                                                                  : theme::surfaceFocus();
+                    Color bg = focused ? theme::accent() : active ? theme::accentMuted()
+                                                                  : k.action == KeyAction::Ok ? theme::accentMuted()
+                                                                  : k.action == KeyAction::Char ? theme::surfaceElevated()
+                                                                  : theme::cardHover();
                     v.bg->setFillColor(bg);
-                    v.bg->setOutlineColor(Color::White);
+                    v.bg->setOutlineColor(theme::textStrong());
                     v.bg->setOutlineThickness(focused ? 3 : 0);
                 }
             }
@@ -178,7 +178,7 @@ namespace {
                      const std::vector<std::string> &buttons, std::function<void(int)> choice, bool destructive)
                 : Screen(a, true), onChoice(std::move(choice)) {
             const float w = 980;
-            auto *msg = new ui::Label(message, theme::BODY, ui::Weight::Regular, theme::textDim());
+            auto *msg = new ui::Label(message, theme::BODY, ui::Weight::Regular, theme::textSecondary());
             msg->setMaxWidth(w - 120);
             msg->setMaxLines(8);
             float msgH = message.empty() ? 0 : msg->height();
@@ -254,7 +254,7 @@ namespace {
                 : Screen(a, true), options(std::move(opts)), details(std::move(extra)), checked(checkedIndex),
                   onChoice(std::move(choice)) {
             const float w = 680;
-            auto *panel = ui::box(this, FloatRect(theme::SCREEN_W - w, 0, w, theme::SCREEN_H), Color(14, 18, 26, 245), 0);
+            auto *panel = ui::box(this, FloatRect(theme::SCREEN_W - w, 0, w, theme::SCREEN_H), theme::panel(), 0);
             auto *t = ui::label(panel, title, theme::TITLE, 48, 64, ui::Weight::SemiBold);
             t->setMaxWidth(w - 96);
             list = new ui::ListView(FloatRect(40, 170, w - 70, 760), 84, 8, this);
@@ -272,9 +272,9 @@ namespace {
 
         C2DObject *createRow(float w, float h) override {
             Row r;
-            r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), Color::Transparent, theme::RADIUS_SMALL);
+            r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::none(), theme::RADIUS_SMALL);
             r.check = ui::label(r.bg, "", theme::BODY, 20, ui::Label::centerOffset(theme::BODY, h), ui::Weight::SemiBold,
-                                theme::accent());
+                                theme::accentText());
             r.name = ui::label(r.bg, "", theme::BODY, 64, ui::Label::centerOffset(theme::BODY, h));
             r.name->setMaxWidth(w - 64 - 24);
             r.detail = ui::label(r.bg, "", theme::CAPTION, 64, ui::Label::centerOffset(theme::BODY, h) + 22,
@@ -294,8 +294,8 @@ namespace {
                 r.name->setText(options[(size_t) i]);
                 r.name->setPosition(64, ui::Label::centerOffset(theme::BODY, 84) - (hasDetail ? 12 : 0));
                 r.detail->setText(hasDetail ? details[(size_t) i] : "");
-                r.name->setColor(focused ? Color::White : theme::text());
-                r.bg->setFillColor(focused ? theme::rowFocus() : Color::Transparent);
+                r.name->setColor(focused ? theme::textStrong() : theme::textPrimary());
+                r.bg->setFillColor(focused ? theme::focus() : theme::none());
                 r.bg->setOutlineColor(theme::accent());
                 r.bg->setOutlineThickness(focused ? 3 : 0);
             }

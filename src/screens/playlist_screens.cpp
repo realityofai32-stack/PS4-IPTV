@@ -76,7 +76,7 @@ namespace {
             }
             status = ui::box(this, FloatRect(1160, 230, 664, 544), theme::surface(), theme::RADIUS);
             statusTitle = ui::label(status, tr("playlist.status_title"), theme::HEADING, 40, 36, ui::Weight::SemiBold);
-            statusBody = ui::label(status, "", theme::BODY, 40, 100, ui::Weight::Regular, theme::textDim());
+            statusBody = ui::label(status, "", theme::BODY, 40, 100, ui::Weight::Regular, theme::textSecondary());
             statusBody->setMaxWidth(584);
             statusBody->setMaxLines(11);
             spinner = new ui::Spinner(18);
@@ -84,7 +84,7 @@ namespace {
             spinner->setVisibility(Visibility::Hidden);
             status->add(spinner);
             screens::hintBar(this, {{ui::Glyph::Cross, tr("profile.hint_edit")}, {ui::Glyph::Circle, tr("common.cancel")}});
-            setStatus(tr(isNew ? "playlist.status_new" : "playlist.status_edit"), theme::textDim());
+            setStatus(tr(isNew ? "playlist.status_new" : "playlist.status_edit"), theme::textSecondary());
             refresh();
         }
 
@@ -214,7 +214,7 @@ namespace {
             }
             testing = true;
             spinner->setVisibility(Visibility::Visible);
-            setStatus("", theme::textDim());
+            setStatus("", theme::textSecondary());
             statusTitle->setText(tr("playlist.testing"));
             LOG_I("profiles", "testing playlist %s", m3u::displayUrl(profile.playlistUrl).c_str());
             testToken = app.m3u().load(profile, APP_DATA_DIR, M3uService::Source::Network, false,
@@ -312,7 +312,7 @@ namespace {
                             theme::surface(), theme::RADIUS);
             for (int i = 0; i < ROWS; i++) {
                 float y = 34 + (float) i * 50;
-                captions[i] = ui::label(panel, "", theme::BODY, 48, y, ui::Weight::Regular, theme::textDim());
+                captions[i] = ui::label(panel, "", theme::BODY, 48, y, ui::Weight::Regular, theme::textSecondary());
                 captions[i]->setMaxWidth(760);
                 values[i] = ui::label(panel, "", theme::BODY, 0, y, ui::Weight::SemiBold);
                 values[i]->setAlign(ui::Align::Right, panel->getSize().x - 48);
@@ -379,8 +379,8 @@ namespace {
                 values[i]->setText(i < (int) rows.size() ? rows[(size_t) i].second : "");
             }
             // HTTPS streams cannot play in this version: flagged, not hidden
-            values[9]->setColor(st.https > 0 ? theme::warning() : theme::text());
-            values[6]->setColor(st.skipped() > 0 ? theme::warning() : theme::text());
+            values[9]->setColor(st.https > 0 ? theme::warning() : theme::textPrimary());
+            values[6]->setColor(st.skipped() > 0 ? theme::warning() : theme::textPrimary());
         }
 
         RectangleShape *panel;

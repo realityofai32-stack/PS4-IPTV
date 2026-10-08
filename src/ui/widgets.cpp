@@ -34,7 +34,7 @@ namespace ui {
 
     C2DObject *background(C2DObject *parent) {
         auto *g = new GradientRectangle(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H));
-        g->setColor(theme::bgTop(), theme::bgBottom(), GradientRectangle::Down);
+        g->setColor(theme::background(), theme::backgroundSecondary(), GradientRectangle::Down);
         if (parent) {
             parent->add(g);
         }
@@ -44,11 +44,11 @@ namespace ui {
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
     ButtonGlyph::ButtonGlyph(Glyph glyph, float s) : RectangleShape(FloatRect(0, 0, s, s)) {
-        setFillColor(Color::Transparent);
-        const Color fg = theme::text();
+        setFillColor(theme::none());
+        const Color fg = theme::textPrimary();
         const float t = std::max(2.0f, std::round(s * 0.09f));
         auto *cap = new CircleShape(s / 2.0f);
-        cap->setFillColor(theme::surfaceRaised());
+        cap->setFillColor(theme::surfaceElevated());
         cap->setPointCount(24);
         add(cap);
         const float c = s / 2.0f;
@@ -58,7 +58,7 @@ namespace ui {
                     auto *bar = new RectangleShape(FloatRect(c, c, s * 0.46f, t));
                     bar->setOrigin(Origin::Center);
                     bar->setRotation(angle);
-                    bar->setFillColor(Color(125, 170, 240));
+                    bar->setFillColor(theme::padCross());
                     add(bar);
                 }
                 break;
@@ -67,8 +67,8 @@ namespace ui {
                 auto *ring = new CircleShape(s * 0.22f);
                 ring->setOrigin(Origin::Center);
                 ring->setPosition(c, c);
-                ring->setFillColor(Color::Transparent);
-                ring->setOutlineColor(Color(240, 110, 120));
+                ring->setFillColor(theme::none());
+                ring->setOutlineColor(theme::padCircle());
                 ring->setOutlineThickness(t);
                 ring->setPointCount(24);
                 add(ring);
@@ -77,8 +77,8 @@ namespace ui {
             case Glyph::Square: {
                 auto *sq = new RectangleShape(FloatRect(c, c, s * 0.40f, s * 0.40f));
                 sq->setOrigin(Origin::Center);
-                sq->setFillColor(Color::Transparent);
-                sq->setOutlineColor(Color(230, 140, 220));
+                sq->setFillColor(theme::none());
+                sq->setOutlineColor(theme::padSquare());
                 sq->setOutlineThickness(t);
                 add(sq);
                 break;
@@ -89,8 +89,8 @@ namespace ui {
                 tri->setPoint(0, Vector2f(c, c - r));
                 tri->setPoint(1, Vector2f(c + r * 0.95f, c + r * 0.62f));
                 tri->setPoint(2, Vector2f(c - r * 0.95f, c + r * 0.62f));
-                tri->setFillColor(Color::Transparent);
-                tri->setOutlineColor(Color(80, 210, 180));
+                tri->setFillColor(theme::none());
+                tri->setOutlineColor(theme::padTriangle());
                 tri->setOutlineThickness(t);
                 add(tri);
                 break;
@@ -104,7 +104,7 @@ namespace ui {
                 auto *l = new Label(txt, (unsigned) std::round(s * 0.42f), Weight::SemiBold, fg);
                 float w = l->width() + s * 0.6f;
                 setSize(w, s);
-                auto *pill = box(nullptr, FloatRect(0, 0, w, s), theme::surfaceRaised(), s / 2.0f);
+                auto *pill = box(nullptr, FloatRect(0, 0, w, s), theme::surfaceElevated(), s / 2.0f);
                 add(pill);
                 l->setAlign(Align::Center, w);
                 l->setPosition(0, Label::centerOffset((unsigned) std::round(s * 0.42f), s));
@@ -118,7 +118,7 @@ namespace ui {
 
     HintBar::HintBar() : RectangleShape(FloatRect(theme::SAFE_X, theme::SCREEN_H - theme::SAFE_Y - 40,
                                                   theme::SCREEN_W - 2 * theme::SAFE_X, 40)) {
-        setFillColor(Color::Transparent);
+        setFillColor(theme::none());
     }
 
     void HintBar::setHints(const std::vector<std::pair<Glyph, std::string>> &hints) {
@@ -143,7 +143,7 @@ namespace ui {
                 add(g);
                 x += g->getSize().x + 10;
                 auto *l = label(this, h.second, layout.size, x, Label::centerOffset(layout.size, 40), Weight::Regular,
-                                theme::textDim());
+                                theme::textSecondary());
                 x += l->width() + layout.gap;
             }
             if (x - layout.gap <= getSize().x) {
@@ -158,7 +158,7 @@ namespace ui {
             : RectangleShape(rect), primary(isPrimary) {
         setCornersRadius(rect.height / 2.0f);
         setCornerPointCount(10);
-        caption = new Label(text, theme::BODY, Weight::SemiBold, theme::text());
+        caption = new Label(text, theme::BODY, Weight::SemiBold, theme::textPrimary());
         caption->setAlign(Align::Center, rect.width);
         add(caption);
         fit();
@@ -204,14 +204,13 @@ namespace ui {
             setOutlineThickness(0);
             caption->setColor(theme::textMuted());
         } else if (focused) {
-            setFillColor(theme::accent());
-            setOutlineColor(theme::withAlpha(Color::White, 230));
-            setOutlineThickness(3);
-            caption->setColor(Color::White);
-        } else {
-            setFillColor(primary ? theme::accentDark() : theme::surfaceRaised());
+            setFillColor(theme::accent());   // the accent fill alone marks it: no outline
             setOutlineThickness(0);
-            caption->setColor(theme::text());
+            caption->setColor(theme::textStrong());
+        } else {
+            setFillColor(primary ? theme::accentMuted() : theme::surfaceElevated());
+            setOutlineThickness(0);
+            caption->setColor(theme::textPrimary());
         }
     }
 
@@ -220,11 +219,11 @@ namespace ui {
     Monogram::Monogram(float size, unsigned fontSize) : RectangleShape(FloatRect(0, 0, size, size)) {
         setCornersRadius(size * 0.18f);
         setCornerPointCount(8);
-        letters = new Label("", fontSize, Weight::SemiBold, Color::White);
+        letters = new Label("", fontSize, Weight::SemiBold, theme::textStrong());
         letters->setAlign(Align::Center, size);
         letters->setPosition(0, Label::centerOffset(fontSize, size));
         add(letters);
-        setFillColor(theme::surfaceRaised());
+        setFillColor(theme::surfaceElevated());
     }
 
     std::string Monogram::initials(const std::string &name) {
@@ -265,13 +264,11 @@ namespace ui {
     }
 
     Color Monogram::color(const std::string &name) {
-        static const Color palette[] = {{58, 92, 160}, {120, 72, 150}, {40, 128, 120}, {160, 92, 52},
-                                        {150, 60, 84}, {70, 110, 60}, {96, 96, 140}, {44, 110, 160}};
         uint32_t h = 2166136261u;
         for (unsigned char c: name) {
             h = (h ^ c) * 16777619u;
         }
-        return palette[h % 8];
+        return theme::monogram(h);
     }
 
     void Monogram::setName(const std::string &name) {
@@ -291,10 +288,10 @@ namespace ui {
         setCornerPointCount(8);
         setFillColor(theme::logoTile());
         image = new RectangleShape(FloatRect(0, 0, 1, 1));
-        image->setFillColor(Color::White);
+        image->setFillColor(theme::untinted());
         image->setVisibility(Visibility::Hidden);
         add(image);
-        initials = new Label("", initialsSize, Weight::SemiBold, Color::White);
+        initials = new Label("", initialsSize, Weight::SemiBold, theme::textStrong());
         initials->setAlign(Align::Center, rect.width);
         initials->setMaxWidth(rect.width - 8);
         initials->setPosition(0, Label::centerOffset(initialsSize, rect.height));
@@ -362,7 +359,7 @@ namespace ui {
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
     Spinner::Spinner(float size) : RectangleShape(FloatRect(0, 0, size * 3.6f, size)) {
-        setFillColor(Color::Transparent);
+        setFillColor(theme::none());
         for (int i = 0; i < 3; i++) {
             dots[i] = new CircleShape(size / 2.0f);
             dots[i]->setPointCount(16);
@@ -390,17 +387,17 @@ namespace ui {
     PosterView::PosterView(const FloatRect &rect, unsigned textSize) : RectangleShape(rect) {
         setCornersRadius(theme::RADIUS_SMALL);
         setCornerPointCount(8);
-        setFillColor(theme::surfaceRaised());
+        setFillColor(theme::surfaceElevated());
         image = new RectangleShape(FloatRect(0, 0, 1, 1));
-        image->setFillColor(Color::White);
+        image->setFillColor(theme::untinted());
         image->setVisibility(Visibility::Hidden);
         add(image);
-        fallback = new Label("", textSize, Weight::SemiBold, theme::textDim());
+        fallback = new Label("", textSize, Weight::SemiBold, theme::textSecondary());
         fallback->setAlign(Align::Center, rect.width);
         fallback->setMaxWidth(rect.width - 20);
         fallback->setMaxLines(4);
         add(fallback);
-        barTrack = box(this, FloatRect(10, rect.height - 16, rect.width - 20, 6), Color(0, 0, 0, 170), 3);
+        barTrack = box(this, FloatRect(10, rect.height - 16, rect.width - 20, 6), theme::progressTrackOnImage(), 3);
         barFill = box(barTrack, FloatRect(0, 0, 1, 6), theme::accent(), 3);
         barTrack->setVisibility(Visibility::Hidden);
         float r = std::max(12.0f, rect.width * 0.09f);
@@ -409,19 +406,19 @@ namespace ui {
         badge->setFillColor(theme::success());
         badge->setPosition(rect.width - 2 * r - 8, 8);
         add(badge);
-        badgeMark = new Label("\xE2\x9C\x93", (unsigned) (r * 1.3f), Weight::SemiBold, Color::White);  // check mark
+        badgeMark = new Label("\xE2\x9C\x93", (unsigned) (r * 1.3f), Weight::SemiBold, theme::textStrong());  // check mark
         badgeMark->setAlign(Align::Center, 2 * r);
         badgeMark->setPosition(0, Label::centerOffset((unsigned) (r * 1.3f), 2 * r));
         badge->add(badgeMark);
         badge->setVisibility(Visibility::Hidden);
         downloadBadge = new CircleShape(r);
         downloadBadge->setPointCount(20);
-        downloadBadge->setFillColor(Color(12, 16, 22, 210));
+        downloadBadge->setFillColor(theme::overlayPanel());
         downloadBadge->setOutlineColor(theme::accent());
         downloadBadge->setOutlineThickness(2);
         downloadBadge->setPosition(8, 8);
         add(downloadBadge);
-        auto *arrow = new Label("\xE2\x86\x93", (unsigned) (r * 1.3f), Weight::SemiBold, theme::accent());  // down arrow
+        auto *arrow = new Label("\xE2\x86\x93", (unsigned) (r * 1.3f), Weight::SemiBold, theme::accentText());  // down arrow
         arrow->setAlign(Align::Center, 2 * r);
         arrow->setPosition(0, Label::centerOffset((unsigned) (r * 1.3f), 2 * r));
         downloadBadge->add(arrow);
@@ -493,15 +490,23 @@ namespace ui {
     }
 
     void PosterView::setFocused(bool focused) {
+        if (focused == lifted && getOutlineThickness() == (focused ? theme::FOCUS_BORDER : 0)) {
+            return;
+        }
         setOutlineColor(theme::accent());
-        setOutlineThickness(focused ? 4 : 0);
+        setOutlineThickness(focused ? theme::FOCUS_BORDER : 0);
+        // a focused poster rises a little: a position change, no animation and no shadow
+        Vector2f p = getPosition();
+        p.y += (lifted ? theme::FOCUS_LIFT : 0) - (focused ? theme::FOCUS_LIFT : 0);
+        setPosition(p);
+        lifted = focused;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
     GridView::GridView(const FloatRect &rect, float cellW, float cellH, int columns, int visibleRows, Adapter *a)
             : RectangleShape(rect), adapter(a), cols(std::max(1, columns)), rows(std::max(1, visibleRows)) {
-        setFillColor(Color::Transparent);
+        setFillColor(theme::none());
         float usableW = rect.width - ScrollBar::WIDTH - ScrollBar::GAP;
         float gapX = cols > 1 ? std::max(0.0f, (usableW - (float) cols * cellW) / (float) (cols - 1)) : 0;
         float gapY = rows > 1 ? std::max(0.0f, (rect.height - (float) rows * cellH) / (float) (rows - 1)) : 0;
@@ -580,7 +585,7 @@ namespace ui {
 
     ListView::ListView(const FloatRect &rect, float rowHeight, float spacing, Adapter *a)
             : RectangleShape(rect), adapter(a) {
-        setFillColor(Color::Transparent);
+        setFillColor(theme::none());
         int n = std::max(1, (int) ((rect.height + spacing) / (rowHeight + spacing)));
         for (int i = 0; i < n; i++) {
             C2DObject *row = adapter->createRow(rowWidth(rect.width), rowHeight);

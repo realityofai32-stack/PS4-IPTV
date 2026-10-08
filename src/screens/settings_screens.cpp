@@ -77,13 +77,13 @@ namespace {
                 dots.push_back(d);
             }
             float sx = w - VALUE_RIGHT - SWITCH_W;
-            track = ui::box(this, FloatRect(sx, (h - SWITCH_H) / 2, SWITCH_W, SWITCH_H), theme::surfaceRaised(),
+            track = ui::box(this, FloatRect(sx, (h - SWITCH_H) / 2, SWITCH_W, SWITCH_H), theme::surfaceElevated(),
                             SWITCH_H / 2);
             knob = new CircleShape(SWITCH_H / 2 - 5);
             knob->setPointCount(24);
             track->add(knob);
             switchText = ui::label(this, "", theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, h),
-                                   ui::Weight::Regular, theme::textDim());
+                                   ui::Weight::Regular, theme::textSecondary());
             switchText->setAlign(ui::Align::Right, sx - 16);
         }
 
@@ -91,8 +91,8 @@ namespace {
             float w = getSize().x;
             float h = getSize().y;
             caption->setText(item.caption);
-            caption->setColor(focused ? Color::White : theme::text());
-            setFillColor(focused ? theme::rowFocus() : theme::surface());
+            caption->setColor(focused ? theme::textStrong() : theme::textPrimary());
+            setFillColor(focused ? theme::focus() : theme::surface());
             setOutlineColor(theme::accent());
             setOutlineThickness(focused ? 3 : 0);
 
@@ -105,12 +105,12 @@ namespace {
             }
             if (isToggle) {
                 bool on = item.toggle();
-                track->setFillColor(on ? theme::accent() : Color(74, 84, 102));
-                knob->setFillColor(on ? Color::White : Color(196, 203, 214));
+                track->setFillColor(on ? theme::accent() : theme::switchOff());
+                knob->setFillColor(on ? theme::textStrong() : theme::switchKnobOff());
                 float r = SWITCH_H / 2 - 5;
                 knob->setPosition(on ? SWITCH_W - 5 - 2 * r : 5, 5);
                 switchText->setText(tr(on ? "common.on" : "common.off"));
-                switchText->setColor(focused ? theme::text() : theme::textDim());
+                switchText->setColor(focused ? theme::textPrimary() : theme::textSecondary());
                 return;
             }
             if (item.kind == Kind::Choice) {
@@ -118,7 +118,7 @@ namespace {
                 // position dots only for short choices (language lists are long)
                 int n = (int) item.options.size() <= (int) dots.size() ? (int) item.options.size() : 0;
                 value->setText(item.options[(size_t) current]);
-                value->setColor(focused ? Color::White : theme::text());
+                value->setColor(focused ? theme::textStrong() : theme::textPrimary());
                 value->setPosition(0, ui::Label::centerOffset(theme::BODY, h) - 7);
                 // option position: small dots under the value, right-aligned with it
                 for (int i = 0; i < n; i++) {
@@ -130,7 +130,7 @@ namespace {
                 return;
             }
             value->setText(item.info ? item.info() : "");
-            value->setColor(focused ? theme::text() : theme::textMuted());
+            value->setColor(focused ? theme::textPrimary() : theme::textMuted());
             value->setPosition(0, ui::Label::centerOffset(theme::BODY, h));
         }
 
@@ -158,7 +158,7 @@ namespace {
             panelTitle = ui::label(panel, "", theme::HEADING, 36, 36, ui::Weight::SemiBold);
             panelTitle->setMaxWidth(PANEL_W - 72);
             panelTitle->setMaxLines(2);
-            panelText = ui::label(panel, "", theme::BODY, 36, 0, ui::Weight::Regular, theme::textDim());
+            panelText = ui::label(panel, "", theme::BODY, 36, 0, ui::Weight::Regular, theme::textSecondary());
             panelText->setMaxWidth(PANEL_W - 72);
             panelText->setMaxLines(14);
 
@@ -815,7 +815,7 @@ namespace {
                                "Inter (Rasmus Andersson) - SIL Open Font License 1.1\n"
                                "Mozilla CA certificate bundle - MPL-2.0\n\n" + tr("about.notices");
             // i18n-exempt-end
-            auto *body = ui::label(this, text, theme::LABEL, theme::SAFE_X, 210, ui::Weight::Regular, theme::textDim());
+            auto *body = ui::label(this, text, theme::LABEL, theme::SAFE_X, 210, ui::Weight::Regular, theme::textSecondary());
             body->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
             body->setMaxLines(24);
             screens::hintBar(this, {{ui::Glyph::Circle, tr("common.back")}});
@@ -839,7 +839,7 @@ namespace {
             screens::header(this, tr("dldiag.title"), tr("dldiag.subtitle"));
             heading = ui::label(this, "", theme::HEADING, theme::SAFE_X, 210, ui::Weight::SemiBold);
             heading->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
-            names = ui::label(this, "", theme::LABEL, theme::SAFE_X, 290, ui::Weight::Regular, theme::textDim());
+            names = ui::label(this, "", theme::LABEL, theme::SAFE_X, 290, ui::Weight::Regular, theme::textSecondary());
             names->setMaxLines(MAX_LINES);
             names->setMaxWidth(NAME_W - 40);
             values = ui::label(this, "", theme::LABEL, theme::SAFE_X + NAME_W, 290, ui::Weight::SemiBold);

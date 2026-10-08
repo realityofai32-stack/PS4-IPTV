@@ -102,7 +102,7 @@ namespace {
             ui::background(this);
             screens::header(this, tr("downloads.title"));
             storageLine = ui::label(this, "", theme::LABEL, theme::SAFE_X, theme::SAFE_Y + 62, ui::Weight::Regular,
-                                    theme::textDim());
+                                    theme::textSecondary());
             storageLine->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
             for (int i = 0; i < 2; i++) {
                 tabs[i] = ui::box(this, FloatRect(theme::SAFE_X + (float) i * 340, 160, 320, 56), theme::surface(), 28);
@@ -162,16 +162,16 @@ namespace {
             const float right = 620;
             r.title = ui::label(r.bg, "", theme::BODY, tx, 22, ui::Weight::SemiBold);
             r.title->setMaxWidth(w - tx - right - 24);
-            r.sub = ui::label(r.bg, "", theme::LABEL, tx, 62, ui::Weight::Regular, theme::textDim());
+            r.sub = ui::label(r.bg, "", theme::LABEL, tx, 62, ui::Weight::Regular, theme::textSecondary());
             r.sub->setMaxWidth(w - tx - right - 24);
             r.extra = ui::label(r.bg, "", theme::CAPTION, tx, 96, ui::Weight::Regular, theme::textMuted());
             r.extra->setMaxWidth(w - tx - right - 24);
-            r.state = ui::label(r.bg, "", theme::LABEL, 0, 22, ui::Weight::SemiBold, theme::accent());
+            r.state = ui::label(r.bg, "", theme::LABEL, 0, 22, ui::Weight::SemiBold, theme::accentText());
             r.state->setAlign(ui::Align::Right, w - 28);
             r.state->setMaxWidth(right - 28);
-            r.barTrack = ui::box(r.bg, FloatRect(w - 28 - (right - 40), 64, right - 40, 8), Color(255, 255, 255, 50), 4);
+            r.barTrack = ui::box(r.bg, FloatRect(w - 28 - (right - 40), 64, right - 40, 8), theme::progressTrack(), 4);
             r.barFill = ui::box(r.barTrack, FloatRect(0, 0, 8, 8), theme::accent(), 4);
-            r.detail = ui::label(r.bg, "", theme::CAPTION, 0, 88, ui::Weight::Regular, theme::textDim());
+            r.detail = ui::label(r.bg, "", theme::CAPTION, 0, 88, ui::Weight::Regular, theme::textSecondary());
             r.detail->setAlign(ui::Align::Right, w - 28);
             r.detail->setMaxWidth(right - 28);
             rows.push_back(r);
@@ -184,7 +184,7 @@ namespace {
                 if (r.bg != obj) {
                     continue;
                 }
-                r.bg->setFillColor(focused ? theme::rowFocus() : theme::surface());
+                r.bg->setFillColor(focused ? theme::focus() : theme::surface());
                 r.bg->setOutlineColor(theme::accent());
                 r.bg->setOutlineThickness(focused ? 3 : 0);
                 std::shared_ptr<ImageSet> img = app.images().get(ImageKind::Poster, d.poster);
@@ -291,7 +291,7 @@ namespace {
                 r.detail->setText(dl::formatBytes(d.downloadedBytes) + (when.empty() ? "" : "  \xC2\xB7  " + when));
                 if (p && progress::inProgress(p->position, p->duration, p->watched)) {
                     r.state->setText(fmt::remaining(p->position, p->duration));
-                    r.state->setColor(theme::textDim());
+                    r.state->setColor(theme::textSecondary());
                 }
                 return;
             }
@@ -317,7 +317,7 @@ namespace {
             r.state->setText(state);
             r.state->setColor(d.state == dl::State::Failed ? theme::danger()
                               : d.state == dl::State::Paused || d.state == dl::State::WaitingForNetwork ? theme::warning()
-                                                                                                         : theme::accent());
+                                                                                                         : theme::accentText());
             float w = r.barTrack->getSize().x;
             float frac = pct >= 0 ? (float) pct / 100.0f : 0.0f;
             r.barFill->setSize(std::max(8.0f, std::round(w * frac)), 8);
@@ -336,7 +336,7 @@ namespace {
                 detail = problemText(d);
             }
             r.detail->setText(detail);
-            r.detail->setColor(d.state == dl::State::Failed ? theme::danger() : theme::textDim());
+            r.detail->setColor(d.state == dl::State::Failed ? theme::danger() : theme::textSecondary());
         }
 
         const HistoryEntry *progressOf(const dl::Item &d) const {
@@ -393,8 +393,8 @@ namespace {
             for (int i = 0; i < 2; i++) {
                 tabLabels[i]->setText(tr(names[i], {std::to_string(counts[i])}));
                 bool f = i == tab;
-                tabs[i]->setFillColor(f ? theme::accentDark() : theme::surface());
-                tabLabels[i]->setColor(f ? Color::White : theme::textDim());
+                tabs[i]->setFillColor(f ? theme::accentMuted() : theme::surface());
+                tabLabels[i]->setColor(f ? theme::textStrong() : theme::textSecondary());
             }
             empty->setText(tr(tab == 0 ? "downloads.empty_active" : "downloads.empty_done"));
             empty->setVisibility(shown.empty() ? Visibility::Visible : Visibility::Hidden);

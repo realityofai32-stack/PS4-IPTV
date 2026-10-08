@@ -35,7 +35,7 @@ namespace {
             t->setAlign(ui::Align::Center, theme::SCREEN_W);
             t->setMaxWidth(1400);
             auto *h = ui::label(this, screens::sourceLocation(p), theme::BODY, 0, 300, ui::Weight::Regular,
-                                theme::textDim());
+                                theme::textSecondary());
             h->setAlign(ui::Align::Center, theme::SCREEN_W);
             h->setMaxWidth(1400);
             const char *xtreamSteps[] = {"connect.step_account", "connect.step_live"};
@@ -54,7 +54,7 @@ namespace {
                 ui::label(s.bg, tr(names[i]), theme::BODY, 110, ui::Label::centerOffset(theme::BODY, 76),
                           ui::Weight::SemiBold);
                 s.detail = ui::label(s.bg, "", theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, 76),
-                                     ui::Weight::Regular, theme::textDim());
+                                     ui::Weight::Regular, theme::textSecondary());
                 s.detail->setAlign(ui::Align::Right, 730);
                 s.detail->setMaxWidth(470);
                 setStep(i, State::Pending, "");
@@ -159,8 +159,8 @@ namespace {
             s.mark->setText(state == State::Done ? "\xE2\x9C\x93" : state == State::Failed ? "!" : "");
             s.mark->setColor(state == State::Done ? theme::success() : theme::danger());
             s.detail->setText(detail);
-            s.detail->setColor(state == State::Failed ? theme::danger() : theme::textDim());
-            s.bg->setFillColor(state == State::Running ? theme::surfaceRaised() : theme::surface());
+            s.detail->setColor(state == State::Failed ? theme::danger() : theme::textSecondary());
+            s.bg->setFillColor(state == State::Running ? theme::surfaceElevated() : theme::surface());
             redraw();
         }
 

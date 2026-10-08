@@ -23,7 +23,7 @@ using screens::VodItem;
 namespace {
 
     const float TILE_Y = 150;
-    const float TILE_H = 200;
+    const float TILE_H = 168;
     const float CW_Y = 384;
     const float CW_CARD_W = 144;
     const float CW_POSTER_H = 216;
@@ -53,12 +53,12 @@ namespace {
 
             // top bar
             ui::label(this, tr("app.name"), theme::HEADING, theme::SAFE_X, theme::SAFE_Y, ui::Weight::SemiBold,
-                      theme::accent());
+                      theme::accentText());
             clock = ui::label(this, clockx::localTime(), theme::HEADING, 0, theme::SAFE_Y, ui::Weight::SemiBold);
             clock->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
             const float whoRight = theme::SCREEN_W - theme::SAFE_X - 180;
             auto *who = ui::label(this, s.profile.name, theme::BODY, 0, theme::SAFE_Y + 4, ui::Weight::SemiBold,
-                                  theme::textDim());
+                                  theme::textSecondary());
             who->setMaxWidth(480);
             who->setAlign(ui::Align::Right, whoRight);
             auto *dot = new CircleShape(8);
@@ -97,12 +97,12 @@ namespace {
             for (int i = 0; i < n; i++) {
                 TileView &t = tiles[i];
                 t.bg = ui::box(this, FloatRect(theme::SAFE_X + (float) i * (tileW + gap), TILE_Y, tileW, TILE_H),
-                               theme::surface(), 20);
-                t.accentBar = ui::box(t.bg, FloatRect(24, 30, 44, 6), theme::accent(), 3);
-                t.title = ui::label(t.bg, tr(titles[tileIds[(size_t) i]]), theme::HEADING - 2, 24, 76, ui::Weight::SemiBold);
+                               theme::card(), theme::RADIUS);
+                t.accentBar = ui::box(t.bg, FloatRect(24, 26, 36, 5), theme::accent(), 2);
+                t.title = ui::label(t.bg, tr(titles[tileIds[(size_t) i]]), theme::HEADING - 2, 24, 54, ui::Weight::SemiBold);
                 t.title->setMaxWidth(tileW - 48);
                 // seven tiles are narrow: the subtitle may take two lines
-                t.subtitle = ui::label(t.bg, "", theme::CAPTION, 24, 126, ui::Weight::Regular, theme::textDim());
+                t.subtitle = ui::label(t.bg, "", theme::CAPTION, 24, 104, ui::Weight::Regular, theme::textSecondary());
                 t.subtitle->setMaxWidth(tileW - 48);
                 t.subtitle->setMaxLines(2);
             }
@@ -112,10 +112,10 @@ namespace {
             cwHeading->setVisibility(playlist ? Visibility::Hidden : Visibility::Visible);
             // the focused card in full: "Series  ·  S01E03 · Title  ·  24:16 / 57:00"
             cwDetail = ui::label(this, "", theme::LABEL, theme::SAFE_X + cwHeading->width() + 32, CW_Y + 8,
-                                 ui::Weight::Regular, theme::textDim());
+                                 ui::Weight::Regular, theme::textSecondary());
             cwDetail->setMaxWidth(theme::SCREEN_W - theme::SAFE_X - (theme::SAFE_X + cwHeading->width() + 32));
             cwLayer = new RectangleShape(FloatRect(theme::SAFE_X, CW_Y + 56, theme::SCREEN_W - 2 * theme::SAFE_X, 300));
-            cwLayer->setFillColor(Color::Transparent);
+            cwLayer->setFillColor(theme::none());
             add(cwLayer);
             cwEmpty = ui::label(this, tr("home.continue_empty"), theme::BODY,
                                 theme::SAFE_X + 8, CW_Y + 140, ui::Weight::Regular, theme::textMuted());
@@ -124,7 +124,7 @@ namespace {
             ui::label(this, tr("home.recently_watched"), theme::HEADING, theme::SAFE_X, recentY, ui::Weight::SemiBold);
             recentLayer = new RectangleShape(FloatRect(theme::SAFE_X, recentY + 56, theme::SCREEN_W - 2 * theme::SAFE_X,
                                                        RECENT_H));
-            recentLayer->setFillColor(Color::Transparent);
+            recentLayer->setFillColor(theme::none());
             add(recentLayer);
             recentEmpty = ui::label(this, tr("home.recent_empty"), theme::BODY,
                                     theme::SAFE_X + 8, recentY + 90, ui::Weight::Regular, theme::textMuted());
@@ -329,7 +329,7 @@ namespace {
                 const HistoryEntry &h = cw[i];
                 float x = (float) i * (CW_CARD_W + CW_GAP);
                 Card c{};
-                c.bg = ui::box(cwLayer, FloatRect(x - 6, -6, CW_CARD_W + 12, CW_POSTER_H + 12), Color::Transparent, 14);
+                c.bg = ui::box(cwLayer, FloatRect(x - 6, -6, CW_CARD_W + 12, CW_POSTER_H + 12), theme::none(), 14);
                 c.poster = new ui::PosterView(FloatRect(x, 0, CW_CARD_W, CW_POSTER_H), theme::CAPTION);
                 cwLayer->add(c.poster);
                 std::shared_ptr<ImageSet> img = app.images().get(ImageKind::Poster, h.icon);
@@ -340,7 +340,7 @@ namespace {
                 // episodes: "S01E03 · Title"; movies: time left
                 std::string second = h.type == ContentType::Series ? episodeLine(h) : fmt::remaining(h.position, h.duration);
                 auto *k = ui::label(cwLayer, second, theme::CAPTION, x, CW_POSTER_H + 38, ui::Weight::Regular,
-                                    theme::textDim());
+                                    theme::textSecondary());
                 k->setMaxWidth(CW_CARD_W);
                 cwCards.push_back(c);
             }
@@ -363,7 +363,7 @@ namespace {
                 float tx = live ? 134 : 90;
                 auto *t = ui::label(c.bg, titleOf(h), theme::LABEL, tx, 22, ui::Weight::SemiBold);
                 t->setMaxWidth(RECENT_W - tx - 16);
-                auto *k = ui::label(c.bg, kindLine(h), theme::CAPTION, tx, 58, ui::Weight::Regular, theme::textDim());
+                auto *k = ui::label(c.bg, kindLine(h), theme::CAPTION, tx, 58, ui::Weight::Regular, theme::textSecondary());
                 k->setMaxWidth(RECENT_W - tx - 16);
                 recentCards.push_back(c);
             }
@@ -572,11 +572,13 @@ namespace {
                 bool f = zone == 0 && i == index[0];
                 TileView &t = tiles[i];
                 t.subtitle->setText(subs[tileIds[(size_t) i]]);
-                t.bg->setFillColor(f ? theme::accentDark() : theme::surface());
-                t.bg->setOutlineColor(theme::withAlpha(Color::White, 220));
+                // focused: a lighter card with the accent border (no large coloured block)
+                t.bg->setFillColor(f ? theme::cardHover() : theme::card());
+                t.bg->setOutlineColor(theme::accent());
                 t.bg->setOutlineThickness(f ? theme::FOCUS_BORDER : 0);
-                t.accentBar->setFillColor(f ? Color::White : theme::accent());
-                t.subtitle->setColor(f ? theme::text() : theme::textDim());
+                t.accentBar->setFillColor(theme::accent());
+                t.title->setColor(f ? theme::textStrong() : theme::textPrimary());
+                t.subtitle->setColor(f ? theme::textPrimary() : theme::textSecondary());
             }
             for (size_t i = 0; i < cwCards.size(); i++) {
                 cwCards[i].poster->setFocused(zone == 1 && (int) i == index[1]);
@@ -584,9 +586,9 @@ namespace {
             cwDetail->setText(zone == 1 && index[1] < (int) cw.size() ? cwDetailOf(cw[(size_t) index[1]]) : "");
             for (size_t i = 0; i < recentCards.size(); i++) {
                 bool f = zone == 2 && (int) i == index[2];
-                recentCards[i].bg->setFillColor(f ? theme::rowFocus() : theme::surface());
+                recentCards[i].bg->setFillColor(f ? theme::focus() : theme::surface());
                 recentCards[i].bg->setOutlineColor(theme::accent());
-                recentCards[i].bg->setOutlineThickness(f ? 3 : 0);
+                recentCards[i].bg->setOutlineThickness(f ? theme::ROW_FOCUS_BORDER : 0);
             }
             screens::Hints h = {{ui::Glyph::Cross, tr(zone == 1 ? "common.resume" : "common.open")}};
             if (zone == 1) {
@@ -627,7 +629,7 @@ namespace {
         SectionScreen(App &a, const std::string &title, const std::string &message) : Screen(a) {
             ui::background(this);
             screens::header(this, title);
-            auto *m = ui::label(this, message, theme::BODY, 0, 480, ui::Weight::Regular, theme::textDim());
+            auto *m = ui::label(this, message, theme::BODY, 0, 480, ui::Weight::Regular, theme::textSecondary());
             m->setAlign(ui::Align::Center, theme::SCREEN_W);
             m->setMaxWidth(1200);
             m->setMaxLines(3);

@@ -76,7 +76,7 @@ namespace {
             ui::label(this, "Username required", theme::LABEL, x, 560, ui::Weight::Regular, theme::danger());
             ui::label(this, "Password required", theme::LABEL, x, 590, ui::Weight::Regular, theme::danger());
             ui::label(this, "Fill in the fields, then use Test Connection.", theme::LABEL, x, 620,
-                      ui::Weight::Regular, theme::textDim());
+                      ui::Weight::Regular, theme::textSecondary());
             ui::label(this, "Pijamal\xC4\xB1 hasta ya\xC4\x9F\xC4\xB1z \xC5\x9F" "of\xC3\xB6re \xC3\xA7" "abucak "
                             "g\xC3\xBCvendi.", theme::CAPTION, x, 655);
             ui::label(this, "P\xC4\xB0JAMALI HASTA YA\xC4\x9EIZ \xC5\x9EOF\xC3\x96RE \xC3\x87" "ABUCAK "
@@ -91,7 +91,7 @@ namespace {
                       26, x, 826);
             for (int i = 0; i < 3; i++) {  // the same string three times shares the cached glyphs
                 ui::label(this, "Username required", theme::LABEL, x + (float) i * 324, 866, ui::Weight::SemiBold,
-                          theme::textDim());
+                          theme::textSecondary());
             }
 
             // right column: real widgets
@@ -117,7 +117,7 @@ namespace {
             auto *e1 = ui::label(p1, "Fill in the fields, then use Test Connection.", theme::LABEL, 20, 16);
             e1->setMaxWidth(290);
             auto *e2 = ui::label(p1, "http://example.com:8080/player_api.php", theme::CAPTION, 20, 60,
-                                 ui::Weight::Regular, theme::textDim());
+                                 ui::Weight::Regular, theme::textSecondary());
             e2->setMaxWidth(290);
             auto *p2 = ui::box(this, FloatRect(rx + 354, 607, 330, 110), theme::surface(), theme::RADIUS_SMALL);
             auto *w = ui::label(p2, "Fill in the fields, then use Test Connection.", theme::LABEL, 20, 16);
@@ -126,7 +126,7 @@ namespace {
 
             ui::label(this, "Characters added after the first frame", theme::CAPTION, rx, 732, ui::Weight::SemiBold,
                       theme::textMuted());
-            auto *r1 = ui::label(this, "", 30, rx, 767, ui::Weight::SemiBold, theme::accent());
+            auto *r1 = ui::label(this, "", 30, rx, 767, ui::Weight::SemiBold, theme::accentText());
             r1->setMaxWidth(rw);
             reveals.emplace_back(r1, "\xC3\x87\xC4\x9E\xC4\xB0I\xC3\x96\xC5\x9E\xC3\x9C \xC3\xA7\xC4\x9Fi\xC4\xB1"
                                      "\xC3\xB6\xC5\x9F\xC3\xBC AQWXYZ aqwxyz 0123456789");

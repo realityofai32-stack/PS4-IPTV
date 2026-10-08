@@ -20,7 +20,7 @@ namespace ui {
                              float radius = theme::RADIUS);
 
     Label *label(c2d::C2DObject *parent, const std::string &text, unsigned size, float x, float y,
-                 Weight weight = Weight::Regular, c2d::Color color = theme::text());
+                 Weight weight = Weight::Regular, c2d::Color color = theme::textPrimary());
 
     // full-screen vertical gradient background
     c2d::C2DObject *background(c2d::C2DObject *parent);
@@ -182,6 +182,7 @@ namespace ui {
         std::shared_ptr<c2d::Texture> shown;
         std::string currentTitle;
         bool showingImage = false;
+        bool lifted = false;
     };
 
     // Virtualized grid: only the cells on screen exist (columns x rows) and are re-bound when scrolling by

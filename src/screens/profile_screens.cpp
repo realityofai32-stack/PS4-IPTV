@@ -19,12 +19,12 @@ namespace {
         explicit OnboardingScreen(App &a) : Screen(a) {
             ui::background(this);
             float cx = theme::SCREEN_W / 2;
-            auto *logo = ui::label(this, tr("app.name"), theme::DISPLAY, 0, 300, ui::Weight::SemiBold, theme::accent());
+            auto *logo = ui::label(this, tr("app.name"), theme::DISPLAY, 0, 300, ui::Weight::SemiBold, theme::accentText());
             logo->setAlign(ui::Align::Center, theme::SCREEN_W);
             auto *t = ui::label(this, tr("onboarding.welcome"), theme::TITLE, 0, 400, ui::Weight::SemiBold);
             t->setAlign(ui::Align::Center, theme::SCREEN_W);
             auto *s = ui::label(this, tr("onboarding.text"), theme::BODY, 0, 470,
-                                ui::Weight::Regular, theme::textDim());
+                                ui::Weight::Regular, theme::textSecondary());
             s->setMaxWidth(980);
             s->setMaxLines(3);
             s->setAlign(ui::Align::Center, theme::SCREEN_W);
@@ -86,7 +86,7 @@ namespace {
             detail = ui::box(this, FloatRect(1060, 220, 764, 720), theme::surface(), theme::RADIUS);
             detailTitle = ui::label(detail, "", theme::HEADING, 48, 44, ui::Weight::SemiBold);
             detailTitle->setMaxWidth(668);
-            detailBody = ui::label(detail, "", theme::BODY, 48, 112, ui::Weight::Regular, theme::textDim());
+            detailBody = ui::label(detail, "", theme::BODY, 48, 112, ui::Weight::Regular, theme::textSecondary());
             detailBody->setMaxWidth(668);
             detailBody->setMaxLines(12);
             hints = screens::hintBar(this, {});
@@ -111,7 +111,7 @@ namespace {
             auto *row = ui::box(nullptr, FloatRect(0, 0, w, h), theme::surface(), theme::RADIUS);
             auto *title = ui::label(row, "", theme::HEADING, 36, 18, ui::Weight::SemiBold);
             title->setMaxWidth(w - 220);
-            auto *sub = ui::label(row, "", theme::LABEL, 36, 64, ui::Weight::Regular, theme::textDim());
+            auto *sub = ui::label(row, "", theme::LABEL, 36, 64, ui::Weight::Regular, theme::textSecondary());
             sub->setMaxWidth(w - 72);
             auto *badge = ui::label(row, "", theme::LABEL, 0, 22, ui::Weight::SemiBold, theme::success());
             badge->setAlign(ui::Align::Right, w - 36);
@@ -126,19 +126,19 @@ namespace {
                 }
                 const auto &profiles = app.profiles().profiles();
                 bool add = index >= (int) profiles.size();
-                r.bg->setFillColor(focused ? theme::surfaceFocus() : theme::surface());
+                r.bg->setFillColor(focused ? theme::cardHover() : theme::surface());
                 r.bg->setOutlineColor(theme::accent());
                 r.bg->setOutlineThickness(focused ? theme::FOCUS_BORDER : 0);
                 (void) selected;
                 if (add) {
                     r.title->setText("+  " + tr("profiles.add"));
-                    r.title->setColor(theme::accent());
+                    r.title->setColor(theme::accentText());
                     r.sub->setText(tr("profiles.add_sub"));
                     r.badge->setText("");
                 } else {
                     const Profile &p = profiles[(size_t) index];
                     r.title->setText(p.name);
-                    r.title->setColor(theme::text());
+                    r.title->setColor(theme::textPrimary());
                     r.sub->setText(subtitleOf(p));
                     bool active = p.id == app.profiles().activeId();
                     r.badge->setText(active ? tr("profiles.active_badge") : "");
@@ -396,7 +396,7 @@ namespace {
             }
             status = ui::box(this, FloatRect(1160, 230, 664, 544), theme::surface(), theme::RADIUS);
             statusTitle = ui::label(status, tr("profile.connection"), theme::HEADING, 40, 36, ui::Weight::SemiBold);
-            statusBody = ui::label(status, "", theme::BODY, 40, 100, ui::Weight::Regular, theme::textDim());
+            statusBody = ui::label(status, "", theme::BODY, 40, 100, ui::Weight::Regular, theme::textSecondary());
             statusBody->setMaxWidth(584);
             statusBody->setMaxLines(11);
             spinner = new ui::Spinner(18);
@@ -404,7 +404,7 @@ namespace {
             spinner->setVisibility(Visibility::Hidden);
             status->add(spinner);
             screens::hintBar(this, {{ui::Glyph::Cross, tr("profile.hint_edit")}, {ui::Glyph::Circle, tr("common.cancel")}});
-            setStatus(tr(isNew ? "profile.status_new" : "profile.status_edit"), theme::textDim());
+            setStatus(tr(isNew ? "profile.status_new" : "profile.status_edit"), theme::textSecondary());
             refresh();
         }
 
@@ -532,7 +532,7 @@ namespace {
             }
             testing = true;
             spinner->setVisibility(Visibility::Visible);
-            setStatus("", theme::textDim());
+            setStatus("", theme::textSecondary());
             statusTitle->setText(tr("profile.testing"));
             LOG_I("profiles", "testing connection to %s", screens::hostOf(profile.server).c_str());
             testToken = app.xtream().authenticate(profile, [this, thenSave](const XtreamService::AuthOutcome &o) {

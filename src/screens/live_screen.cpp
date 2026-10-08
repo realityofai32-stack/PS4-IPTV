@@ -57,7 +57,7 @@ namespace {
             playlist = app.session().profile.isPlaylist();
             screens::header(this, tr("home.live_tv"));
             notice = ui::label(this, "", theme::LABEL, theme::SAFE_X, theme::SAFE_Y + 62, ui::Weight::Regular,
-                               theme::textDim());
+                               theme::textSecondary());
             notice->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
             generation = app.session().liveGeneration;
             updateNotice();
@@ -234,7 +234,7 @@ namespace {
 
             C2DObject *createRow(float w, float h) override {
                 Row r;
-                r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), Color::Transparent, theme::RADIUS_SMALL);
+                r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::none(), theme::RADIUS_SMALL);
                 r.marker = ui::box(r.bg, FloatRect(0, 16, 4, h - 32), theme::accent(), 2);
                 r.name = ui::label(r.bg, "", theme::BODY, 22, ui::Label::centerOffset(theme::BODY, h));
                 r.name->setMaxWidth(w - 22 - 84);
@@ -266,14 +266,14 @@ namespace {
                     }
                     r.name->setText(name);
                     r.count->setText(std::to_string(n));
-                    r.bg->setFillColor(focused ? theme::rowFocus() : selected ? theme::surface() : Color::Transparent);
+                    r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surface() : theme::none());
                     r.bg->setOutlineColor(theme::accent());
                     r.bg->setOutlineThickness(focused ? 3 : 0);
                     // the open category keeps an accent marker while the channel list has focus
                     r.marker->setVisibility(selected && !focused ? Visibility::Visible : Visibility::Hidden);
                     r.name->setWeight(selected ? ui::Weight::SemiBold : ui::Weight::Regular);
-                    r.name->setColor(focused ? Color::White : selected ? theme::text() : theme::textDim());
-                    r.count->setColor(focused ? theme::text() : theme::textMuted());
+                    r.name->setColor(focused ? theme::textStrong() : selected ? theme::textPrimary() : theme::textSecondary());
+                    r.count->setColor(focused ? theme::textPrimary() : theme::textMuted());
                 }
             }
 
@@ -321,11 +321,11 @@ namespace {
                     r.num->setText(c.num > 0 ? std::to_string(c.num) : "");
                     r.name->setText(c.name);
                     r.name->setWeight(focused ? ui::Weight::SemiBold : ui::Weight::Regular);
-                    r.name->setColor(focused ? Color::White : theme::text());
-                    r.num->setColor(focused ? theme::text() : theme::textMuted());
+                    r.name->setColor(focused ? theme::textStrong() : theme::textPrimary());
+                    r.num->setColor(focused ? theme::textPrimary() : theme::textMuted());
                     r.fav->setText(screen->app.library().isFavorite(ContentType::Live, c.id) ? "\xE2\x98\x85" : "");
                     // selected while the categories have focus: show where the channel cursor is
-                    r.bg->setFillColor(focused ? theme::rowFocus() : selected ? theme::surfaceRaised()
+                    r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surfaceElevated()
                                                                               : theme::surface());
                     r.bg->setOutlineColor(theme::accent());
                     r.bg->setOutlineThickness(focused ? 3 : 0);
@@ -352,14 +352,14 @@ namespace {
             detailName = ui::label(pane, "", theme::HEADING, 28, 0, ui::Weight::SemiBold);
             detailName->setMaxWidth(PANE_W - 56);
             detailName->setMaxLines(2);
-            detailCategory = ui::label(pane, "", theme::LABEL, 28, 0, ui::Weight::Regular, theme::textDim());
+            detailCategory = ui::label(pane, "", theme::LABEL, 28, 0, ui::Weight::Regular, theme::textSecondary());
             detailCategory->setMaxWidth(PANE_W - 56);
             detailCategory->setMaxLines(2);
             detailNumber = ui::label(pane, "", theme::LABEL, 28, 0, ui::Weight::Regular, theme::textMuted());
             detailFav = ui::label(pane, "", theme::LABEL, 28, 0, ui::Weight::SemiBold, theme::warning());
 
             const float bw = PANE_W - 56;
-            watch = ui::box(pane, FloatRect(28, LIST_H - 28 - 72, bw, 72), theme::surfaceRaised(), 36);
+            watch = ui::box(pane, FloatRect(28, LIST_H - 28 - 72, bw, 72), theme::surfaceElevated(), 36);
             auto *wl = ui::label(watch, tr("live.watch"), theme::BODY, 0, ui::Label::centerOffset(theme::BODY, 72),
                                  ui::Weight::SemiBold);
             float textW = wl->width();
@@ -401,7 +401,7 @@ namespace {
             detailFav->setText(app.library().isFavorite(ContentType::Live, c->id)
                                ? "\xE2\x98\x85  " + tr("favorites.in_favorites") : "");
             detailFav->setPosition(28, y + 8);
-            watch->setFillColor(focus == 1 ? theme::accent() : theme::surfaceRaised());
+            watch->setFillColor(focus == 1 ? theme::accent() : theme::surfaceElevated());
         }
 
         // ------------------------------------------------------------------ behaviour

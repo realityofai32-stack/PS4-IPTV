@@ -22,7 +22,7 @@ namespace {
             ui::background(this);
             screens::header(this, tr("home.favorites"));
             tabLayer = new RectangleShape(FloatRect(theme::SAFE_X, 140, 1200, 60));
-            tabLayer->setFillColor(Color::Transparent);
+            tabLayer->setFillColor(theme::none());
             add(tabLayer);
             channels = new ui::ListView(FloatRect(theme::SAFE_X, TOP, theme::SCREEN_W - 2 * theme::SAFE_X, CONTENT_H),
                                         84, 8, &listAdapter);
@@ -138,7 +138,7 @@ namespace {
             r.name = ui::label(r.bg, "", theme::BODY, 144, ui::Label::centerOffset(theme::BODY, h));
             r.name->setMaxWidth(w - 144 - 500);
             r.meta = ui::label(r.bg, "", theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, h), ui::Weight::Regular,
-                               theme::textDim());
+                               theme::textSecondary());
             r.meta->setAlign(ui::Align::Right, w - 24);
             r.meta->setMaxWidth(440);
             rows.push_back(r);
@@ -155,7 +155,7 @@ namespace {
                 r.logo->set(c.name, img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
                 r.name->setText(c.name);
                 r.meta->setText(categoryName(c.categoryId));
-                r.bg->setFillColor(focused ? theme::rowFocus() : theme::surface());
+                r.bg->setFillColor(focused ? theme::focus() : theme::surface());
                 r.bg->setOutlineColor(theme::accent());
                 r.bg->setOutlineThickness(focused ? 3 : 0);
             }
@@ -165,10 +165,10 @@ namespace {
         C2DObject *createCell(float w, float h) {
             Cell c;
             c.root = new RectangleShape(FloatRect(0, 0, w, h));
-            c.root->setFillColor(Color::Transparent);
+            c.root->setFillColor(theme::none());
             c.poster = new ui::PosterView(FloatRect(0, 0, w, 210), theme::CAPTION);
             c.root->add(c.poster);
-            c.title = ui::label(c.root, "", theme::CAPTION, 0, 218, ui::Weight::Regular, theme::textDim());
+            c.title = ui::label(c.root, "", theme::CAPTION, 0, 218, ui::Weight::Regular, theme::textSecondary());
             c.title->setAlign(ui::Align::Center, w);
             c.title->setMaxWidth(w);
             cells.push_back(c);
@@ -188,7 +188,7 @@ namespace {
                 c.poster->setWatched(false);
                 c.poster->setFocused(focused);
                 c.title->setText(title);
-                c.title->setColor(focused ? Color::White : theme::textDim());
+                c.title->setColor(focused ? theme::textStrong() : theme::textSecondary());
             }
         }
 
@@ -269,9 +269,9 @@ namespace {
             for (int t = 0; t < tabs; t++) {
                 bool sel = t == tab;
                 std::string text = tr(TAB_KEYS[t]) + "  " + std::to_string(counts[t]);
-                auto *chip = ui::box(tabLayer, FloatRect(x, 0, 260, 56), sel ? theme::accent() : theme::surface(), 28);
+                auto *chip = ui::box(tabLayer, FloatRect(x, 0, 260, 56), sel ? theme::accentMuted() : theme::surface(), 28);
                 auto *l = ui::label(chip, text, theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, 56),
-                                    sel ? ui::Weight::SemiBold : ui::Weight::Regular, sel ? Color::White : theme::textDim());
+                                    sel ? ui::Weight::SemiBold : ui::Weight::Regular, sel ? theme::textStrong() : theme::textSecondary());
                 l->setAlign(ui::Align::Center, 260);
                 x += 276;
             }

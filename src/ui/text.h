@@ -14,6 +14,7 @@
 #include <string>
 
 #include "cross2d/c2d.h"
+#include "theme.h"
 
 namespace ui {
 
@@ -49,7 +50,7 @@ namespace ui {
     public:
 
         Label(const std::string &text, unsigned size, Weight weight = Weight::Regular,
-              c2d::Color color = c2d::Color::White);
+              c2d::Color color = theme::textPrimary());
 
         void setText(const std::string &text);
 
