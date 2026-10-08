@@ -64,6 +64,18 @@ namespace search {
 
     public:
 
+        // The views point into `blob`, which build() always allocates on the heap: moving keeps them valid,
+        // copying would not (copies are disabled).
+        Index() = default;
+
+        Index(const Index &) = delete;
+
+        Index &operator=(const Index &) = delete;
+
+        Index(Index &&) = default;
+
+        Index &operator=(Index &&) = default;
+
         // texts[i]: what item i is found by. aliases (optional, same size or empty): a second text for the
         // same item, e.g. a movie's title without its trailing year ("Primate" for "Primate 2026").
         void build(const std::vector<std::string> &texts, const std::vector<std::string> &aliases = {});

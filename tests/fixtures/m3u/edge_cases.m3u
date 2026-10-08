@@ -1,0 +1,48 @@
+
+
+   #EXTM3U   
+#EXTINF:-1 tvg-id="x1" group-title="Group 1",  Name, With, Commas  
+   http://stream.example.com/1.ts   
+#EXTINF:-1 group-title="Group 1",No Logo Channel
+http://stream.example.com/2.ts
+#EXTINF:-1 tvg-logo="http://img.example.com/3.png",No Group Channel
+http://stream.example.com/3.ts
+#EXTINF:-1 group-title="Group 1",Duplicate Name
+http://stream.example.com/dup-a.ts
+#EXTINF:-1 group-title="Group 2",Duplicate Name
+http://stream.example.com/dup-b.ts
+#EXTINF:-1 group-title="Group 1",Same URL
+http://stream.example.com/same.ts
+#EXTINF:-1 group-title="Group 2",Same URL
+http://stream.example.com/same.ts
+#EXTINF:-1 tvg-id="shared.id" group-title="Group 3",Shared Id One
+http://stream.example.com/s1.ts
+#EXTINF:-1 tvg-id="shared.id" group-title="Group 3",Shared Id Two
+http://stream.example.com/s2.ts
+#EXTINF:-1 tvg-id="nocomma" tvg-name="Fallback Name" group-title="Group 4"
+http://stream.example.com/nocomma.ts
+#EXTINF:-1 tvg-id="broken" group-title="Group 4,Unterminated Quote Channel
+http://stream.example.com/unterminated.ts
+#EXTINF:-1 group-title="Group 4",Missing URL Channel
+#EXTINF:-1 group-title='Group 5' tvg-chno=101 tvg-id=unquoted.id,Single Quoted
+http://stream.example.com/single.ts
+#EXTIMG:http://img.example.com/ignored.png
+#EXT-UNKNOWN-DIRECTIVE:value
+#KODIPROP:inputstream.adaptive.manifest_type=hls
+#EXTVLCOPT:http-referrer=http://www.example.com/
+#EXTVLCOPT:http-user-agent=ExamplePlayer/1.0 (Test)
+#EXTINF:-1 group-title="Group 5",User Agent Channel
+http://stream.example.com/ua.ts
+#EXTINF:-1 group-title="Group 5",Invalid URL Channel
+not a url at all
+#EXTINF:-1 group-title="Group 6",HTTPS Media
+https://secure.example.com/live/https.m3u8?token=exampletoken
+#EXTINF:-1 group-title="Group 6",RTMP Media
+rtmp://media.example.com/live/rtmp
+#EXTINF:-1 group-title="Group 6",Credential Path
+http://xtream.example.com:8080/exampleuser/examplepass/12345
+http://stream.example.com/plain/Plain_Entry.ts
+# a plain comment
+#EXTINF:-1 group-title="Group 6" ,
+http://stream.example.com/unnamed/Unnamed_Stream.ts
+#EXTINF:-1 group-title="Group 6",Last Without URL

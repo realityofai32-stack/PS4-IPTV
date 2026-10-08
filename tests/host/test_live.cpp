@@ -67,7 +67,7 @@ TEST(xtream_live_streams) {
         {"name":"no id"},
         {"stream_id":103,"name":"","category_id":"6","category_ids":[6,7]}])", ch, err));
     CHECK_EQ(ch.size(), (size_t) 3);
-    CHECK(ch[0].streamId == "101" && ch[0].name == "TRT 1 HD" && ch[0].categoryId == "5");
+    CHECK(ch[0].id == "101" && ch[0].name == "TRT 1 HD" && ch[0].categoryId == "5");
     CHECK(ch[0].icon == "https://x/1.png" && ch[0].epgId == "trt1.tr" && ch[0].added == 1700000000 && ch[0].num == 1);
     CHECK(ch[1].name == "\xC5\x9Eow TV" && ch[1].num == 2 && ch[1].archive);
     CHECK(ch[2].name == "Channel 103");
@@ -78,7 +78,7 @@ TEST(live_catalog_indices_and_search) {
     std::vector<LiveChannel> ch;
     auto add = [&](const char *id, const char *name, const char *cat) {
         LiveChannel c;
-        c.streamId = id;
+        c.id = id;
         c.name = name;
         c.categoryId = cat;
         ch.push_back(c);

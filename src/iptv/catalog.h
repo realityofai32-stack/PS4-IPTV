@@ -33,7 +33,10 @@ namespace iptv {
 
         const std::vector<LiveChannel> &channels() const { return list; }
 
-        const LiveChannel *find(const std::string &streamId) const;
+        const LiveChannel *find(const std::string &id) const;
+
+        // display name of a category id ("" when unknown; Uncategorized in the UI language)
+        std::string categoryName(const std::string &categoryId) const;
 
         // indices into channels() of one category, in provider order
         const std::vector<int> &inCategory(const std::string &categoryId) const;
@@ -49,6 +52,9 @@ namespace iptv {
         const search::Index &searchIndex() const { return index; }
 
         int countInCategory(const std::string &categoryId) const { return (int) inCategory(categoryId).size(); }
+
+        // channels with a logo URL (playlist diagnostics)
+        int withLogo() const;
 
         bool empty() const { return list.empty(); }
 

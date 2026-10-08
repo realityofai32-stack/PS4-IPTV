@@ -20,6 +20,22 @@ namespace iptv {
                 return "Series";
         }
     }
+
+    const char *sourceTypeKey(SourceType type) {
+        return type == SourceType::M3u ? "m3u" : "xtream";
+    }
+
+    bool sourceTypeFromKey(const std::string &key, SourceType &out) {
+        if (key == "xtream") {
+            out = SourceType::Xtream;
+            return true;
+        }
+        if (key == "m3u") {
+            out = SourceType::M3u;
+            return true;
+        }
+        return false;
+    }
 }
 
 namespace xtream {
@@ -209,14 +225,14 @@ namespace xtream {
         size_t elements = 0;
         bool ok = json::forEachObject(body, [&out, &audit](const json::FlatObject &o) {
             LiveChannel c;
-            c.streamId = url::trim(o.get("stream_id"));
-            if (!audit.accept(c.streamId)) {
+            c.id = url::trim(o.get("stream_id"));
+            if (!audit.accept(c.id)) {
                 return true;  // malformed entry: skip
             }
             c.name = url::trim(o.get("name"));
             if (c.name.empty()) {
                 audit.stats.missingName++;
-                c.name = i18n::tr("fallback.channel", {c.streamId});
+                c.name = i18n::tr("fallback.channel", {c.id});
             }
             c.categoryId = url::trim(o.get("category_id"));
             audit.stats.missingCategory += c.categoryId.empty();

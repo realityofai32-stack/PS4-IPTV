@@ -89,7 +89,7 @@ namespace http {
         curl_easy_setopt(c, CURLOPT_TIMEOUT_MS, req.totalTimeoutMs);
         curl_easy_setopt(c, CURLOPT_LOW_SPEED_LIMIT, 1L);
         curl_easy_setopt(c, CURLOPT_LOW_SPEED_TIME, req.stallTimeoutS);
-        curl_easy_setopt(c, CURLOPT_USERAGENT, g_userAgent.c_str());
+        curl_easy_setopt(c, CURLOPT_USERAGENT, req.userAgent.empty() ? g_userAgent.c_str() : req.userAgent.c_str());
         curl_easy_setopt(c, CURLOPT_ACCEPT_ENCODING, "");  // gzip/deflate: Xtream JSON lists shrink a lot
         curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, onWrite);
         curl_easy_setopt(c, CURLOPT_WRITEDATA, &t);

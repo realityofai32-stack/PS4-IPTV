@@ -104,7 +104,7 @@ TEST(search_turkish_punctuation_and_examples) {
     std::vector<LiveChannel> channels;
     for (const char *n: {"TR: TRT 10", "TR: TRT 1", "TR: TRT Spor", "HD: beIN Sports 1", "|DE| ZDF HD"}) {
         LiveChannel ch;
-        ch.streamId = std::to_string(channels.size());
+        ch.id = std::to_string(channels.size());
         ch.name = n;
         channels.push_back(ch);
     }

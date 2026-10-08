@@ -1,0 +1,17 @@
+﻿#EXTM3U url-tvg="http://epg.example.com/guide.xml"
+#EXTINF:-1 tvg-id="news1.example" tvg-name="News One" tvg-logo="http://img.example.com/logos/news1.png" group-title="News",News One HD
+http://stream.example.com/live/news1.ts
+#EXTINF:-1 tvg-id="sport1.example" tvg-logo="https://img.example.com/logos/sport1.png" group-title="Sports",Sport 1
+http://stream.example.com/live/sport1.m3u8
+#EXTINF:-1 tvg-id="trt1.tr" tvg-name="TRT 1" tvg-logo="http://img.example.com/trt1.png" group-title="Türkiye",TR: TRT 1 Çocuk Şarkıları
+http://stream.example.com/live/trt1.ts
+#EXTINF:-1 tvg-id="perviy.ru" group-title="Россия",Первый канал
+http://stream.example.com/live/perviy.ts
+#EXTINF:-1 group-title="Ελλάδα",ΕΡΤ1
+http://stream.example.com/live/ert1.ts
+#EXTINF:-1 group-title="日本",NHK 総合
+http://stream.example.com/live/nhk.ts
+#EXTINF:-1 group-title="한국",KBS 1TV
+http://stream.example.com/live/kbs.ts
+#EXTINF:-1 group-title="العربية",الجزيرة
+http://stream.example.com/live/aljazeera.ts

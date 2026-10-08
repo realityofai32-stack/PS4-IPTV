@@ -20,7 +20,7 @@ namespace iptv {
         names.reserve(list.size());
         aliases.reserve(list.size());
         for (int i = 0; i < (int) list.size(); i++) {
-            byId[list[(size_t) i].streamId] = i;
+            byId[list[(size_t) i].id] = i;
             byCategory[list[(size_t) i].categoryId].push_back(i);
             names.push_back(list[(size_t) i].name);
             aliases.push_back(xtream::channelNameWithoutPrefix(list[(size_t) i].name));   // "TRT 1" for "TR: TRT 1"
@@ -28,9 +28,29 @@ namespace iptv {
         index.build(names, aliases);
     }
 
-    const LiveChannel *LiveCatalog::find(const std::string &streamId) const {
-        auto it = byId.find(streamId);
+    const LiveChannel *LiveCatalog::find(const std::string &id) const {
+        auto it = byId.find(id);
         return it == byId.end() ? nullptr : &list[(size_t) it->second];
+    }
+
+    std::string LiveCatalog::categoryName(const std::string &categoryId) const {
+        if (categoryId == UNCATEGORIZED_ID) {
+            return uncategorizedName();   // localized when shown, not when the list was parsed
+        }
+        for (const auto &c: cats) {
+            if (c.id == categoryId) {
+                return c.name;
+            }
+        }
+        return "";
+    }
+
+    int LiveCatalog::withLogo() const {
+        int n = 0;
+        for (const auto &c: list) {
+            n += !c.icon.empty();
+        }
+        return n;
     }
 
     const std::vector<int> &LiveCatalog::inCategory(const std::string &categoryId) const {
@@ -41,7 +61,7 @@ namespace iptv {
     std::vector<int> LiveCatalog::favorites(const std::set<std::string> &favoriteIds) const {
         std::vector<int> out;
         for (int i = 0; i < (int) list.size(); i++) {
-            if (favoriteIds.count(list[(size_t) i].streamId)) {
+            if (favoriteIds.count(list[(size_t) i].id)) {
                 out.push_back(i);
             }
         }

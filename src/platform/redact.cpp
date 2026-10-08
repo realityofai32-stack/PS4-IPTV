@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cctype>
+#include <iterator>
 #include <mutex>
 #include <vector>
 
@@ -12,8 +13,11 @@ namespace {
     // Path markers after which Xtream Codes puts "<username>/<password>/".
     const char *const XTREAM_MARKERS[] = {"/live/", "/movie/", "/series/", "/timeshift/"};
 
-    // Query parameters whose values are treated as credentials.
-    const char *const QUERY_KEYS[] = {"username=", "password=", "user=", "pass=", "token=", "auth="};
+    // Query parameters whose values are treated as credentials (Xtream get.php / player_api.php, and the
+    // signed / tokenized URLs M3U playlists often contain).
+    const char *const QUERY_KEYS[] = {"username=", "password=", "user=", "pass=", "token=", "auth=", "key=",
+                                      "apikey=", "api_key=", "access_token=", "signature=", "sig=", "hash=",
+                                      "session=", "secret=", "passwd=", "pwd=", "login="};
 
     std::mutex g_mutex;
     std::vector<std::string> g_secrets;  // sorted longest first
@@ -175,6 +179,45 @@ namespace redact {
                 std::string rest = url.substr(pos + std::string(marker).size());
                 addSecretLocked(pathSegment(rest, 0));
                 addSecretLocked(pathSegment(rest, 1));
+            }
+        }
+
+        // M3U lines from Xtream panels (get.php output): scheme://host[:port]/<user>/<pass>/<stream id>[.ext]
+        // with no /live/ marker. Two segments before a numeric last segment are treated as credentials.
+        if (scheme != std::string::npos) {
+            size_t pathStart = url.find('/', scheme + 3);
+            size_t queryStart = url.find_first_of("?#", scheme + 3);
+            if (pathStart != std::string::npos && (queryStart == std::string::npos || pathStart < queryStart)) {
+                std::string path = url.substr(pathStart + 1, queryStart == std::string::npos ? std::string::npos
+                                                                                            : queryStart - pathStart - 1);
+                std::vector<std::string> segs;
+                size_t at = 0;
+                while (at <= path.size()) {
+                    size_t slash = path.find('/', at);
+                    segs.push_back(path.substr(at, slash == std::string::npos ? std::string::npos : slash - at));
+                    if (slash == std::string::npos) {
+                        break;
+                    }
+                    at = slash + 1;
+                }
+                if (segs.size() == 3) {
+                    std::string last = segs.back().substr(0, segs.back().find('.'));
+                    bool numeric = !last.empty() && std::all_of(last.begin(), last.end(), [](char c) {
+                        return c >= '0' && c <= '9';
+                    });
+                    // ordinary path words are not credentials (masking them would mangle every log line)
+                    static const char *const WORDS[] = {"live", "movie", "movies", "series", "hls", "dash", "play",
+                                                        "stream", "streams", "channel", "channels", "video", "media",
+                                                        "index", "playlist", "iptv", "epg", "tv", "vod"};
+                    auto ordinary = [](const std::string &seg) {
+                        std::string l = toLower(seg);
+                        return std::any_of(std::begin(WORDS), std::end(WORDS), [&l](const char *w) { return l == w; });
+                    };
+                    if (numeric && !ordinary(segs[0]) && !ordinary(segs[1])) {
+                        addSecretLocked(segs[0]);
+                        addSecretLocked(segs[1]);
+                    }
+                }
             }
         }
 

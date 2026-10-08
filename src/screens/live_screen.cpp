@@ -90,7 +90,7 @@ namespace {
             if (!returnStreamId.empty()) {
                 const auto &channels = app.session().live.channels();
                 for (size_t i = 0; i < visible.size(); i++) {
-                    if (channels[(size_t) visible[i]].streamId == returnStreamId) {
+                    if (channels[(size_t) visible[i]].id == returnStreamId) {
                         channelList->setSelected((int) i);
                         setFocus(1);
                         break;
@@ -301,7 +301,7 @@ namespace {
                     r.name->setWeight(focused ? ui::Weight::SemiBold : ui::Weight::Regular);
                     r.name->setColor(focused ? Color::White : theme::text());
                     r.num->setColor(focused ? theme::text() : theme::textMuted());
-                    r.fav->setText(screen->app.library().isFavorite(ContentType::Live, c.streamId) ? "\xE2\x98\x85" : "");
+                    r.fav->setText(screen->app.library().isFavorite(ContentType::Live, c.id) ? "\xE2\x98\x85" : "");
                     // selected while the categories have focus: show where the channel cursor is
                     r.bg->setFillColor(focused ? theme::rowFocus() : selected ? theme::surfaceRaised()
                                                                               : theme::surface());
@@ -375,7 +375,7 @@ namespace {
             if (c->num > 0) {
                 y += detailNumber->height() + 6;
             }
-            detailFav->setText(app.library().isFavorite(ContentType::Live, c->streamId)
+            detailFav->setText(app.library().isFavorite(ContentType::Live, c->id)
                                ? "\xE2\x98\x85  " + tr("favorites.in_favorites") : "");
             detailFav->setPosition(28, y + 8);
             watch->setFillColor(focus == 1 ? theme::accent() : theme::surfaceRaised());
@@ -393,7 +393,7 @@ namespace {
 
         std::string selectedStreamId() const {
             const LiveChannel *c = selectedChannel();
-            return c ? c->streamId : std::string();
+            return c ? c->id : std::string();
         }
 
         void selectCategory(int row, bool force = false) {
@@ -426,7 +426,7 @@ namespace {
             int index = 0;
             if (!keep.empty()) {
                 for (size_t i = 0; i < visible.size(); i++) {
-                    if (live.channels()[(size_t) visible[i]].streamId == keep) {
+                    if (live.channels()[(size_t) visible[i]].id == keep) {
                         index = (int) i;
                         break;
                     }
@@ -504,7 +504,7 @@ namespace {
 
         void toggleFavorite() {
             const LiveChannel *c = selectedChannel();
-            bool on = app.library().toggleFavorite(ContentType::Live, c->streamId);
+            bool on = app.library().toggleFavorite(ContentType::Live, c->id);
             app.saveLibrary();
             app.toast(tr(on ? "favorites.added" : "favorites.removed"), on ? ToastKind::Success : ToastKind::Info);
             if (currentCategoryRow == FAVORITES_ROW) {

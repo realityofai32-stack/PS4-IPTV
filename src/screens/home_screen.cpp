@@ -501,7 +501,7 @@ namespace {
                 case ContentType::Live: {
                     const auto &live = app.session().live;
                     for (int i = 0; i < (int) live.channels().size(); i++) {
-                        if (live.channels()[(size_t) i].streamId == h.id) {
+                        if (live.channels()[(size_t) i].id == h.id) {
                             app.push(screens::makeLivePlayer(app, {i}, 0));
                             return;
                         }

@@ -4,12 +4,17 @@
 #include "../platform/redact.h"
 
 namespace {
-    const int FORMAT_VERSION = 1;
+    // 1: Xtream profiles only (Checkpoints 1 - 3.1)
+    // 2: "sourceType" per profile ("xtream" / "m3u") + playlist fields; version 1 files load as Xtream
+    const int FORMAT_VERSION = 2;
     const size_t MAX_FILE_BYTES = 1024 * 1024;
 
     void registerSecrets(const iptv::Profile &p) {
         redact::addSecret(p.password);
         redact::addSecret(p.username);
+        if (!p.playlistUrl.empty()) {
+            redact::addUrl(p.playlistUrl);   // get.php?username=..&password=.., tokens, user:pass@
+        }
     }
 }
 
@@ -27,10 +32,17 @@ std::string ProfileStore::serialize() const {
     for (const auto &p: items) {
         json::Value o = json::Value::makeObject();
         o.set("id", json::Value::makeString(p.id));
+        o.set("sourceType", json::Value::makeString(iptv::sourceTypeKey(p.type)));
         o.set("name", json::Value::makeString(p.name));
-        o.set("server", json::Value::makeString(p.server));
-        o.set("username", json::Value::makeString(p.username));
-        o.set("password", json::Value::makeString(p.password));
+        if (p.type == iptv::SourceType::Xtream) {
+            o.set("server", json::Value::makeString(p.server));
+            o.set("username", json::Value::makeString(p.username));
+            o.set("password", json::Value::makeString(p.password));
+        } else {
+            o.set("playlistUrl", json::Value::makeString(p.playlistUrl));
+            o.set("userAgent", json::Value::makeString(p.userAgent));
+            o.set("playlistChannels", json::Value::makeInt(p.playlistChannels));
+        }
         o.set("createdAt", json::Value::makeInt(p.createdAt));
         o.set("lastUsedAt", json::Value::makeInt(p.lastUsedAt));
         o.set("lastStatus", json::Value::makeString(p.lastStatus));
@@ -60,20 +72,28 @@ bool ProfileStore::deserialize(const std::string &text, std::string *error) {
     for (const auto &o: root["profiles"].items()) {
         iptv::Profile p;
         p.id = o["id"].asString();
+        // version 1 has no source type: every profile was an Xtream one
+        if (version >= 2 && !iptv::sourceTypeFromKey(o["sourceType"].asString(), p.type)) {
+            continue;   // a source type this version does not know
+        }
         p.name = o["name"].asString();
         p.server = o["server"].asString();
         p.username = o["username"].asString();
         p.password = o["password"].asString();
+        p.playlistUrl = o["playlistUrl"].asString();
+        p.userAgent = o["userAgent"].asString();
+        p.playlistChannels = (int) o["playlistChannels"].asInt(-1);
         p.createdAt = o["createdAt"].asInt(0);
         p.lastUsedAt = o["lastUsedAt"].asInt(0);
         p.lastStatus = o["lastStatus"].asString();
-        if (p.id.empty() || p.server.empty()) {
+        if (p.id.empty() || (p.type == iptv::SourceType::Xtream ? p.server.empty() : p.playlistUrl.empty())) {
             continue;
         }
         registerSecrets(p);
         loaded.push_back(std::move(p));
     }
     items = std::move(loaded);
+    loadedVersion = (int) version;
     activeProfileId = root["activeProfileId"].asString();
     if (find(activeProfileId) == nullptr) {
         activeProfileId = items.empty() ? "" : items.front().id;
@@ -90,6 +110,7 @@ bool ProfileStore::load(std::string *warning) {
         return true;
     }
     if (fs::readFile(path(), text, MAX_FILE_BYTES, &err) && deserialize(text, &err)) {
+        keepOriginal(text);
         return true;
     }
     std::string first = err;
@@ -105,6 +126,18 @@ bool ProfileStore::load(std::string *warning) {
     items.clear();
     activeProfileId.clear();
     return false;
+}
+
+void ProfileStore::keepOriginal(const std::string &text) {
+    // Upgrading from version 1: the original file is kept once, untouched, as profiles.v1.json. The next save
+    // writes version 2, which older app versions cannot read; this copy keeps the Xtream logins recoverable.
+    if (loadedVersion >= FORMAT_VERSION) {
+        return;
+    }
+    std::string copy = fs::join(dir, "profiles.v1.json");
+    if (!fs::exists(copy)) {
+        fs::writeFileAtomic(copy, text);
+    }
 }
 
 bool ProfileStore::save(std::string *error) {

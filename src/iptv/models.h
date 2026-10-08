@@ -9,15 +9,35 @@
 
 namespace iptv {
 
+    // Kind of IPTV source a profile signs in to (profiles.json schema 2: "sourceType").
+    enum class SourceType {
+        Xtream,     // Xtream Codes API: Live TV, Movies, Series
+        M3u         // M3U / M3U8 channel playlist: Live TV only (no Movies / Series guessing)
+    };
+
+    // "xtream" / "m3u" (profiles.json values)
+    const char *sourceTypeKey(SourceType type);
+
+    // false for unknown values
+    bool sourceTypeFromKey(const std::string &key, SourceType &out);
+
+    // One source (profile). Xtream sources use server/username/password; playlist sources use playlistUrl
+    // (http(s):// URL, or a file under /data/PS4IPTV/playlists/) and an optional User-Agent.
     struct Profile {
         std::string id;
+        SourceType type = SourceType::Xtream;
         std::string name;
-        std::string server;     // normalized base URL, e.g. http://host:8080
+        std::string server;     // Xtream: normalized base URL, e.g. http://host:8080
         std::string username;
         std::string password;
+        std::string playlistUrl;   // M3U: as entered (may contain credentials / tokens: never shown or logged)
+        std::string userAgent;     // M3U: custom User-Agent for the playlist and its streams ("" = default)
+        int playlistChannels = -1; // M3U: channels in the last playlist loaded (-1 = never loaded)
         int64_t createdAt = 0;
         int64_t lastUsedAt = 0;
         std::string lastStatus; // short user-facing status of the last connection attempt
+
+        bool isPlaylist() const { return type == SourceType::M3u; }
     };
 
     enum class ContentType {
@@ -32,15 +52,23 @@ namespace iptv {
         std::string parentId;
     };
 
+    // A Live TV channel of either source type. `id` is its identity for favorites, history and search:
+    //   Xtream:   the provider's stream_id (playback URL built by xtream::liveUrl)
+    //   playlist: a stable local id derived from the source and the entry (m3u::channelId), never a stream_id;
+    //             `url` is the media URL to play as-is
     struct LiveChannel {
-        std::string streamId;
+        std::string id;
         std::string name;
         std::string categoryId;
         std::string icon;
-        std::string epgId;
+        std::string epgId;       // Xtream epg_channel_id / playlist tvg-id
+        std::string url;         // playlist channels only ("" for Xtream)
+        std::string userAgent;   // playlist #EXTVLCOPT:http-user-agent ("" = the source default)
         int64_t added = 0;
-        int num = 0;
+        int num = 0;             // channel number (Xtream num / playlist tvg-chno), 0 = none
         bool archive = false;
+
+        bool isPlaylist() const { return !url.empty(); }
     };
 
     // get_vod_streams entry (kept compact: catalogs hold tens of thousands of these)

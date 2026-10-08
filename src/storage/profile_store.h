@@ -1,6 +1,11 @@
-// Xtream profiles persisted in <dataDir>/profiles.json (versioned, crash-safe writes, .bak fallback).
+// Sources (profiles) persisted in <dataDir>/profiles.json (versioned, crash-safe writes, .bak fallback).
 // Credentials have to be stored on the console to log in; they are registered with the log redactor
 // as soon as they are loaded or edited so they never reach a log line.
+//
+// Schema 2 adds "sourceType" ("xtream" / "m3u") and the playlist fields. Version 1 files (Xtream only) are
+// migrated on load: every profile becomes sourceType xtream with all its fields unchanged (lossless); loading
+// and saving again changes nothing (idempotent). The original version 1 file is kept once as
+// profiles.v1.json.
 
 #ifndef PS4IPTV_STORAGE_PROFILE_STORE_H
 #define PS4IPTV_STORAGE_PROFILE_STORE_H
@@ -46,12 +51,18 @@ public:
 
     bool deserialize(const std::string &text, std::string *error);
 
+    // schema version of the file last loaded (0 = none)
+    int loadedFormat() const { return loadedVersion; }
+
 private:
+
+    void keepOriginal(const std::string &text);
 
     std::string dir;
     std::vector<iptv::Profile> items;
     std::string activeProfileId;
     int nextIdHint = 1;
+    int loadedVersion = 0;
 
     std::string newId();
 };

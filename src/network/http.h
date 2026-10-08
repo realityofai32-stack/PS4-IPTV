@@ -20,6 +20,7 @@ namespace http {
         long stallTimeoutS = 15;        // abort if no data for this long
         size_t maxBytes = 64u * 1024 * 1024;
         CancelFlag cancel;
+        std::string userAgent;          // "" = the app's (globalInit)
     };
 
     enum class Error {

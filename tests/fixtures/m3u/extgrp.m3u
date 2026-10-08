@@ -1,0 +1,15 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="a",Channel A
+#EXTGRP:Music
+http://stream.example.com/a.ts
+#EXTGRP:Kids
+#EXTINF:-1 tvg-id="b",Channel B
+http://stream.example.com/b.ts
+#EXTINF:-1 group-title="Movies",Channel C
+#EXTGRP:Ignored Group
+http://stream.example.com/c.ts
+#EXTINF:-1 group-title="",Channel D
+#EXTGRP:   Docs   
+http://stream.example.com/d.ts
+#EXTINF:-1,Channel E
+http://stream.example.com/e.ts

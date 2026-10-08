@@ -7,3 +7,5 @@
 *.pkg binary
 *.pem text eol=lf
 *.ps1 text eol=crlf
+# M3U parser fixtures: exact bytes (LF / CRLF / CR line ends, BOM, invalid UTF-8, UTF-16)
+tests/fixtures/m3u/* -text

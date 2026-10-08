@@ -208,7 +208,9 @@ namespace search {
             uint32_t len;
         };
         std::vector<Span> spans(n * 4);
-        blob.reserve(total);
+        // never inside std::string's small-buffer storage: a moved index (catalogs are built on a worker and
+        // moved into the session) must keep the heap buffer its views point into
+        blob.reserve(std::max<size_t>(total, 64));
         auto put = [this](const std::string &s, bool compact) {
             Span sp{(uint32_t) blob.size(), 0};
             for (char c: s) {

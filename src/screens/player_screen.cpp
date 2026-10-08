@@ -195,7 +195,7 @@ namespace {
                         LOG_I("player", "retry canceled by the user");
                     }
                     if (onExit) {
-                        onExit(channel(pendingIndex >= 0 ? pendingIndex : index).streamId);
+                        onExit(channel(pendingIndex >= 0 ? pendingIndex : index).id);
                     }
                     app.pop();
                     return;
@@ -226,7 +226,7 @@ namespace {
                     return;
                 case PadButton::Square:
                     if (!e.repeat) {
-                        bool on = app.library().toggleFavorite(ContentType::Live, channel(index).streamId);
+                        bool on = app.library().toggleFavorite(ContentType::Live, channel(index).id);
                         app.saveLibrary();
                         app.toast(tr(on ? "favorites.added" : "favorites.removed"));
                         setOverlay(true);
@@ -280,7 +280,7 @@ namespace {
             preset = s.stability;
             recovery.begin(stability::policy(preset), s.retryOnStall, !plan.fallback.empty(), app.now());
             LOG_I("player", "%s channel %s (%s): format %s%s%s, stability %s, auto-retry %s", first ? "open" : "zap",
-                  channel(index).streamId.c_str(), channel(index).name.c_str(), format.c_str(),
+                  channel(index).id.c_str(), channel(index).name.c_str(), format.c_str(),
                   plan.fallback.empty() ? "" : " then ", plan.fallback.c_str(), stabilityName(preset),
                   s.retryOnStall ? "on" : "off");
             open();
@@ -294,7 +294,7 @@ namespace {
             // Options panel must not carry over to Live TV)
             pb.applyOptions(display::mpvOptions(app.settings().get().defaultGeometry(), (int) theme::SCREEN_W,
                                                 (int) theme::SCREEN_H));
-            std::string url = xtream::liveUrl(app.session().profile, channel(index).streamId, format);
+            std::string url = xtream::liveUrl(app.session().profile, channel(index).id, format);
             pb.open(url, format == "ts" ? "MPEG-TS" : "HLS");
             video->resetFrameStats();
             refresh(app.now());
@@ -364,7 +364,7 @@ namespace {
         void recordHistory() {
             HistoryEntry h;
             h.type = ContentType::Live;
-            h.id = channel(index).streamId;
+            h.id = channel(index).id;
             h.name = channel(index).name;
             h.icon = channel(index).icon;
             h.watchedAt = clockx::unixNow();
@@ -385,7 +385,7 @@ namespace {
             title->setText((c.num > 0 ? std::to_string(c.num) + "   " : std::string()) + c.name);
             subtitle->setText(categoryName(c.categoryId));
             clock->setText(clockx::localTime());
-            fav->setText(app.library().isFavorite(ContentType::Live, c.streamId) ? "\xE2\x98\x85 " + tr("common.favorite") : "");
+            fav->setText(app.library().isFavorite(ContentType::Live, c.id) ? "\xE2\x98\x85 " + tr("common.favorite") : "");
 
             const StreamInfo &si = pb.info();
             stability::Status rs = recovery.status();

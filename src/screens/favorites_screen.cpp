@@ -334,7 +334,7 @@ namespace {
             }
             if (tab == 0) {
                 app.library().toggleFavorite(ContentType::Live,
-                                             app.session().live.channels()[(size_t) liveItems[(size_t) channels->selected()]].streamId);
+                                             app.session().live.channels()[(size_t) liveItems[(size_t) channels->selected()]].id);
             } else {
                 int i = vodItems[(size_t) grid->selected()];
                 if (tab == 1) {
