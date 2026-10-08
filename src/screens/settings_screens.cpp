@@ -498,29 +498,40 @@ namespace {
             subShadow.describe = [] { return tr("settings.subtitle_shadow.desc"); };
             items.push_back(subShadow);
 
-            // ---- video display (defaults; the Options panel changes only the current playback)
-            SettingItem mode;
-            mode.kind = Kind::Choice;
-            mode.caption = tr("settings.display_mode");
-            for (int i = 0; i < display::MODE_COUNT; i++) {
-                mode.options.push_back(tr(display::modeNameKey((display::Mode) i)));
+            // ---- video geometry defaults (the Options panel changes only the current playback)
+            SettingItem aspect;
+            aspect.kind = Kind::Choice;
+            aspect.caption = tr("settings.aspect");
+            for (int i = 0; i < display::ASPECT_COUNT; i++) {
+                aspect.options.push_back(screens::aspectName((display::Aspect) i));
             }
-            mode.choice = [&s] { return (int) s.displayMode; };
-            mode.setChoice = [this, &s](int i) {
-                s.displayMode = (display::Mode) i;
+            aspect.choice = [&s] { return (int) s.videoAspect; };
+            aspect.setChoice = [this, &s](int i) {
+                s.videoAspect = (display::Aspect) i;
                 save();
             };
-            mode.describe = [&s] {
-                return tr("settings.display_mode.desc", {tr(display::modeNameKey(s.displayMode)),
-                                                         tr(display::modeDescKey(s.displayMode))});
+            aspect.describe = [&s] { return tr("settings.aspect.desc", {screens::aspectName(s.videoAspect)}); };
+            items.push_back(aspect);
+
+            SettingItem crop;
+            crop.kind = Kind::Choice;
+            crop.caption = tr("settings.crop");
+            for (int i = 0; i < display::CROP_COUNT; i++) {
+                crop.options.push_back(screens::cropName((display::Crop) i));
+            }
+            crop.choice = [&s] { return (int) s.videoCrop; };
+            crop.setChoice = [this, &s](int i) {
+                s.videoCrop = (display::Crop) i;
+                save();
             };
-            items.push_back(mode);
+            crop.describe = [&s] { return tr("settings.crop.desc", {screens::cropName(s.videoCrop)}); };
+            items.push_back(crop);
 
             SettingItem zoom;
             zoom.kind = Kind::Choice;
             zoom.caption = tr("settings.zoom");
             for (int z: display::zoomSteps()) {
-                zoom.options.push_back(std::to_string(z) + " %");
+                zoom.options.push_back(screens::zoomName(z));
             }
             zoom.choice = [&s] {
                 const auto &steps = display::zoomSteps();

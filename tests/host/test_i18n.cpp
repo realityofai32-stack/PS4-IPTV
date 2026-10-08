@@ -291,9 +291,8 @@ TEST(i18n_every_used_key_exists) {
             CHECK(en.count(std::string(prefix) + suffix) == 1);
         }
     }
-    for (int i = 0; i < display::MODE_COUNT; i++) {
-        CHECK(en.count(display::modeNameKey((display::Mode) i)) == 1);
-        CHECK(en.count(display::modeDescKey((display::Mode) i)) == 1);
+    for (const char *k: {"geometry.left", "geometry.right", "geometry.up", "geometry.down"}) {
+        CHECK(en.count(k) == 1);
     }
     for (int m = 1; m <= 12; m++) {
         CHECK(en.count("date.month." + std::to_string(m)) == 1);
@@ -317,7 +316,10 @@ TEST(i18n_screens_do_not_hardcode_text) {
             // controller button names printed on the button glyphs (as on the DualShock 4 itself)
             "D-PAD", "OPTIONS",
             // file paths and log-only reasons
-            "cache/images", "app exit", "pause", "stop", "episode change"};
+            "cache/images", "app exit", "pause", "stop", "episode change",
+            "assets/fonts/", "assets/fonts/Inter-SemiBold.ttf", "assets/cacert.pem", "PS4IPTV/", "downloads/", "mpv",
+            // settings / mpv values: language codes, option names and choices
+            "tr", "en", "off", "default", "hr-seek", "clear-metadata", "force_redraw"};
     // "\xC2\xB7" escapes are symbols, not words: drop escapes before looking for letters
     const std::regex escapes("\\\\(x[0-9A-Fa-f]{2}|.)");
     std::vector<std::filesystem::path> files;
@@ -342,6 +344,9 @@ TEST(i18n_screens_do_not_hardcode_text) {
         int n = 0;
         while (std::getline(lines, line)) {
             n++;
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();   // CRLF working copies: the end-of-statement check below needs the bare line
+            }
             if (line.find("i18n-exempt-begin") != std::string::npos) {
                 exempt = true;
             }

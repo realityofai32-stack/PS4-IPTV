@@ -206,7 +206,8 @@ namespace i18n {
             {"home.kind_live", "Canlı TV"},
             {"home.offline_notice", "Çevrimdışı: kayıtlı listeler gösteriliyor. İndirilen filmler ve bölümler "
                                     "bağlantı olmadan oynatılır."},
-            {"home.https_notice", "Bu sunucu HTTPS kullanıyor. Bu sürüm şu anda yalnızca HTTP yayınlarını destekliyor."},
+            {"home.https_notice", "Bu sunucu HTTPS kullanıyor. Bu sürüm şu anda yalnızca HTTP yayınlarını "
+                                  "destekliyor."},
             {"home.expiry_notice", "Aboneliğiniz {0} tarihinde sona eriyor."},
 
             // ---------------------------------------------------------------- kataloglar
@@ -464,17 +465,34 @@ namespace i18n {
             {"options.subtitles", "Altyazılar"},
             {"options.available_later", "Oynatma başladığında kullanılabilir"},
             {"options.no_subtitles", "Bu dosyada yok"},
-            {"options.display_mode", "Video görüntü modu"},
-            {"options.zoom", "Yakınlaştırma"},
-            {"options.zoom_stretch", "Esnetme modunda kullanılamaz"},
-            {"options.zoom_stretch_toast", "Yakınlaştırma Esnetme modunda kullanılamaz"},
+            {"options.video", "Video"},
+            {"options.display_default", "Varsayılan yap"},
+            {"options.display_is_default", "Geçerli en boy oranı, kırpma ve yakınlaştırma varsayılan"},
+            {"options.display_make_default", "Geçerli en boy oranını, kırpmayı ve yakınlaştırmayı Ayarlar'a kaydet"},
+            {"options.display_saved", "Varsayılan video geometrisi olarak kaydedildi"},
+            {"geometry.aspect", "En Boy Oranı"},
+            {"geometry.crop", "Kırp / Doldur"},
+            {"geometry.zoom", "Yakınlaştırma"},
+            {"geometry.pos_x", "Yatay konum"},
+            {"geometry.pos_y", "Dikey konum"},
+            {"geometry.reset", "Video Geometrisini Sıfırla"},
+            {"geometry.reset_desc", "Otomatik / Kaynak, kırpma yok, %100, ortada"},
+            {"geometry.reset_done", "Video geometrisi sıfırlandı"},
+            {"geometry.aspect_source", "Otomatik / Kaynak"},
+            {"geometry.crop_none", "Yok"},
+            {"geometry.crop_fill", "Ekranı Doldur"},
+            {"geometry.zoom_value", "%{0}"},
+            {"geometry.centered", "Ortada"},
+            {"geometry.left", "Sol %{0}"},
+            {"geometry.right", "Sağ %{0}"},
+            {"geometry.up", "Yukarı %{0}"},
+            {"geometry.down", "Aşağı %{0}"},
+            {"geometry.aspect_desc", "Görüntünün biçimi; hiçbir yer kesilmez"},
+            {"geometry.crop_desc", "Ekranı daha çok doldurmak için görüntünün kenarlarını keser"},
+            {"geometry.position_desc", "Yakınlaştırılmış veya kırpılmış görüntüyü kaydırır"},
             {"options.tech_info", "Teknik bilgi"},
             {"options.shown", "Gösteriliyor"},
             {"options.hidden", "Gizli"},
-            {"options.display_default", "Görüntü ayarlarını varsayılan yap"},
-            {"options.display_is_default", "Geçerli görüntü modu ve yakınlaştırma varsayılan"},
-            {"options.display_make_default", "Geçerli görüntü modunu ve yakınlaştırmayı Ayarlar'a kaydet"},
-            {"options.display_saved", "Varsayılan görüntü modu olarak kaydedildi"},
             {"subtitle.size", "Altyazı boyutu"},
             {"subtitle.size.small", "Küçük"},
             {"subtitle.size.medium", "Orta"},
@@ -483,18 +501,6 @@ namespace i18n {
             {"subtitle.position.bottom", "Alt"},
             {"subtitle.position.raised", "Yukarıda"},
             {"subtitle.shadow", "Altyazı gölgesi"},
-            {"display.mode.auto", "Otomatik / Orijinal"},
-            {"display.mode.fit", "Sığdır"},
-            {"display.mode.fill", "Doldur / Kırp"},
-            {"display.mode.stretch", "Esnet"},
-            {"display.mode.16x9", "16:9"},
-            {"display.mode.4x3", "4:3"},
-            {"display.mode.auto_desc", "Videonun kendi en boy oranı; görüntünün tamamı görünür."},
-            {"display.mode.fit_desc", "Görüntünün tamamı ekranın içinde; şekiller farklıysa siyah şeritler oluşur."},
-            {"display.mode.fill_desc", "Ekranı bozulma olmadan doldurur; sığmayan kenarlar kesilir."},
-            {"display.mode.stretch_desc", "Görüntüyü esneterek ekranı doldurur (şekiller bozuk görünebilir)."},
-            {"display.mode.16x9_desc", "Dosya ne derse desin görüntüyü 16:9 olarak gösterir."},
-            {"display.mode.4x3_desc", "Dosya ne derse desin görüntüyü 4:3 olarak gösterir."},
 
             // ---------------------------------------------------------------- ortam parçaları
             {"track.number", "Parça {0}"},
@@ -670,12 +676,19 @@ namespace i18n {
                                                 "kırpıyorsa kullanışlıdır)."},
             {"settings.subtitle_shadow.desc", "Parlak sahneler için kenarlıklı altyazı metninin arkasına koyu bir gölge "
                                               "ekler."},
-            {"settings.display_mode", "Varsayılan video görüntü modu"},
-            {"settings.display_mode.desc", "{0}: {1}\n\nBir film, bölüm veya kanal başladığında kullanılır. Oynatma "
-                                           "sırasında OPTIONS menüsü onu yalnızca o oynatma için değiştirir."},
+            {"settings.aspect", "Varsayılan en boy oranı"},
+            {"settings.aspect.desc", "{0}\n\nBir film, bölüm veya kanal başladığında görüntünün gösterileceği "
+                                     "biçim. Otomatik / Kaynak videonun kendi biçimini kullanır; sabit bir oran "
+                                     "görüntüyü esnetilmiş veya sıkıştırılmış gösterebilir ama hiçbir yer kesilmez. "
+                                     "Oynatma sırasında OPTIONS menüsü onu yalnızca o oynatma için değiştirir."},
+            {"settings.crop", "Varsayılan kırpma"},
+            {"settings.crop.desc", "{0}\n\nYok hiçbir yeri kesmez. Ekranı Doldur ekranı bozulma olmadan doldurur ve "
+                                   "sığmayanı keser. Bir oran, görüntünün yalnızca o biçimdeki orta kısmını bırakır "
+                                   "(örneğin 2.39:1, videonun parçası olan siyah şeritleri kaldırır). Oynatma "
+                                   "sırasında OPTIONS menüsü onu yalnızca o oynatma için değiştirir."},
+            {"settings.zoom.desc", "Görüntüyü en boy oranı ve kırpmanın üzerine büyütür (en fazla %150). Oynatma "
+                                   "sırasında OPTIONS menüsü onu yalnızca o oynatma için değiştirir."},
             {"settings.zoom", "Varsayılan yakınlaştırma"},
-            {"settings.zoom.desc", "Videonun parçası olan siyah kenarlıkları gizlemek için görüntüyü biraz büyütür "
-                                   "(en fazla %125). Esnetme modunda kullanılmaz."},
             {"settings.tech_info", "Teknik oynatma bilgisini göster"},
             {"settings.tech_info.desc", "Oynatma başladığında yayın bilgi panelini (çözünürlük, kodekler, arabellek, ağ "
                                         "hızı, yeniden bağlanma denemeleri) gösterir. Üçgen tuşu onu istediğiniz zaman "

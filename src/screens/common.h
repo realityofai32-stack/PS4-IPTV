@@ -33,6 +33,19 @@ namespace screens {
     // "Active - expires 21 Sep 2027 - 0/1 connections"
     std::string accountSummary(const iptv::AccountInfo &account);
 
+    // video geometry values as shown to the user (Playback Options, Settings, technical info)
+    std::string aspectName(display::Aspect aspect);
+
+    std::string cropName(display::Crop crop);
+
+    std::string zoomName(int percent);
+
+    // "Centered", "Left 50%", "Down 25%"
+    std::string positionName(int step, bool horizontal);
+
+    // "Auto / Source  ·  None  ·  100%"
+    std::string geometrySummary(const display::Geometry &g);
+
     // a row with a caption on the left and a value on the right, used by forms and settings
     class FieldRow : public c2d::RectangleShape {
     public:

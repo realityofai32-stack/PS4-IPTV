@@ -92,7 +92,8 @@ std::string SettingsStore::serialize() const {
     root.set("autoPlayNextEpisode", json::Value::makeBool(settings.autoPlayNextEpisode));
     root.set("showTechnicalInfo", json::Value::makeBool(settings.showTechnicalInfo));
     root.set("loadImages", json::Value::makeBool(settings.loadImages));
-    root.set("displayMode", json::Value::makeString(display::modeKey(settings.displayMode)));
+    root.set("videoAspect", json::Value::makeString(display::aspectKey(settings.videoAspect)));
+    root.set("videoCrop", json::Value::makeString(display::cropKey(settings.videoCrop)));
     root.set("zoom", json::Value::makeInt(display::clampZoom(settings.zoomPercent)));
     root.set("retryDownloads", json::Value::makeBool(settings.retryDownloads));
     root.set("resumeDownloadsOnStart", json::Value::makeBool(settings.resumeDownloadsOnStart));
@@ -131,7 +132,13 @@ bool SettingsStore::deserialize(const std::string &text, std::string *error) {
     s.autoPlayNextEpisode = root["autoPlayNextEpisode"].asBool(s.autoPlayNextEpisode);
     s.showTechnicalInfo = root["showTechnicalInfo"].asBool(s.showTechnicalInfo);
     s.loadImages = root["loadImages"].asBool(s.loadImages);
-    s.displayMode = display::modeFromKey(root["displayMode"].asString("auto"));
+    if (root["videoAspect"].isString() || root["videoCrop"].isString()) {
+        s.videoAspect = display::aspectFromKey(root["videoAspect"].asString("source"));
+        s.videoCrop = display::cropFromKey(root["videoCrop"].asString("none"));
+    } else {
+        // written before Aspect Ratio and Crop were separate: the old display mode's meaning
+        display::migrateDisplayMode(root["displayMode"].asString("auto"), s.videoAspect, s.videoCrop);
+    }
     s.zoomPercent = display::clampZoom((int) root["zoom"].asInt(100));
     s.retryDownloads = root["retryDownloads"].asBool(s.retryDownloads);
     s.resumeDownloadsOnStart = root["resumeDownloadsOnStart"].asBool(s.resumeDownloadsOnStart);

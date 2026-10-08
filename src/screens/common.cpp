@@ -22,6 +22,36 @@ namespace screens {
         return bar;
     }
 
+    std::string aspectName(display::Aspect aspect) {
+        return aspect == display::Aspect::Source ? tr("geometry.aspect_source") : display::aspectLabel(aspect);
+    }
+
+    std::string cropName(display::Crop crop) {
+        return crop == display::Crop::None ? tr("geometry.crop_none")
+                                           : crop == display::Crop::Fill ? tr("geometry.crop_fill")
+                                                                         : display::cropLabel(crop);
+    }
+
+    std::string zoomName(int percent) {
+        return tr("geometry.zoom_value", {std::to_string(display::clampZoom(percent))});
+    }
+
+    std::string positionName(int step, bool horizontal) {
+        step = display::clampPosition(step);
+        if (step == 0) {
+            return tr("geometry.centered");
+        }
+        std::string amount = std::to_string(std::abs(step) * 100 / display::POSITION_STEPS);
+        const char *key = horizontal ? (step < 0 ? "geometry.left" : "geometry.right")
+                                     : (step < 0 ? "geometry.up" : "geometry.down");
+        return tr(key, {amount});
+    }
+
+    std::string geometrySummary(const display::Geometry &g) {
+        const std::string sep = "  \xC2\xB7  ";
+        return aspectName(g.aspect) + sep + cropName(g.crop) + sep + zoomName(g.zoom);
+    }
+
     std::string hostOf(const std::string &server) {
         size_t s = server.find("://");
         return s == std::string::npos ? server : server.substr(s + 3);

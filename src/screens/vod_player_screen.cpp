@@ -9,10 +9,12 @@
 //     episode and app exit the position is queried from mpv right before stopping and written at once
 //   - overlay: hides 4 s after the last input while playing (player/hud_logic.h)
 //   - episodes: L1/R1 previous/next, an "Up next" panel at the end (auto-play only when enabled in Settings)
-//   - video display mode / zoom (player/display): mpv vo properties set at runtime from the Options panel; the
-//     Settings defaults apply when the player opens, a change in the panel lasts for this playback only
+//   - video geometry (player/display): Aspect Ratio, Crop / Fill, Zoom and Position in the Options panel's Video
+//     menu, mpv properties set at runtime (no reload: position, pause state and tracks stay). The Settings
+//     defaults apply when the player opens; a change in the panel lasts for this playback only, unless the
+//     user chooses "Set as default" there
 //   - offline: a downloaded item (VodItem::localPath) opens the local file through the same Playback /
-//     mpv path; tracks, display mode, resume and progress work identically. Progress is kept in the download's
+//     mpv path; tracks, video geometry, resume and progress work identically. Progress is kept in the download's
 //     profile (the library switches to it while the player is open)
 //   - downloads pause while the player is open (App::setPlaybackActive): decoding comes first
 
@@ -96,8 +98,7 @@ namespace {
                 : Screen(a), queue(std::move(items)), index(start), resumeOnStart(resumeFirst),
                   onExit(std::move(exitCallback)), tracker(a.library(), &clockx::unixNow) {
             setFillColor(Color::Black);
-            displayMode = app.settings().get().displayMode;
-            zoom = display::clampZoom(app.settings().get().zoomPercent);
+            geometry = app.settings().get().defaultGeometry();
             app.setPlaybackActive(true);
             video = new VideoTexture(app.playback().backend(), {theme::SCREEN_W, theme::SCREEN_H});
             add(video);
@@ -309,10 +310,11 @@ namespace {
             recovery.begin(stability::policy(preset), s.retryOnStall, false, app.now());
             // exactly the saved position (no seconds subtracted), when resuming an item in progress
             double start = tracker.begin(item(), resume && s.resumeVod, app.now());
-            LOG_I("player", "%s %s (%s, %s), %s, stability %s, display %s %d%%", isEpisode() ? "episode" : "movie",
-                  item().id.c_str(), item().extension.c_str(), item().localPath.empty() ? "stream" : "downloaded file",
+            LOG_I("player", "%s %s (%s, %s), %s, stability %s, aspect %s, crop %s, zoom %d%%",
+                  isEpisode() ? "episode" : "movie", item().id.c_str(), item().extension.c_str(),
+                  item().localPath.empty() ? "stream" : "downloaded file",
                   start > 0 ? diag::format("resume at %.3fs", start).c_str() : "from the start", stabilityName(preset),
-                  display::modeKey(displayMode), zoom);
+                  display::aspectKey(geometry.aspect), display::cropKey(geometry.crop), geometry.zoom);
             lastActivity = app.now();
             open(start);
             setOverlay(true);
@@ -326,7 +328,7 @@ namespace {
             pb.applyOptions(tracks::appearanceOptions(s.subtitleSize, s.subtitlePosition, s.subtitleShadow));
             // precise absolute seeks for the resume start (mpv 0.34.1 default, set explicitly against configs)
             pb.applyOptions({{"hr-seek", "default"}});
-            pb.applyOptions(display::mpvOptions(displayMode, zoom));
+            pb.applyOptions(display::mpvOptions(geometry, (int) theme::SCREEN_W, (int) theme::SCREEN_H));
             const VodItem &it = item();
             // a downloaded copy plays from the disk (same backend, no provider request)
             std::string url = !it.localPath.empty() ? it.localPath
@@ -728,7 +730,7 @@ namespace {
                         {"info.dropped", std::to_string(si.droppedFrames)},
                         {"info.tracks", tr("info.tracks_value", {std::to_string(countTracks(tracks::Kind::Audio)),
                                                                  std::to_string(countTracks(tracks::Kind::Subtitle))})},
-                        {"info.display", tr(display::modeNameKey(displayMode)) + ", " + std::to_string(zoom) + " %"},
+                        {"info.display", geometryText()},
                         {"info.stability", tr(stabilityKey(preset))},
                         {"info.state", tr(statusKey(rs))},
                         {"info.recovery", std::to_string(recovery.attempts()) + " / " + std::to_string(recovery.maxAttempts())
@@ -767,16 +769,29 @@ namespace {
         enum class Row {
             AudioMenu,
             SubtitleMenu,
-            DisplayMode,
-            Zoom,
+            VideoMenu,
             SubtitleSize,
             SubtitlePosition,
             SubtitleShadow,
             TechInfo,
-            DisplayDefault, // the current display mode / zoom become the Settings defaults
             AudioTrack,     // level 1
-            SubtitleTrack,  // level 1 (id 0 = off)
+            SubtitleTrack,  // level 2 (id 0 = off)
+            Aspect,         // level 3: video geometry
+            Crop,
+            Zoom,
+            PositionX,
+            PositionY,
+            ResetGeometry,
+            DisplayDefault, // the current aspect / crop / zoom become the Settings defaults
             BackRow
+        };
+
+        // the Options panel's menus (panelLevel)
+        enum Menu {
+            MENU_MAIN = 0,
+            MENU_AUDIO = 1,
+            MENU_SUBTITLES = 2,
+            MENU_VIDEO = 3
         };
 
         struct PanelItem {
@@ -835,13 +850,32 @@ namespace {
                                                                           ? tr("common.off") : tr("options.no_subtitles");
                     break;
                 }
-                case Row::DisplayMode:
-                    name = tr("options.display_mode");
-                    detail = tr(display::modeNameKey(displayMode));
+                case Row::VideoMenu:
+                    name = tr("options.video");
+                    detail = geometryText();
+                    break;
+                case Row::Aspect:
+                    name = tr("geometry.aspect") + ":  " + screens::aspectName(geometry.aspect);
+                    detail = tr("geometry.aspect_desc");
+                    break;
+                case Row::Crop:
+                    name = tr("geometry.crop") + ":  " + screens::cropName(geometry.crop);
+                    detail = tr("geometry.crop_desc");
                     break;
                 case Row::Zoom:
-                    name = tr("options.zoom");
-                    detail = display::zoomAvailable(displayMode) ? std::to_string(zoom) + " %" : tr("options.zoom_stretch");
+                    name = tr("geometry.zoom") + ":  " + screens::zoomName(geometry.zoom);
+                    break;
+                case Row::PositionX:
+                    name = tr("geometry.pos_x") + ":  " + screens::positionName(geometry.posX, true);
+                    detail = tr("geometry.position_desc");
+                    break;
+                case Row::PositionY:
+                    name = tr("geometry.pos_y") + ":  " + screens::positionName(geometry.posY, false);
+                    detail = tr("geometry.position_desc");
+                    break;
+                case Row::ResetGeometry:
+                    name = tr("geometry.reset");
+                    detail = tr("geometry.reset_desc");
                     break;
                 case Row::SubtitleSize:
                     name = tr("subtitle.size");
@@ -860,7 +894,8 @@ namespace {
                     detail = tr(info->isVisible() ? "options.shown" : "options.hidden");
                     break;
                 case Row::DisplayDefault: {
-                    bool same = s.displayMode == displayMode && display::clampZoom(s.zoomPercent) == zoom;
+                    const display::Geometry d = s.defaultGeometry();
+                    bool same = d.aspect == geometry.aspect && d.crop == geometry.crop && d.zoom == geometry.zoom;
                     name = tr("options.display_default");
                     detail = tr(same ? "options.display_is_default" : "options.display_make_default");
                     break;
@@ -922,15 +957,21 @@ namespace {
         void showMenu(int level, int selectRow = 0) {
             panelLevel = level;
             panelItems.clear();
-            if (level == 0) {
+            if (level == MENU_MAIN) {
                 panelTitle->setText(tr("options.title"));
-                for (Row r: {Row::AudioMenu, Row::SubtitleMenu, Row::DisplayMode, Row::Zoom, Row::SubtitleSize,
-                             Row::SubtitlePosition, Row::SubtitleShadow, Row::TechInfo, Row::DisplayDefault}) {
+                for (Row r: {Row::AudioMenu, Row::SubtitleMenu, Row::VideoMenu, Row::SubtitleSize,
+                             Row::SubtitlePosition, Row::SubtitleShadow, Row::TechInfo}) {
+                    panelItems.push_back({r, 0});
+                }
+            } else if (level == MENU_VIDEO) {
+                panelTitle->setText(tr("options.video"));
+                for (Row r: {Row::Aspect, Row::Crop, Row::Zoom, Row::PositionX, Row::PositionY, Row::ResetGeometry,
+                             Row::DisplayDefault}) {
                     panelItems.push_back({r, 0});
                 }
             } else {
-                tracks::Kind kind = level == 1 ? tracks::Kind::Audio : tracks::Kind::Subtitle;
-                panelTitle->setText(tr(level == 1 ? "options.audio" : "options.subtitles"));
+                tracks::Kind kind = level == MENU_AUDIO ? tracks::Kind::Audio : tracks::Kind::Subtitle;
+                panelTitle->setText(tr(level == MENU_AUDIO ? "options.audio" : "options.subtitles"));
                 if (kind == tracks::Kind::Subtitle) {
                     panelItems.push_back({Row::SubtitleTrack, 0});
                 }
@@ -967,8 +1008,9 @@ namespace {
                     if (e.repeat) {
                         return;
                     }
-                    if (panelLevel > 0) {
-                        showMenu(0, panelLevel == 1 ? 0 : 1);
+                    if (panelLevel != MENU_MAIN) {
+                        // back to the main menu, on the row that opened this one
+                        showMenu(MENU_MAIN, panelLevel == MENU_AUDIO ? 0 : panelLevel == MENU_SUBTITLES ? 1 : 2);
                     } else {
                         closePanel();
                     }
@@ -977,7 +1019,8 @@ namespace {
                 case PadButton::Right:
                 case PadButton::Cross:
                     if (!e.repeat || e.button != PadButton::Cross) {
-                        activate(panelItems[(size_t) panelList->selected()], e.button == PadButton::Left ? -1 : 1);
+                        activate(panelItems[(size_t) panelList->selected()], e.button == PadButton::Left ? -1 : 1,
+                                 e.button == PadButton::Cross);
                     }
                     return;
                 default:
@@ -985,51 +1028,66 @@ namespace {
             }
         }
 
-        void activate(const PanelItem &pi, int delta) {
+        // delta: -1 Left, 1 Right / Cross. cross: Cross cycles (wraps) where Left / Right stop at the ends
+        void activate(const PanelItem &pi, int delta, bool cross) {
             Settings &s = app.settings().get();
             Playback &pb = app.playback();
             bool appearance = false;
             switch (pi.row) {
                 case Row::AudioMenu:
                     if (delta > 0) {
-                        showMenu(1);
+                        showMenu(MENU_AUDIO);
                     }
                     return;
                 case Row::SubtitleMenu:
                     if (delta > 0) {
-                        showMenu(2);
+                        showMenu(MENU_SUBTITLES);
                     }
                     return;
-                case Row::DisplayMode: {
-                    // cycles through the modes; applied at once, without a reload (position and tracks stay)
-                    int m = ((int) displayMode + (delta < 0 ? display::MODE_COUNT - 1 : 1)) % display::MODE_COUNT;
-                    displayMode = (display::Mode) m;
-                    applyDisplay();
+                case Row::VideoMenu:
+                    if (delta > 0) {
+                        showMenu(MENU_VIDEO);
+                    }
+                    return;
+                // geometry: applied at once, without a reload (position, pause state and tracks stay)
+                case Row::Aspect:
+                    geometry.aspect = display::stepAspect(geometry.aspect, delta);
+                    applyGeometry();
+                    break;
+                case Row::Crop:
+                    geometry.crop = display::stepCrop(geometry.crop, delta);
+                    applyGeometry();
+                    break;
+                case Row::Zoom: {
+                    const auto &steps = display::zoomSteps();
+                    geometry.zoom = cross && geometry.zoom == steps.back() ? steps.front()
+                                                                           : display::stepZoom(geometry.zoom, delta);
+                    applyGeometry();
                     break;
                 }
-                case Row::Zoom: {
-                    if (!display::zoomAvailable(displayMode)) {
-                        app.toast(tr("options.zoom_stretch_toast"));
+                case Row::PositionX:
+                case Row::PositionY: {
+                    int &p = pi.row == Row::PositionX ? geometry.posX : geometry.posY;
+                    p = cross && p == display::POSITION_STEPS ? -display::POSITION_STEPS
+                                                              : display::stepPosition(p, delta);
+                    applyGeometry();
+                    break;
+                }
+                case Row::ResetGeometry:
+                    if (delta < 0) {
                         return;
                     }
-                    const auto &steps = display::zoomSteps();
-                    int at = 0;
-                    for (size_t k = 0; k < steps.size(); k++) {
-                        if (steps[k] == zoom) {
-                            at = (int) k;
-                        }
-                    }
-                    at = delta < 0 ? std::max(0, at - 1) : (at + 1 < (int) steps.size() ? at + 1 : 0);
-                    zoom = steps[(size_t) at];
-                    applyDisplay();
+                    geometry = display::defaults();
+                    applyGeometry();
+                    app.toast(tr("geometry.reset_done"));
                     break;
-                }
                 case Row::DisplayDefault:
                     if (delta < 0) {
                         return;
                     }
-                    s.displayMode = displayMode;
-                    s.zoomPercent = zoom;
+                    s.videoAspect = geometry.aspect;
+                    s.videoCrop = geometry.crop;
+                    s.zoomPercent = geometry.zoom;
                     {
                         std::string err;
                         if (!app.settings().save(&err)) {
@@ -1079,7 +1137,7 @@ namespace {
                     pb.selectSubtitle(pi.trackId);
                     break;
                 default:
-                    showMenu(0);
+                    showMenu(MENU_MAIN);
                     return;
             }
             if (appearance) {
@@ -1093,10 +1151,23 @@ namespace {
             refresh(app.now());
         }
 
-        // the display mode / zoom of this playback (mpv vo properties, runtime: no reload)
-        void applyDisplay() {
-            LOG_I("player", "display %s, zoom %d%%", display::modeKey(displayMode), zoom);
-            app.playback().applyOptions(display::mpvOptions(displayMode, zoom));
+        // the video geometry of this playback (mpv properties at runtime: no reload, no seek, tracks untouched)
+        void applyGeometry() {
+            LOG_I("player", "geometry: aspect %s, crop %s, zoom %d%%, position %d/%d", display::aspectKey(geometry.aspect),
+                  display::cropKey(geometry.crop), geometry.zoom, geometry.posX, geometry.posY);
+            app.playback().applyOptions(display::mpvOptions(geometry, (int) theme::SCREEN_W, (int) theme::SCREEN_H));
+        }
+
+        // "Auto / Source  ·  None  ·  100%" (+ the position when it is not centred)
+        std::string geometryText() const {
+            std::string text = screens::geometrySummary(geometry);
+            if (geometry.posX != 0) {
+                text += "  \xC2\xB7  " + screens::positionName(geometry.posX, true);
+            }
+            if (geometry.posY != 0) {
+                text += "  \xC2\xB7  " + screens::positionName(geometry.posY, false);
+            }
+            return text;
         }
 
         struct PanelRow {
@@ -1129,8 +1200,7 @@ namespace {
         int manualSub = -2;
         std::string manualAudioLang;
         std::string manualSubLang;
-        display::Mode displayMode = display::Mode::Auto;
-        int zoom = 100;
+        display::Geometry geometry;   // this playback's (starts as the Settings defaults, centred)
         std::string previousProfile;   // library profile before a download of another profile was played
 
         VideoTexture *video;

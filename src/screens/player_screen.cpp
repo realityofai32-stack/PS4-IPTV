@@ -290,10 +290,10 @@ namespace {
         void open() {
             Playback &pb = app.playback();
             pb.applyOptions(stability::mpvOptions(preset));
-            // the default display mode / zoom (mpv keeps vo properties between files: a change made in a movie's
+            // the default video geometry (mpv keeps vo properties between files: a change made in a movie's
             // Options panel must not carry over to Live TV)
-            const Settings &st = app.settings().get();
-            pb.applyOptions(display::mpvOptions(st.displayMode, st.zoomPercent));
+            pb.applyOptions(display::mpvOptions(app.settings().get().defaultGeometry(), (int) theme::SCREEN_W,
+                                                (int) theme::SCREEN_H));
             std::string url = xtream::liveUrl(app.session().profile, channel(index).streamId, format);
             pb.open(url, format == "ts" ? "MPEG-TS" : "HLS");
             video->resetFrameStats();

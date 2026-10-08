@@ -33,8 +33,10 @@ struct Settings {
     int subtitleSize = 1;                         // 0 small, 1 medium, 2 large
     int subtitlePosition = 0;                     // 0 bottom, 1 raised
     bool subtitleShadow = false;
-    // video display (Settings defaults; the Options panel changes only the current playback)
-    display::Mode displayMode = display::Mode::Auto;
+    // video geometry defaults (the Options panel changes only the current playback). Position is never a
+    // default: every playback starts centred.
+    display::Aspect videoAspect = display::Aspect::Source;
+    display::Crop videoCrop = display::Crop::None;
     int zoomPercent = 100;
     // offline downloads
     bool retryDownloads = true;          // network loss: retry automatically with backoff
@@ -44,6 +46,15 @@ struct Settings {
     std::string language = "en";
     // Movies / Series grid order, per profile: "<profileId>/movies" -> sort key ("az", "added_desc"...)
     std::map<std::string, std::string> sortOrders;
+
+    // the geometry every playback starts with (centred)
+    display::Geometry defaultGeometry() const {
+        display::Geometry g;
+        g.aspect = videoAspect;
+        g.crop = videoCrop;
+        g.zoom = display::clampZoom(zoomPercent);
+        return g;
+    }
 };
 
 class SettingsStore {
