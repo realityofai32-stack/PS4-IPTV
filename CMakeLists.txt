@@ -30,6 +30,9 @@ find_package(BZip2 REQUIRED)
 find_package(MPV REQUIRED)
 find_package(ffmpeg COMPONENTS avfilter avcodec avformat avutil swscale swresample)
 find_package(ass REQUIRED)
+# FreeType (font coverage for the fallback fonts) and FriBidi (right-to-left text): already linked for libass
+find_package(PkgConfig REQUIRED)
+pkg_search_module(FREETYPE2 REQUIRED freetype2)
 
 # build info
 string(TIMESTAMP BUILD_DATE "%Y-%m-%d %H:%M UTC" UTC)
@@ -55,7 +58,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
         src
         "${CMAKE_CURRENT_BINARY_DIR}/generated"
         "${PPLAY_DIR}/src"
-        ${MPV_INCLUDE_DIRS} ${ASS_INCLUDE_DIRS} ${FFMPEG_INCLUDE_DIRS} ${BZIP2_INCLUDE_DIR})
+        ${MPV_INCLUDE_DIRS} ${ASS_INCLUDE_DIRS} ${FFMPEG_INCLUDE_DIRS} ${BZIP2_INCLUDE_DIR} ${FREETYPE2_INCLUDE_DIRS})
 target_compile_options(${PROJECT_NAME} PRIVATE -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)
 # same language level as libcross2d (CMAKE_CXX_STANDARD 17) and the host tests (/std:c++17)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS ON)
@@ -95,6 +98,8 @@ add_custom_target(${PROJECT_NAME}_data
         COMMAND ${CMAKE_COMMAND} -E copy
                 "${CMAKE_CURRENT_SOURCE_DIR}/third_party/inter/Inter-Regular.ttf"
                 "${CMAKE_CURRENT_SOURCE_DIR}/third_party/inter/Inter-SemiBold.ttf"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts-fallback/DejaVuSans.ttf"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts-fallback/DroidSansFallback.ttf"
                 "${PKG_ROMFS}/assets/fonts/"
         COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cacert/cacert.pem" "${PKG_ROMFS}/assets/cacert.pem"
         VERBATIM)

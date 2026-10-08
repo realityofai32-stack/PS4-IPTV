@@ -275,3 +275,59 @@ TEST(text_test_screen_strings_decode) {
     std::u32string s = utf8::decode("\xC5\x9E" "ehir Kanal\xC4\xB1");
     CHECK(s.size() == 12 && s[0] == 0x15E && s[1] == 'e' && s[11] == 0x131);
 }
+
+// ------------------------------------------------------------------ font fallback (ui/font_fallback.h)
+#include "../../src/ui/font_fallback.h"
+
+TEST(font_fallback_choice_per_code_point) {
+    // fonts: 0 Inter Regular, 1 Inter SemiBold, 2 scripts fallback, 3 CJK fallback
+    auto inRange = [](char32_t c, char32_t a, char32_t b) { return c >= a && c <= b; };
+    int asked = 0;
+    ui::FontChooser chooser(0, {2, 3}, [&](int font, char32_t c) {
+        asked++;
+        if (font == 0) {
+            return c < 0x0250 || inRange(c, 0x0370, 0x04FF);              // Latin, Greek, Cyrillic
+        }
+        if (font == 2) {
+            return inRange(c, 0x0590, 0x06FF) || inRange(c, 0xFE70, 0xFEFF) || c == 0xFFFD;
+        }
+        return inRange(c, 0x3040, 0x30FF) || inRange(c, 0xAC00, 0xD7A3) || inRange(c, 0x4E00, 0x9FFF);
+    });
+    // Latin / Turkish: the label's own weight, without any lookup
+    CHECK_EQ(chooser.pick(1, U'\x15F'), 1);   // ş
+    CHECK_EQ(chooser.pick(0, U'A'), 0);
+    CHECK_EQ(asked, 0);
+    // Greek / Cyrillic: the UI font (both weights)
+    CHECK_EQ(chooser.pick(1, 0x0416), 1);      // Ж
+    CHECK_EQ(chooser.pick(0, 0x03A9), 0);      // Ω
+    // other scripts: the first fallback that has them, whatever the weight
+    CHECK_EQ(chooser.pick(0, 0x0627), 2);      // Arabic alef
+    CHECK_EQ(chooser.pick(1, 0x05D0), 2);      // Hebrew alef
+    CHECK_EQ(chooser.pick(1, 0xFEFB), 2);      // lam-alef ligature (presentation form)
+    CHECK_EQ(chooser.pick(0, 0x3042), 3);      // Hiragana a
+    CHECK_EQ(chooser.pick(1, 0xD55C), 3);      // Hangul han
+    CHECK_EQ(chooser.pick(0, 0x65E5), 3);      // CJK 日
+    CHECK_EQ(chooser.pick(0, 0xFFFD), 2);      // replacement character
+    // no font has it: the UI font (its missing-glyph box), counted
+    CHECK_EQ(chooser.pick(1, 0x0E01), 1);      // Thai
+    CHECK_EQ(chooser.missingGlyphs(), 1);
+    // cached: asking again does not query the fonts
+    int before = asked;
+    CHECK_EQ(chooser.pick(0, 0x65E5), 3);
+    CHECK_EQ(chooser.pick(0, 0x0E01), 0);
+    CHECK_EQ(asked, before);
+    CHECK_EQ(chooser.missingGlyphs(), 1);
+    // without coverage data (fallback fonts missing): always the UI font, as before Checkpoint 3.2
+    ui::FontChooser none;
+    CHECK_EQ(none.pick(1, 0x65E5), 1);
+}
+
+TEST(font_fallback_right_to_left_detection) {
+    CHECK(!ui::hasRtl(U"TRT 1 HD"));
+    CHECK(!ui::hasRtl(U"\x041F\x0435\x0440\x0432\x044B\x0439"));   // Cyrillic
+    CHECK(!ui::hasRtl(U"NHK \x7DCF\x5408"));                         // CJK
+    CHECK(ui::hasRtl(U"Al \x062C\x0632\x064A\x0631\x0629"));       // Arabic
+    CHECK(ui::hasRtl(U"\x05E2\x05E8\x05D5\x05E5 11"));               // Hebrew
+    CHECK(ui::hasRtl(U"\xFEFB"));                                    // presentation form
+    CHECK(ui::isRtl(0x0600) && ui::isRtl(0x08FF) && !ui::isRtl(0x0900));
+}

@@ -87,18 +87,20 @@ try {
     & $PkgTool pkg_extract --passcode 00000000000000000000000000000000 $pkg.FullName $x *>&1 | Out-Null
     $uroot = Join-Path $x 'uroot'
     $files = @(Get-ChildItem -Recurse -File $uroot | ForEach-Object { $_.FullName.Substring($uroot.Length + 1) -replace '\\', '/' } | Sort-Object)
-    $allowed = @('assets/cacert.pem', 'assets/fonts/Inter-Regular.ttf', 'assets/fonts/Inter-SemiBold.ttf', 'eboot.bin',
+    $allowed = @('assets/cacert.pem', 'assets/fonts/Inter-Regular.ttf', 'assets/fonts/Inter-SemiBold.ttf',
+                 'assets/fonts/DejaVuSans.ttf', 'assets/fonts/DroidSansFallback.ttf', 'eboot.bin',
                  'sce_module/libc.prx', 'sce_module/libSceFios2.prx', 'sce_sys/about/right.sprx', 'sce_sys/keystone')
     $unexpected = @($files | Where-Object { $_ -notin $allowed })
     $missing = @($allowed | Where-Object { $_ -notin $files })
     $entries = & $PkgTool pkg_listentries $pkg.FullName
     $sfoOk = [bool]($entries | Select-String 'PARAM_SFO') -and [bool]($entries | Select-String 'ICON0_PNG')
-    # the UI fonts must be byte-identical to third_party/inter (text renders from them)
+    # the UI and fallback fonts must be byte-identical to third_party (text renders from them)
     $fontsOk = $true
-    foreach ($font in 'Inter-Regular.ttf', 'Inter-SemiBold.ttf') {
-        $packed = Join-Path $uroot "assets\fonts\$font"
+    foreach ($font in 'inter\Inter-Regular.ttf', 'inter\Inter-SemiBold.ttf', 'fonts-fallback\DejaVuSans.ttf',
+                      'fonts-fallback\DroidSansFallback.ttf') {
+        $packed = Join-Path $uroot ("assets\fonts\" + (Split-Path -Leaf $font))
         $fontsOk = $fontsOk -and (Test-Path $packed) -and
-                ((Get-FileHash $packed).Hash -eq (Get-FileHash (Join-Path $RepoRoot "third_party\inter\$font")).Hash)
+                ((Get-FileHash $packed).Hash -eq (Get-FileHash (Join-Path $RepoRoot "third_party\$font")).Hash)
     }
     Report '6 PKG contents allow-list' ($unexpected.Count -eq 0 -and $missing.Count -eq 0 -and $sfoOk -and $fontsOk) `
         ("fonts identical=$fontsOk | files: " + ($files -join ', ') + $(if ($unexpected) { " | UNEXPECTED: " + ($unexpected -join ', ') } else { '' }) +

@@ -89,6 +89,9 @@ namespace {
                             "\xC3\xA9\xC3\xA8\xC3\xAA\xC3\xAB\xC3\xAD\xC3\xB1\xC3\xB3\xC3\xB4\xC3\xB8\xC3\xBA\xC3\xBF "
                             "\xE2\x82\xAC\xC2\xA3\xC2\xA9\xC2\xB0\xC2\xB1\xC3\x97 \xE2\x80\xA6 \xE2\x80\x94",
                       26, x, 826);
+            // other scripts: drawn by the fallback fonts (DejaVu Sans, Droid Sans Fallback), Arabic / Hebrew in
+            // right-to-left order with joined Arabic letters
+            ui::label(this, "\xCE\x95" "\xCE\xBB" "\xCE\xBB" "\xCE\xB7" "\xCE\xBD" "\xCE\xB9" "\xCE\xBA" "\xCE\xAC" "  \xD0\xA0" "\xD1\x83" "\xD1\x81" "\xD1\x81" "\xD0\xBA" "\xD0\xB8" "\xD0\xB9" "  \xD7\xA2" "\xD7\x91" "\xD7\xA8" "\xD7\x99" "\xD7\xAA" "  \xD8\xA7" "\xD9\x84" "\xD8\xB9" "\xD8\xB1" "\xD8\xA8" "\xD9\x8A" "\xD8\xA9" "  \xE6\x97\xA5" "\xE6\x9C\xAC" "\xE8\xAA\x9E" "  \xED\x95\x9C" "\xEA\xB5\xAD" "\xEC\x96\xB4" "  \xE4\xB8\xAD" "\xE6\x96\x87" "", 26, x, 906);
             for (int i = 0; i < 3; i++) {  // the same string three times shares the cached glyphs
                 ui::label(this, "Username required", theme::LABEL, x + (float) i * 324, 866, ui::Weight::SemiBold,
                           theme::textSecondary());
@@ -134,7 +137,11 @@ namespace {
             r2->setMaxWidth(rw);
             reveals.emplace_back(r2, "\xC5\x9E" "ehir Kanal\xC4\xB1 \xC4\xB0zle \xE2\x80\xA2 Ba\xC4\x9Flant\xC4\xB1 "
                                      "haz\xC4\xB1r");
-            stats = ui::label(this, "", theme::CAPTION, rx, 868, ui::Weight::Regular, theme::textMuted());
+            // fallback-font glyphs added after the first frame: the same upload path as the Latin reveals
+            auto *r3 = ui::label(this, "", 28, rx, 854);
+            r3->setMaxWidth(rw);
+            reveals.emplace_back(r3, "\xE3\x81\xB2" "\xE3\x82\x89" "\xE3\x81\x8C" "\xE3\x81\xAA" " \xE3\x82\xAB" "\xE3\x82\xBF" "\xE3\x82\xAB" "\xE3\x83\x8A" " \xE6\xBC\xA2" "\xE5\xAD\x97" " \xED\x95\x9C" "\xEA\xB5\xAD" "\xEC\x96\xB4" " \xEB\xB0\xA9" "\xEC\x86\xA1" " \xD8\xA7" "\xD9\x84" "\xD8\xB9" "\xD8\xB1" "\xD8\xA8" "\xD9\x8A" "\xD8\xA9" " \xD8\xA7" "\xD9\x84" "\xD8\xAC" "\xD8\xB2" "\xD9\x8A" "\xD8\xB1" "\xD8\xA9" " \xD7\xA2" "\xD7\x91" "\xD7\xA8" "\xD7\x99" "\xD7\xAA" "");
+            stats = ui::label(this, "", theme::CAPTION, rx, 906, ui::Weight::Regular, theme::textMuted());
             stats->setMaxWidth(rw);
 
             screens::hintBar(this, {{ui::Glyph::Cross, tr(startup ? "diagnostics.continue" : "common.close")},
@@ -153,10 +160,11 @@ namespace {
                 changed |= r.tick(now - start);
             }
             ui::TextStats s = ui::textStats();
-            char buf[160];
+            char buf[256];
             snprintf(buf, sizeof(buf), "Atlas: %d pages  \xE2\x80\xA2  %d glyphs  \xE2\x80\xA2  %d uploads  \xE2\x80\xA2  "
-                                       "%d grown  \xE2\x80\xA2  %d skipped", s.pages, s.glyphs, s.uploads, s.resizes,
-                     s.unplaced);
+                                       "%d grown  \xE2\x80\xA2  %d skipped  \xE2\x80\xA2  fallback fonts %d, "
+                                       "%d looked up, %d missing", s.pages, s.glyphs, s.uploads, s.resizes,
+                     s.unplaced, s.fallbackFonts, s.codePointsLookedUp, s.missingGlyphs);
             if (stats->getText() != buf) {
                 stats->setText(buf);
                 changed = true;

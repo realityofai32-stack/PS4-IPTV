@@ -55,6 +55,11 @@ Bundled assets:
 
 Inter 4.1 typeface          Rasmus Andersson                             SIL Open Font License 1.1
   third_party/inter/LICENSE.txt
+DejaVu Sans 2.37            Bitstream, Inc., DejaVu authors, T. Bah      Bitstream Vera license + public domain
+                                                                         (DejaVu changes) + Arev license
+  third_party/fonts-fallback/LICENSE-DejaVu.txt (fallback font: Arabic, Hebrew, Armenian, Georgian...)
+Droid Sans Fallback         The Android Open Source Project              Apache-2.0
+  third_party/fonts-fallback/LICENSE-DroidSansFallback.txt (fallback font: Japanese kana, Hangul, CJK)
 Mozilla CA certificate bundle (curl.se/ca/cacert.pem)                    MPL-2.0
 
 The PS4 system modules sce_module/libc.prx and sce_module/libSceFios2.prx and sce_sys/about/right.sprx are
