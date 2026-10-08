@@ -5,6 +5,10 @@
 //     the source of Continue Watching and of every resume. Live TV never has progress.
 //   - history: what was played recently (Live, movies, episodes) for Recently Watched. Live TV zapping can
 //     only push out older Live entries, never movie/episode progress.
+//   - dismissed: movies / episodes the user removed from Continue Watching (same key as progress, with the
+//     position at that moment). Removing hides the card only: the position, history, favorites and downloads
+//     stay. The item returns once playback moves NEW_PROGRESS_SECONDS away from that position; it is
+//     forgotten when the progress is reset, completed or evicted. Optional in the file (older versions ignore it).
 // Schema 1 files (history with positions inside) are migrated on load.
 
 #ifndef PS4IPTV_STORAGE_LIBRARY_STORE_H
@@ -41,6 +45,8 @@ struct HistoryEntry {
 namespace progress {
     const double WATCHED_FRACTION = 0.93;    // ~93 % counts as watched (end credits)
     const double MIN_CONTINUE_SECONDS = 5;   // playback has genuinely started
+    // a removed Continue Watching item comes back once playback moved this far from where it was removed
+    const double NEW_PROGRESS_SECONDS = 60;
 
     bool isWatched(double position, double duration);
 
@@ -88,11 +94,18 @@ public:
     // records a movie / episode position: progress + Recently Watched, newest activity
     void updateProgress(const HistoryEntry &entry);
 
-    // forget the position and watched state, keep the history entry
+    // forget the position and watched state, keep the history entry (also ends a Continue Watching removal)
     void resetProgress(iptv::ContentType type, const std::string &id);
 
-    // in-progress movies and episodes, most recent playback activity first; per series only its most
-    // recently played unfinished episode
+    // "Remove from Continue Watching": hides the movie / episode from the row, keeps its position (Resume still
+    // works), history, favorite and download. False when it is not in progress (nothing to hide).
+    bool dismissFromContinueWatching(iptv::ContentType type, const std::string &id);
+
+    // removed from Continue Watching and not played on since
+    bool isDismissed(iptv::ContentType type, const std::string &id) const;
+
+    // in-progress movies and episodes that were not removed from the row, most recent playback activity first;
+    // per series only its most recently played unfinished (and not removed) episode
     std::vector<const HistoryEntry *> continueWatching(size_t limit) const;
 
     // everything played recently, newest first, one entry per series. At most maxLive Live TV channels
@@ -131,6 +144,7 @@ private:
     struct ProfileData {
         std::vector<HistoryEntry> history;
         std::unordered_map<std::string, HistoryEntry> progress;
+        std::map<std::string, double> dismissed;   // progress key -> position when removed from Continue Watching
         int64_t seq = 0;   // last activity number handed out
     };
 

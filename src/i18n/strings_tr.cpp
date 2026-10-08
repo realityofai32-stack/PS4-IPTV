@@ -199,6 +199,8 @@ namespace i18n {
             {"home.section_open", "Yüklemek için açın"},
             {"home.continue_watching", "İzlemeye Devam Et"},
             {"home.continue_empty", "Başlattığınız filmler ve bölümler burada, devam etmeye hazır olarak görünür."},
+            {"home.cw_remove", "İzlemeye Devam Et'ten Kaldır"},
+            {"home.cw_removed", "İzlemeye Devam Et'ten kaldırıldı. Kaldığınız yer korunuyor."},
             {"home.recently_watched", "Son İzlenenler"},
             {"home.recent_empty", "İzlediğiniz kanallar, filmler ve bölümler burada görünür."},
             {"home.kind_movie", "Film"},

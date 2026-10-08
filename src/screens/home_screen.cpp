@@ -5,6 +5,8 @@
 // progress, most recent playback first, one card per series. It is rebuilt whenever the store changes
 // (generation), so returning from the player shows the new position at once. Live TV never appears there;
 // Recently Watched shows at most RECENT_LIVE_MAX channels while movies/episodes can fill the row.
+// Square on a Continue Watching card removes it from the row only (LibraryStore::dismissFromContinueWatching):
+// the resume position, history, favorite and any download stay; new playback progress brings it back.
 
 #include "common.h"
 #include "../app/offline.h"
@@ -196,6 +198,11 @@ namespace {
                 case PadButton::Triangle:
                     if (!e.repeat) {
                         openTile(TILE_SEARCH);
+                    }
+                    return;
+                case PadButton::Square:
+                    if (!e.repeat && zone == 1 && index[1] < (int) cw.size()) {
+                        removeFromContinueWatching(cw[(size_t) index[1]]);
                     }
                     return;
                 case PadButton::Options:
@@ -477,6 +484,18 @@ namespace {
             app.push(screens::makeVodPlayer(app, queue, position, true));
         }
 
+        // hides the card at once (the next card moves into its place); progress, history and downloads stay
+        void removeFromContinueWatching(const HistoryEntry &h) {
+            if (!app.library().dismissFromContinueWatching(h.type, h.id)) {
+                return;
+            }
+            app.saveLibrary();
+            rebuildRows();
+            refresh();
+            redraw();
+            app.toast(tr("home.cw_removed"));
+        }
+
         void openRecent(const HistoryEntry &h) {
             switch (h.type) {
                 case ContentType::Live: {
@@ -555,9 +574,14 @@ namespace {
                 recentCards[i].bg->setOutlineColor(theme::accent());
                 recentCards[i].bg->setOutlineThickness(f ? 3 : 0);
             }
-            hints->setHints({{ui::Glyph::Cross, tr(zone == 1 ? "common.resume" : "common.open")},
-                             {ui::Glyph::Triangle, tr("home.search")}, {ui::Glyph::Options, tr("home.settings")},
-                             {ui::Glyph::Circle, tr(zone == 0 ? "common.exit" : "common.back")}});
+            screens::Hints h = {{ui::Glyph::Cross, tr(zone == 1 ? "common.resume" : "common.open")}};
+            if (zone == 1) {
+                h.push_back({ui::Glyph::Square, tr("home.cw_remove")});
+            }
+            h.push_back({ui::Glyph::Triangle, tr("home.search")});
+            h.push_back({ui::Glyph::Options, tr("home.settings")});
+            h.push_back({ui::Glyph::Circle, tr(zone == 0 ? "common.exit" : "common.back")});
+            hints->setHints(h);
         }
 
         TileView tiles[TILE_COUNT];

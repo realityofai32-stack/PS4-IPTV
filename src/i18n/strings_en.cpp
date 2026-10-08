@@ -199,6 +199,8 @@ namespace i18n {
             {"home.section_open", "Open to load"},
             {"home.continue_watching", "Continue Watching"},
             {"home.continue_empty", "Movies and episodes you start appear here, ready to resume."},
+            {"home.cw_remove", "Remove from Continue Watching"},
+            {"home.cw_removed", "Removed from Continue Watching. Your resume position is kept."},
             {"home.recently_watched", "Recently Watched"},
             {"home.recent_empty", "Channels, movies and episodes you watch appear here."},
             {"home.kind_movie", "Movie"},

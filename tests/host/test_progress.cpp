@@ -455,3 +455,197 @@ TEST(hud_auto_hide_after_4_seconds) {
     s.visible = true;
     CHECK(hud::shouldAutoHide(s, 200));
 }
+
+// ---------------------------------------------------------------- Remove from Continue Watching
+
+TEST(continue_watching_remove_keeps_progress) {
+    std::string dir = tempDir("cw_remove");
+    LibraryStore lib(dir);
+    lib.load();
+    lib.setProfile("p1");
+    // 1. a partial movie is in Continue Watching
+    playAndStop(lib, movieItem("m1", "Movie One"), 1456);   // 24:16
+    CHECK(lib.continueWatching(10).size() == 1);
+    lib.toggleFavorite(ContentType::Movie, "m1");
+    // a downloaded copy of it (the library never touches download files)
+    std::string media = fs::join(dir, "m1.mkv");
+    CHECK(fs::writeFileAtomic(media, "media bytes"));
+    size_t recentBefore = lib.recentlyWatched(10).size();
+
+    // 2. removed: gone from the row at once
+    unsigned g = lib.generation();
+    CHECK(lib.dismissFromContinueWatching(ContentType::Movie, "m1"));
+    CHECK(lib.generation() != g);   // Home rebuilds its rows immediately
+    CHECK(lib.continueWatching(10).empty());
+    CHECK(lib.isDismissed(ContentType::Movie, "m1"));
+    // 3. / 4. the resume position is unchanged: Movie Detail still offers Resume 24:16
+    const HistoryEntry *p = lib.progressOf(ContentType::Movie, "m1");
+    CHECK(p && p->position == 1456 && !p->watched);
+    CHECK(progress::inProgress(p->position, p->duration, p->watched));
+    CHECK(VodProgress(lib).begin(movieItem("m1"), true, 0) == 1456);
+    // 5. Recently Watched, 6. favorite, 7. downloaded media: all still there
+    CHECK_EQ(lib.recentlyWatched(10).size(), recentBefore);
+    CHECK(lib.recentlyWatched(10)[0]->id == "m1");
+    CHECK(lib.isFavorite(ContentType::Movie, "m1"));
+    CHECK(fs::exists(media));
+    // removing twice changes nothing; something not in the row cannot be removed
+    CHECK(lib.dismissFromContinueWatching(ContentType::Movie, "m1"));
+    CHECK(!lib.dismissFromContinueWatching(ContentType::Movie, "never-played"));
+    CHECK(!lib.dismissFromContinueWatching(ContentType::Live, "m1"));
+
+    // 8. app restart: still removed, position still there
+    CHECK(lib.save());
+    LibraryStore restarted(dir);
+    restarted.load();
+    restarted.setProfile("p1");
+    CHECK(restarted.continueWatching(10).empty());
+    CHECK(restarted.isDismissed(ContentType::Movie, "m1"));
+    CHECK(restarted.progressOf(ContentType::Movie, "m1")->position == 1456);
+    CHECK(restarted.isFavorite(ContentType::Movie, "m1"));
+}
+
+TEST(continue_watching_remove_until_new_progress) {
+    LibraryStore lib("unused");
+    lib.setProfile("p1");
+    playAndStop(lib, movieItem("m1"), 1456);
+    CHECK(lib.dismissFromContinueWatching(ContentType::Movie, "m1"));
+    // 9. opening the detail page only reads the progress
+    lib.progressOf(ContentType::Movie, "m1");
+    CHECK(lib.continueWatching(10).empty());
+    // opening the player and leaving at once (same position) is not new progress
+    playAndStop(lib, movieItem("m1"), 1456);
+    CHECK(lib.isDismissed(ContentType::Movie, "m1") && lib.continueWatching(10).empty());
+    // a short look (30 s) is not meaningful new progress either
+    playAndStop(lib, movieItem("m1"), 1486);
+    CHECK(lib.isDismissed(ContentType::Movie, "m1") && lib.continueWatching(10).empty());
+    CHECK(lib.progressOf(ContentType::Movie, "m1")->position == 1486);
+    // 10. resumed and watched on (24:16 -> 27:00): back in the row at the new position
+    playAndStop(lib, movieItem("m1"), 1620);
+    CHECK(!lib.isDismissed(ContentType::Movie, "m1"));
+    std::vector<const HistoryEntry *> cw = lib.continueWatching(10);
+    CHECK(cw.size() == 1 && cw[0]->id == "m1" && cw[0]->position == 1620);
+}
+
+TEST(continue_watching_remove_episodes) {
+    LibraryStore lib("unused");
+    lib.setProfile("p1");
+    // 11. an episode behaves like a movie
+    playAndStop(lib, episodeItem("e13", "s1", 1, 3), 900);
+    CHECK(lib.dismissFromContinueWatching(ContentType::Series, "e13"));
+    CHECK(lib.continueWatching(10).empty());
+    CHECK(lib.progressOf(ContentType::Series, "e13")->position == 900);
+    CHECK(VodProgress(lib).begin(episodeItem("e13", "s1", 1, 3), true, 0) == 900);
+    playAndStop(lib, episodeItem("e13", "s1", 1, 3), 1100);
+    std::vector<const HistoryEntry *> cw = lib.continueWatching(10);
+    CHECK(cw.size() == 1 && cw[0]->id == "e13" && cw[0]->position == 1100);
+
+    // 12. two partial episodes of one series: removing the card's episode lets the other stand for the series
+    playAndStop(lib, episodeItem("e15", "s1", 1, 5), 600);
+    playAndStop(lib, episodeItem("e13", "s1", 1, 3), 1200);   // e13 played last: it is the series card
+    cw = lib.continueWatching(10);
+    CHECK(cw.size() == 1 && cw[0]->id == "e13");
+    CHECK(lib.dismissFromContinueWatching(ContentType::Series, "e13"));
+    cw = lib.continueWatching(10);
+    CHECK(cw.size() == 1 && cw[0]->id == "e15" && cw[0]->position == 600);   // independent progress
+    CHECK(!lib.isDismissed(ContentType::Series, "e15"));
+    // removing that one too: the series leaves the row, both positions stay
+    CHECK(lib.dismissFromContinueWatching(ContentType::Series, "e15"));
+    CHECK(lib.continueWatching(10).empty());
+    CHECK(lib.progressOf(ContentType::Series, "e13")->position == 1200);
+    CHECK(lib.progressOf(ContentType::Series, "e15")->position == 600);
+    // another series is unaffected; so is a movie with the same id as a removed episode
+    playAndStop(lib, episodeItem("x1", "s2", 1, 1), 300);
+    playAndStop(lib, movieItem("e13"), 300);
+    cw = lib.continueWatching(10);
+    CHECK(cw.size() == 2);
+    CHECK(!lib.isDismissed(ContentType::Movie, "e13"));
+}
+
+TEST(continue_watching_remove_profiles_reset_and_completion) {
+    LibraryStore lib("unused");
+    // 13. profiles are independent
+    lib.setProfile("p1");
+    playAndStop(lib, movieItem("m1"), 1000);
+    lib.setProfile("p2");
+    playAndStop(lib, movieItem("m1"), 2000);
+    CHECK(lib.dismissFromContinueWatching(ContentType::Movie, "m1"));
+    CHECK(lib.continueWatching(10).empty());
+    lib.setProfile("p1");
+    CHECK(!lib.isDismissed(ContentType::Movie, "m1"));
+    CHECK(lib.continueWatching(10).size() == 1);
+
+    // 14. Reset progress (Mark as not watched / Start over) is a different action: it clears the position and
+    // the now obsolete removal; the next real playback shows the item again
+    CHECK(lib.dismissFromContinueWatching(ContentType::Movie, "m1"));
+    lib.resetProgress(ContentType::Movie, "m1");
+    CHECK(!lib.isDismissed(ContentType::Movie, "m1"));
+    CHECK(lib.progressOf(ContentType::Movie, "m1")->position == 0);
+    CHECK(VodProgress(lib).begin(movieItem("m1"), true, 0) == 0);
+    playAndStop(lib, movieItem("m1"), 40, false);
+    CHECK(lib.continueWatching(10).size() == 1);
+
+    // 15. completed content is never in the row and gets no removal record
+    playAndStop(lib, movieItem("done", "Done", 6000), 5990);
+    CHECK(!lib.dismissFromContinueWatching(ContentType::Movie, "done"));
+    CHECK(!lib.isDismissed(ContentType::Movie, "done"));
+    // a removed item played to the end: the record goes away, the item is watched (Recently Watched only)
+    playAndStop(lib, movieItem("m2", "Two", 6000), 3000);
+    CHECK(lib.dismissFromContinueWatching(ContentType::Movie, "m2"));
+    playAndStop(lib, movieItem("m2", "Two", 6000), 5995);
+    CHECK(!lib.isDismissed(ContentType::Movie, "m2"));
+    CHECK(lib.progressOf(ContentType::Movie, "m2")->watched);
+    for (const HistoryEntry *e: lib.continueWatching(10)) {
+        CHECK(e->id != "m2" && e->id != "done");
+    }
+
+    // 16. Live TV is unaffected: no progress, nothing to remove, Recently Watched as before
+    HistoryEntry live;
+    live.type = ContentType::Live;
+    live.id = "ch1";
+    live.name = "Channel";
+    lib.addHistory(live);
+    CHECK(!lib.dismissFromContinueWatching(ContentType::Live, "ch1"));
+    CHECK(lib.recentlyWatched(10)[0]->id == "ch1");
+}
+
+TEST(continue_watching_remove_storage_bounded) {
+    LibraryStore lib("unused");
+    lib.setProfile("p1");
+    playAndStop(lib, movieItem("old"), 100);
+    CHECK(lib.dismissFromContinueWatching(ContentType::Movie, "old"));
+    // the removal record lives only as long as the position it hides: evicted with it
+    for (size_t i = 0; i < LibraryStore::PROGRESS_LIMIT; i++) {
+        HistoryEntry e;
+        e.type = ContentType::Movie;
+        e.id = "fill" + std::to_string(i);
+        e.position = 50;
+        e.duration = 6000;
+        lib.updateProgress(e);
+    }
+    CHECK(lib.progressOf(ContentType::Movie, "old") == nullptr);
+    CHECK(!lib.isDismissed(ContentType::Movie, "old"));
+    // records whose progress is gone or no longer in progress are dropped on load
+    std::string text = "{\"version\":2,\"profiles\":{\"p1\":{\"seq\":3,\"history\":[],\"progress\":["
+                       "{\"type\":\"movie\",\"id\":\"a\",\"position\":500,\"duration\":6000,\"activity\":1},"
+                       "{\"type\":\"movie\",\"id\":\"b\",\"position\":5900,\"duration\":6000,\"watched\":true,"
+                       "\"activity\":2}],"
+                       "\"dismissed\":[{\"key\":\"movie:a\",\"position\":500},{\"key\":\"movie:b\",\"position\":10},"
+                       "{\"key\":\"movie:gone\",\"position\":10}]}}}";
+    LibraryStore fromFile("unused");
+    std::string err;
+    CHECK(fromFile.deserializeHistory(text, &err));
+    fromFile.setProfile("p1");
+    CHECK(fromFile.isDismissed(ContentType::Movie, "a"));
+    CHECK(!fromFile.isDismissed(ContentType::Movie, "b"));
+    CHECK(!fromFile.isDismissed(ContentType::Movie, "gone"));
+    CHECK(fromFile.continueWatching(10).empty());
+    CHECK(fromFile.serializeHistory().find("movie:gone") == std::string::npos);
+    CHECK(fromFile.serializeHistory().find("movie:a") != std::string::npos);
+    // a file without the field (written by the previous version) loads as before
+    CHECK(fromFile.deserializeHistory("{\"version\":2,\"profiles\":{\"p1\":{\"seq\":1,\"history\":[],\"progress\":["
+                                      "{\"type\":\"movie\",\"id\":\"a\",\"position\":500,\"duration\":6000,"
+                                      "\"activity\":1}]}}}", &err));
+    fromFile.setProfile("p1");
+    CHECK(fromFile.continueWatching(10).size() == 1);
+    CHECK(fromFile.serializeHistory().find("dismissed") == std::string::npos);
+}

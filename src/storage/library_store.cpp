@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 
 #include "library_store.h"
 #include "../core/json.h"
@@ -197,7 +198,16 @@ void LibraryStore::updateProgress(const HistoryEntry &entry) {
     ProfileData &d = data();
     HistoryEntry e = entry;
     e.activity = ++d.seq;
-    d.progress[progressKey(e.type, e.id)] = e;
+    std::string key = progressKey(e.type, e.id);
+    d.progress[key] = e;
+    auto removed = d.dismissed.find(key);
+    if (removed != d.dismissed.end()) {
+        // new playback progress (or the end) brings a removed item back; opening it or a short look does not
+        bool moved = std::fabs(e.position - removed->second) >= progress::NEW_PROGRESS_SECONDS;
+        if (moved || e.watched || progress::isWatched(e.position, e.duration)) {
+            d.dismissed.erase(removed);
+        }
+    }
     if (d.progress.size() > PROGRESS_LIMIT) {
         // forget the least recently played position
         auto oldest = d.progress.begin();
@@ -206,6 +216,7 @@ void LibraryStore::updateProgress(const HistoryEntry &entry) {
                 oldest = it;
             }
         }
+        d.dismissed.erase(oldest->first);
         d.progress.erase(oldest);
     }
     pushHistory(d, e);
@@ -219,6 +230,7 @@ void LibraryStore::resetProgress(iptv::ContentType type, const std::string &id) 
         it->second.position = 0;
         it->second.watched = false;
     }
+    d.dismissed.erase(progressKey(type, id));
     for (auto &e: d.history) {
         if (e.type == type && e.id == id) {
             e.position = 0;
@@ -226,6 +238,26 @@ void LibraryStore::resetProgress(iptv::ContentType type, const std::string &id) 
         }
     }
     gen++;
+}
+
+bool LibraryStore::dismissFromContinueWatching(iptv::ContentType type, const std::string &id) {
+    if (type == iptv::ContentType::Live) {
+        return false;
+    }
+    ProfileData &d = data();
+    std::string key = progressKey(type, id);
+    auto it = d.progress.find(key);
+    if (it == d.progress.end() || !progress::inProgress(it->second.position, it->second.duration, it->second.watched)) {
+        return false;   // not in the row (completed content never gets a record)
+    }
+    d.dismissed[key] = it->second.position;
+    gen++;
+    return true;
+}
+
+bool LibraryStore::isDismissed(iptv::ContentType type, const std::string &id) const {
+    const ProfileData *d = current();
+    return d != nullptr && d->dismissed.count(progressKey(type, id)) > 0;
 }
 
 std::vector<const HistoryEntry *> LibraryStore::continueWatching(size_t limit) const {
@@ -236,6 +268,9 @@ std::vector<const HistoryEntry *> LibraryStore::continueWatching(size_t limit) c
     }
     for (const auto &p: d->progress) {
         const HistoryEntry &e = p.second;
+        if (d->dismissed.count(p.first)) {
+            continue;   // removed by the user; another episode of the same series may still stand for it
+        }
         if (e.type != iptv::ContentType::Live && progress::inProgress(e.position, e.duration, e.watched)) {
             eligible.push_back(&e);
         }
@@ -389,6 +424,16 @@ std::string LibraryStore::serializeHistory() const {
             prog.push(entryJson(*e));
         }
         o.set("progress", std::move(prog));
+        if (!p.second.dismissed.empty()) {
+            json::Value dis = json::Value::makeArray();
+            for (const auto &k: p.second.dismissed) {
+                json::Value r = json::Value::makeObject();
+                r.set("key", json::Value::makeString(k.first));
+                r.set("position", json::Value::makeNumber(k.second));
+                dis.push(std::move(r));
+            }
+            o.set("dismissed", std::move(dis));
+        }
         profilesJson.set(p.first, std::move(o));
     }
     root.set("profiles", std::move(profilesJson));
@@ -467,6 +512,15 @@ bool LibraryStore::deserializeHistory(const std::string &text, std::string *erro
                 HistoryEntry e = entryOf(o);
                 if (!e.id.empty() && e.type != iptv::ContentType::Live && d.progress.size() < PROGRESS_LIMIT) {
                     d.progress.emplace(progressKey(e.type, e.id), e);
+                }
+            }
+            for (const auto &o: p.second["dismissed"].items()) {
+                // only records that still hide something (the position is kept, the item still in progress)
+                std::string key = o["key"].asString();
+                auto it = d.progress.find(key);
+                if (it != d.progress.end()
+                    && progress::inProgress(it->second.position, it->second.duration, it->second.watched)) {
+                    d.dismissed[key] = o["position"].asDouble(it->second.position);
                 }
             }
         }
