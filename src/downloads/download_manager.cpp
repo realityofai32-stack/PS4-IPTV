@@ -76,6 +76,8 @@ namespace dl {
         std::string err;
         if (!fs::writeFileAtomic(fs::join(dirOf(cfg.root, "metadata"), "downloads.json"), text, &err)) {
             LOG_E("downloads", "manifest not saved: %s", err.c_str());
+        } else {
+            manifestWrites++;
         }
     }
 
@@ -365,6 +367,7 @@ namespace dl {
             std::function<void(const ResponseHead &, int64_t total, int64_t written)> headAccepted;
             std::function<void(int64_t written, int64_t total, double speed, double eta)> progress;
             std::function<void(int64_t durable)> durable;
+            std::function<void(const TransferStats &)> publish;   // diagnostics, at the UI rate and at the end
 
             Plan plan;
             bool headSeen = false;
@@ -375,9 +378,11 @@ namespace dl {
             int64_t neededBytes = 0;
             int64_t availableBytes = -1;
             int64_t lastSync = 0;
+            double lastSyncTime = 0;
             int64_t lastSpaceCheck = 0;
             double lastUi = 0;
             SpeedMeter meter;
+            StatsMeter diag;
 
             FileSink(PartFile &f, int64_t offset, int64_t expected, const ManagerConfig &c, int large)
                     : file(f), requestOffset(offset), expectedTotal(expected), cfg(c), largeFiles(large) {}
@@ -386,6 +391,10 @@ namespace dl {
                 headSeen = true;
                 httpStatus = h.status;
                 plan = planResponse(requestOffset, expectedTotal, h);
+                // Range support: a resume answered with 206, or (fresh download) the Accept-Ranges header
+                int rangeSupport = requestOffset > 0 ? (h.status == 206 ? 1 : 0)
+                                   : h.acceptRanges.empty() ? -1 : h.acceptRanges == "none" ? 0 : 1;
+                diag.head(cfg.clock(), h.status, plan.total, rangeSupport);
                 if (plan.action != Plan::Action::Write) {
                     problem = plan.problem;
                     return false;
@@ -398,6 +407,7 @@ namespace dl {
                 }
                 written = plan.writeOffset;
                 lastSync = written;
+                lastSyncTime = cfg.clock();
                 lastSpaceCheck = written;
                 total = plan.total;
                 if (total > 0 && total > FOUR_GIB - 1 && largeFiles < 0) {
@@ -428,17 +438,27 @@ namespace dl {
                     return false;
                 }
                 int e = 0;
+                double before = cfg.clock();
                 if (!file.write(data, n, &e)) {
                     problem = e == ENOSPC ? Problem::NoSpace : e == EFBIG ? Problem::FileTooLarge : Problem::Storage;
                     LOG_E("downloads", "write failed at %lld bytes: errno %d", (long long) written, e);
                     return false;
                 }
+                double now = cfg.clock();
+                diag.data(now, n, now - before);
                 written += (int64_t) n;
-                if (written - lastSync >= cfg.syncEvery) {
-                    if (file.sync()) {
+                bool syncDue = written - lastSync >= cfg.syncEvery
+                               || (written > lastSync && now - lastSyncTime >= cfg.syncInterval);
+                if (syncDue) {
+                    bool ok = file.sync();
+                    double after = cfg.clock();
+                    diag.sync(after - now);
+                    lastSyncTime = after;
+                    if (ok) {
                         lastSync = written;
                         durable(written);
                     }
+                    now = after;
                 }
                 if (written - lastSpaceCheck >= cfg.spaceCheckEvery) {
                     lastSpaceCheck = written;
@@ -452,15 +472,41 @@ namespace dl {
                         return false;
                     }
                 }
-                double now = cfg.clock();
                 meter.sample(now, written);
                 if (now - lastUi >= UI_UPDATE_EVERY) {
                     lastUi = now;
                     progress(written, total, meter.bytesPerSecond(), meter.eta(total >= 0 ? total - written : -1));
+                    diag.stats().smoothed = meter.bytesPerSecond();
+                    if (publish) {
+                        publish(diag.stats());
+                    }
                 }
                 return true;
             }
+
+            void onSocket(int defaultReceiveBuffer, int receiveBuffer) override {
+                diag.stats().receiveBufferDefault = defaultReceiveBuffer;
+                diag.stats().receiveBuffer = receiveBuffer;
+                LOG_I("downloads", "socket receive buffer: system default %d KB, in use %d KB",
+                      defaultReceiveBuffer < 0 ? -1 : defaultReceiveBuffer / 1024,
+                      receiveBuffer < 0 ? -1 : receiveBuffer / 1024);
+            }
         };
+
+        // the session's numbers in one log line (no URL, no credentials)
+        void logStats(const std::string &file, const TransferStats &s) {
+            LOG_I("downloads", "%s: session %.1f MB in %.1f s = %.2f MB/s (network %.2f MB/s, disk %.1f MB/s, peak "
+                               "%.2f MB/s); first byte %.2f s; %lld callbacks avg %.1f KB (min %lld, max %lld B), "
+                               "%.0f/s; write %.2f s, %d flushes %.2f s, %d manifest writes; HTTP %ld, length %s, "
+                               "range %s; receive buffer %d -> %d KB, curl buffer %ld KB",
+                  file.c_str(), s.bytes / 1e6, s.elapsed, s.average() / 1e6, s.networkSpeed() / 1e6,
+                  s.diskSpeed() / 1e6, s.peak / 1e6, s.firstByte, (long long) s.callbacks, s.averageCallback() / 1024,
+                  (long long) s.minCallback, (long long) s.maxCallback, s.callbacksPerSecond(), s.writeSeconds, s.syncs,
+                  s.syncSeconds, s.manifestWrites, s.httpStatus, s.lengthKnown ? "known" : "unknown",
+                  s.rangeSupport > 0 ? "yes" : s.rangeSupport == 0 ? "no" : "unknown",
+                  s.receiveBufferDefault < 0 ? -1 : s.receiveBufferDefault / 1024,
+                  s.receiveBuffer < 0 ? -1 : s.receiveBuffer / 1024, s.transferBuffer / 1024);
+        }
     }
 
     void DownloadManager::runTransfer(Item work, const Credentials &c) {
@@ -534,9 +580,20 @@ namespace dl {
                     req.offset = offset;
                     req.ifRange = offset > 0 ? (!etag.empty() ? etag : lastModified) : "";
                     req.cancel = cancelFlag;
+                    req.receiveBuffer = cfg.receiveBuffer;
+                    req.transferBuffer = cfg.transferBuffer;
                     FileSink sink(file, offset, offset > 0 ? total : -1, cfg, largeFiles);
                     sink.cancel = cancelFlag;
+                    sink.diag.stats().title = work.title;
+                    sink.diag.begin(cfg.clock(), offset, req.transferBuffer);
+                    int manifestBase = manifestWrites.load();
                     std::string key = work.key;
+                    sink.publish = [this, manifestBase](const TransferStats &st) {
+                        std::lock_guard<std::mutex> lock(m);
+                        lastStats = st;
+                        lastStats.manifestWrites = manifestWrites.load() - manifestBase;
+                    };
+                    sink.publish(sink.diag.stats());
                     sink.headAccepted = [this, key, &etag, &lastModified](const ResponseHead &h, int64_t t, int64_t w) {
                         std::lock_guard<std::mutex> lock(m);
                         etag = h.etag;
@@ -580,7 +637,15 @@ namespace dl {
                         total = sink.total;
                     }
                     httpStatus = r.status ? r.status : sink.httpStatus;
-                    file.sync();
+                    double syncStart = cfg.clock();
+                    file.sync();   // pause / cancel / failure / completion / app exit: the written bytes are durable
+                    sink.diag.sync(cfg.clock() - syncStart);
+                    sink.diag.stats().smoothed = sink.meter.bytesPerSecond();
+                    sink.diag.finish(cfg.clock());
+                    sink.publish(sink.diag.stats());
+                    if (sink.diag.stats().callbacks > 0) {
+                        logStats(work.fileName, transferStats());
+                    }
                     if (sink.headSeen && sink.plan.action == Plan::Action::RestartFromZero) {
                         LOG_W("downloads", "%s: the server's answer cannot be used to resume (HTTP %ld), restarting "
                                            "from 0", work.fileName.c_str(), httpStatus);
@@ -854,6 +919,11 @@ namespace dl {
     LiveProgress DownloadManager::live() const {
         std::lock_guard<std::mutex> lock(m);
         return liveProgress;
+    }
+
+    TransferStats DownloadManager::transferStats() const {
+        std::lock_guard<std::mutex> lock(m);
+        return lastStats;
     }
 
     Totals DownloadManager::totals() const {

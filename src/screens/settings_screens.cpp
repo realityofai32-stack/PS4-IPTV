@@ -761,6 +761,13 @@ namespace {
 
         // ------------------------------------------------------------------ Diagnostics
         void buildDiagnostics() {
+            SettingItem downloads;
+            downloads.caption = tr("diagnostics.downloads");
+            downloads.info = [] { return tr("settings.open"); };
+            downloads.run = [this] { app.push(screens::makeDownloadDiagnostics(app)); };
+            downloads.describe = [] { return tr("diagnostics.downloads.desc"); };
+            items.push_back(downloads);
+
             SettingItem textTest;
             textTest.caption = tr("diagnostics.text_test");
             textTest.info = [] { return tr("settings.open"); };
@@ -822,9 +829,137 @@ namespace {
             }
         }
     };
+
+    // Settings > Diagnostics > Download diagnostics: the download engine's measurements, refreshed 4 times a
+    // second. 1 MB = 1,000,000 bytes here (comparable with the PC control measurement).
+    class DownloadDiagnosticsScreen : public Screen {
+    public:
+        explicit DownloadDiagnosticsScreen(App &a) : Screen(a) {
+            ui::background(this);
+            screens::header(this, tr("dldiag.title"), tr("dldiag.subtitle"));
+            heading = ui::label(this, "", theme::HEADING, theme::SAFE_X, 210, ui::Weight::SemiBold);
+            heading->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
+            names = ui::label(this, "", theme::LABEL, theme::SAFE_X, 290, ui::Weight::Regular, theme::textDim());
+            names->setMaxLines(MAX_LINES);
+            names->setMaxWidth(NAME_W - 40);
+            values = ui::label(this, "", theme::LABEL, theme::SAFE_X + NAME_W, 290, ui::Weight::SemiBold);
+            values->setMaxLines(MAX_LINES);
+            values->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X - NAME_W);
+            screens::hintBar(this, {{ui::Glyph::Circle, tr("common.back")}});
+            refreshStats();
+        }
+
+        const char *name() const override { return "download-diagnostics"; }
+
+        void tick(double now) override {
+            if (now - lastUpdate >= 0.25) {
+                lastUpdate = now;
+                refreshStats();
+            }
+        }
+
+        void handleInput(const InputEvent &e) override {
+            if (!e.repeat && (e.button == PadButton::Circle || e.button == PadButton::Cross)) {
+                app.pop();
+            }
+        }
+
+    private:
+        static const int MAX_LINES = 20;
+        static constexpr float NAME_W = 620;
+
+        // units (MB/s, Mbit/s, MB, KB, s) are the same in every language
+        // i18n-exempt-begin
+        // "2.45 MB/s (19.6 Mbit/s)" with the language's decimal point
+        static std::string rate(double bytesPerSecond) {
+            if (bytesPerSecond <= 0) {
+                return "-";
+            }
+            return decimal(bytesPerSecond / 1e6, 2) + " MB/s  (" + decimal(bytesPerSecond * 8 / 1e6, 1) + " Mbit/s)";
+        }
+
+        static std::string decimal(double v, int places) {
+            char buf[48];
+            snprintf(buf, sizeof(buf), "%.*f", places, v);
+            std::string s = buf;
+            size_t dot = s.find('.');
+            if (dot != std::string::npos) {
+                s.replace(dot, 1, tr("format.decimal_point"));
+            }
+            return s;
+        }
+
+        static std::string megabytes(double bytes) {
+            return decimal(bytes / 1e6, 1) + " MB";
+        }
+
+        static std::string kilobytes(double bytes) {
+            return bytes < 0 ? tr("common.unknown") : decimal(bytes / 1024, bytes < 10240 ? 1 : 0) + " KB";
+        }
+
+        static std::string seconds(double s) {
+            return s < 0 ? "-" : decimal(s, s < 10 ? 2 : 1) + " s";
+        }
+        // i18n-exempt-end
+
+        void refreshStats() {
+            dl::TransferStats s = app.downloads().transferStats();
+            std::string text, vals;
+            if (s.title.empty()) {
+                heading->setText(tr("dldiag.none"));
+            } else {
+                heading->setText(tr(s.active ? "dldiag.active" : "dldiag.last", {s.title}));
+                std::string resumed = s.startOffset > 0
+                                      ? "  (" + tr("dldiag.from", {megabytes((double) s.startOffset)}) + ")" : "";
+                std::string callbackRange = kilobytes((double) s.minCallback) + " / "
+                                            + kilobytes((double) s.maxCallback);
+                std::string flushes = tr("dldiag.flushes_value", {std::to_string(s.syncs), seconds(s.syncSeconds)});
+                std::vector<std::pair<const char *, std::string>> rows = {
+                        {"dldiag.current", rate(s.smoothed)},
+                        {"dldiag.average", rate(s.average())},
+                        {"dldiag.peak", rate(s.peak)},
+                        {"dldiag.network", rate(s.networkSpeed())},
+                        {"dldiag.disk", rate(s.diskSpeed())},
+                        {"dldiag.transferred", megabytes((double) s.bytes) + resumed},
+                        {"dldiag.elapsed", seconds(s.elapsed)},
+                        {"dldiag.first_byte", seconds(s.firstByte)},
+                        {"dldiag.callbacks", tr("dldiag.callbacks_value", {std::to_string(s.callbacks),
+                                                                           kilobytes(s.averageCallback()),
+                                                                           decimal(s.callbacksPerSecond(), 0)})},
+                        {"dldiag.callback_range", callbackRange},
+                        {"dldiag.flushes", flushes},
+                        {"dldiag.manifest", std::to_string(s.manifestWrites)},
+                        {"dldiag.http", s.httpStatus > 0 ? std::to_string(s.httpStatus) : "-"},
+                        {"dldiag.length", tr(s.lengthKnown ? "common.yes" : "common.no")},
+                        {"dldiag.range", s.rangeSupport < 0 ? tr("common.unknown")
+                                                            : tr(s.rangeSupport > 0 ? "common.yes" : "common.no")},
+                        {"dldiag.rcvbuf", tr("dldiag.rcvbuf_value", {kilobytes(s.receiveBufferDefault),
+                                                                     kilobytes(s.receiveBuffer)})},
+                        {"dldiag.curlbuf", kilobytes((double) s.transferBuffer)}};
+                for (const auto &r: rows) {
+                    text += (text.empty() ? "" : "\n") + tr(r.first);
+                    vals += (vals.empty() ? "" : "\n") + r.second;
+                }
+            }
+            if (text != names->getText() || vals != values->getText()) {
+                names->setText(text);
+                values->setText(vals);
+                redraw();
+            }
+        }
+
+        ui::Label *heading;
+        ui::Label *names;
+        ui::Label *values;
+        double lastUpdate = 0;
+    };
 }
 
 namespace screens {
+    Screen *makeDownloadDiagnostics(App &app) {
+        return new DownloadDiagnosticsScreen(app);
+    }
+
     Screen *makeSettings(App &app, SettingsPage page) {
         return new SettingsScreen(app, page);
     }

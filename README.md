@@ -14,12 +14,14 @@ offline downloads for services that allow storing content.
 - **Live TV**: categories, channel logos, favorites, fast zapping, MPEG-TS or HLS with automatic fallback
 - **Movies and Series**: poster grids by category, details (plot, cast, rating, duration), seasons and episodes
 - **Offline downloads** of movies and episodes to the console's internal storage, played back without a connection
-- **Continue Watching** with exact resume (to the millisecond), Recently Watched, watched state
+- **Continue Watching** with exact resume (to the millisecond), Recently Watched, watched state; remove a card
+  without losing its resume position
 - **Favorites** for channels, movies and series
 - **Search** across Live TV, Movies and Series (Turkish letters, apostrophes and small typos are fine)
 - **Sorting**: A–Z, newest added, year, rating, recently watched, provider order
 - **Every audio and subtitle track** of a file, switchable during playback; preferred audio / subtitle language
-- **Video display modes**: Auto / Original, Fit, Fill / Crop, Stretch, 16:9, 4:3 and zoom (100–125 %)
+- **VLC-like video geometry**: Aspect Ratio (Auto / Source, 16:9, 16:10, 4:3, 5:4, 1:1, 1.85, 2.21, 2.35, 2.39,
+  2.40), Crop / Fill (None, Fill Screen or the same ratios), Zoom (100–150 %) and position, changed live
 - **Playback stability presets** (Fast, Balanced, Maximum stability) with stall detection and bounded reconnects
 - **DualShock 4 interface** made for the TV: hold-to-scroll, controller hints everywhere, on-screen keyboard
 - **English and Türkçe** user interface (English by default; Settings › Language)
@@ -49,7 +51,7 @@ Profiles, including their passwords, are stored only on the console.
 |---|---|
 | ✕ | Select / open / play |
 | ○ | Back |
-| □ | Favorite; on an episode: download it |
+| □ | Favorite; on an episode: download it; on a Continue Watching card: remove it from the row |
 | △ | Search (Live TV, Movies, Series); in the player: technical info |
 | OPTIONS | Settings (Home); sort & refresh (Movies, Series); playback options (player) |
 | L1 / R1 | Previous / next category, season, tab or episode |
@@ -65,8 +67,15 @@ Press OPTIONS while a movie or episode plays:
 - **Audio** and **Subtitles**: every track the file contains, named by language (native name where the console
   font can show it, e.g. Deutsch, Español, Русский; the name in your UI language for scripts it cannot, e.g.
   Japanese), otherwise *Track 1*, *Track 2*. Commentary and forced tracks are labelled.
-- **Video display mode** and **Zoom**: applied instantly, without restarting playback or changing tracks.
-  The defaults are in Settings; a change in the panel applies to that playback (or can be saved as default).
+- **Video**: four independent controls, applied instantly without restarting playback, seeking or changing
+  tracks:
+  - **Aspect Ratio**: the shape the picture is shown with (Auto / Source = the file's own). Never cuts anything.
+  - **Crop / Fill**: *Fill Screen* fills the screen without distortion and cuts what does not fit; a ratio
+    (e.g. 2.39:1) keeps only the centre of the picture in that shape, e.g. to remove black bars that are part of
+    the video. *None* by default.
+  - **Zoom** (100–150 %) on top, and a horizontal / vertical **position** for a zoomed or cropped picture.
+  - **Reset Video Geometry** returns to Auto / Source, None, 100 %, centred.
+  The defaults are in Settings; a change in the panel applies to that playback only (or *Set as default*).
 - Subtitle size, position and shadow; technical information.
 
 ## Offline downloads
@@ -89,6 +98,10 @@ Movies and episodes can be downloaded to the console's internal storage and watc
 - **Progress is shared**: a movie started as a stream resumes at the same position when played from its download,
   and the other way round. Deleting a download keeps favorites, history and the position.
 - Manage everything in **Downloads** (Home) and in **Settings › Storage & downloads**.
+- **Speed**: no bandwidth cap; one connection at the speed the network and the provider allow. The app enlarges
+  the socket receive buffer so a single connection is not limited by a small TCP window.
+  **Settings › Diagnostics › Download diagnostics** shows the measured network and disk speed of the current or
+  last download (no addresses or passwords).
 
 **Use downloads only for services and content where you have permission to store content locally.** The feature
 saves the files your service delivers to you; it does not remove DRM, decrypt content or circumvent any access
@@ -133,6 +146,14 @@ powershell -ExecutionPolicy Bypass -File scripts\run-download-integration-test.p
 powershell -ExecutionPolicy Bypass -File scripts\verify-ps4iptv.ps1                # full release validation
 ```
 
+Download speed measurements on the PC (they use your provider account from `config\test_streams.txt` and print
+no address, user name or password):
+
+```powershell
+python -I scripts\measure-provider-download.py --seconds 60   # raw single connection, Range, receive buffer
+powershell -ExecutionPolicy Bypass -File scripts\run-download-bench.ps1  # the app's download pipeline
+```
+
 `verify-ps4iptv.ps1` rebuilds from clean and checks: zero errors and warnings, all host tests, the localization
 checks, the download integration test, `pkg_validate`, an exact allow-list of packaged files, a secret scan of the
 extracted PKG and of the complete Git history, the linked system modules, and that no diagnostic screen can open
@@ -152,7 +173,7 @@ src/app/          application shell, services (Xtream, catalogs, progress, offli
 src/downloads/    download engine: manifest, resumable transfers (libcurl), queue, storage checks
 src/i18n/         localization tables (English, Türkçe)
 src/iptv/         Xtream API parsing, catalogs, search index, sorting
-src/player/       playback adapter over pPlay's mpv wrapper, tracks, stability, display modes
+src/player/       playback adapter over pPlay's mpv wrapper, tracks, stability, video geometry
 src/screens/      TV screens
 src/ui/           UTF-8 text rendering, widgets, on-screen keyboard
 tests/host/       host unit tests and the download integration test

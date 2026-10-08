@@ -1,5 +1,9 @@
 #include <curl/curl.h>
 
+#ifndef _WIN32
+#include <sys/socket.h>
+#endif
+
 #include <cstdlib>
 #include <cstring>
 
@@ -65,6 +69,8 @@ namespace dl {
                 c->head.etag = value;
             } else if (headerIs(line, "last-modified", value)) {
                 c->head.lastModified = value;
+            } else if (headerIs(line, "accept-ranges", value)) {
+                c->head.acceptRanges = value;
             }
             return n;
         }
@@ -95,6 +101,43 @@ namespace dl {
                 return 0;
             }
             return n;
+        }
+
+        int receiveBufferOf(curl_socket_t fd) {
+            int v = 0;
+            curl_socklen_t len = sizeof(v);
+#ifdef _WIN32
+            if (getsockopt(fd, SOL_SOCKET, SO_RCVBUF, (char *) &v, &len) != 0) {
+#else
+            if (getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &v, &len) != 0) {
+#endif
+                return -1;
+            }
+            return v;
+        }
+
+        // a new socket, before connect: the receive buffer bounds the TCP window, i.e. the speed of one
+        // connection (window / round-trip time). Never fails the connection.
+        int onSocket(void *user, curl_socket_t fd, curlsocktype purpose) {
+            auto *c = (Context *) user;
+            if (purpose != CURLSOCKTYPE_IPCXN) {
+                return CURL_SOCKOPT_OK;
+            }
+            int before = receiveBufferOf(fd);
+            for (int want = c->request->receiveBuffer; want >= 64 * 1024; want /= 2) {
+                if (before >= want) {
+                    break;   // the system already gives at least that much
+                }
+#ifdef _WIN32
+                if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, (const char *) &want, sizeof(want)) == 0) {
+#else
+                if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &want, sizeof(want)) == 0) {
+#endif
+                    break;
+                }
+            }
+            c->sink->onSocket(before, receiveBufferOf(fd));
+            return CURL_SOCKOPT_OK;
         }
 
         int onProgress(void *user, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
@@ -139,7 +182,9 @@ namespace dl {
         curl_easy_setopt(c, CURLOPT_XFERINFODATA, &ctx);
         curl_easy_setopt(c, CURLOPT_NOPROGRESS, 0L);
         curl_easy_setopt(c, CURLOPT_ERRORBUFFER, errbuf);
-        curl_easy_setopt(c, CURLOPT_BUFFERSIZE, 256L * 1024);
+        curl_easy_setopt(c, CURLOPT_BUFFERSIZE, req.transferBuffer);
+        curl_easy_setopt(c, CURLOPT_SOCKOPTFUNCTION, onSocket);
+        curl_easy_setopt(c, CURLOPT_SOCKOPTDATA, &ctx);
         if (!caBundle.empty()) {
             curl_easy_setopt(c, CURLOPT_CAINFO, caBundle.c_str());
         }

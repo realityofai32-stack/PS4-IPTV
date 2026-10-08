@@ -79,12 +79,15 @@ namespace screens {
     enum class SettingsPage {
         Main,
         Storage,        // Storage & downloads: sizes, free space, deleting downloads and caches
-        Diagnostics     // text rendering test, build information
+        Diagnostics     // text rendering test, download diagnostics, build information
     };
 
     Screen *makeSettings(App &app, SettingsPage page = SettingsPage::Main);
 
     Screen *makeAbout(App &app);
+
+    // measurements of the download in progress / the last one (speeds, callbacks, flushes; no URL)
+    Screen *makeDownloadDiagnostics(App &app);
 
     // Downloads: in progress / downloaded movies and episodes (works offline, from the manifest)
     Screen *makeDownloads(App &app);

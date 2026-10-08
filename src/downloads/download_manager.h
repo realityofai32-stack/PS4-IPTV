@@ -5,7 +5,9 @@
 // - a transfer writes temp/<file>.part; resume requests "Range: bytes=<part size>-" (+ If-Range) and the
 //   response is checked by dl::planResponse: 206 at the offset is appended, a 200 is never appended (small
 //   partials restart from 0, large ones wait for the user's confirmation), 416 for a complete file finishes it
-// - the .part file is fsynced every SYNC_EVERY bytes and that size is recorded (durableBytes): after a crash
+// - media bytes go straight from each libcurl callback to write() on the .part file (no stdio buffer, no
+//   flush per callback). The file is fsynced every syncEvery bytes or syncInterval seconds (whichever comes
+//   first, only while data arrives) and that size is recorded (durableBytes) in the manifest: after a crash
 //   the partial is cut back to it, so a resumed file never contains bytes that were not on the disk
 // - complete: the size is checked against Content-Length / Content-Range, then the file is renamed into
 //   movies/ or episodes/; only then is it Completed
@@ -14,8 +16,13 @@
 // - free space is checked before a transfer (when the size is known), when the size becomes known, and every
 //   SPACE_CHECK_EVERY bytes while writing; the safety margin is never used up
 // - playback started: the active transfer is stopped and resumes (from the same byte) when playback ends
-// - the manifest is written atomically after every state change; credentials only live in memory
-//   (setProfiles) and the URL is built when a transfer starts
+// - the manifest is written atomically after every state change and with each durable flush (never per
+//   callback or progress update); credentials only live in memory (setProfiles) and the URL is built when a
+//   transfer starts
+// - no bandwidth cap: one connection at the speed the network and provider allow. The socket receive buffer
+//   is enlarged (receiveBuffer): with the system default a single TCP connection is limited to
+//   window / round-trip time, far below the line speed
+// - transferStats(): measurements of the current / last transfer (Settings > Diagnostics), logged at its end
 
 #ifndef PS4IPTV_DOWNLOADS_DOWNLOAD_MANAGER_H
 #define PS4IPTV_DOWNLOADS_DOWNLOAD_MANAGER_H
@@ -52,7 +59,10 @@ namespace dl {
         std::function<std::string(const Credentials &, Kind, const std::string &id, const std::string &ext)> buildUrl;
         RetryPolicy retry;
         int64_t syncEvery = 32ll * 1024 * 1024;
+        double syncInterval = 15;                           // seconds: flush at least this often while data arrives
         int64_t spaceCheckEvery = 64ll * 1024 * 1024;
+        int receiveBuffer = 1024 * 1024;                    // socket SO_RCVBUF per transfer (0 = system default)
+        long transferBuffer = 256 * 1024;                   // libcurl CURLOPT_BUFFERSIZE
         bool probeLargeFiles = false;                       // PS4: check the >4 GiB support once
     };
 
@@ -114,6 +124,9 @@ namespace dl {
         bool hasCompletedEpisodes(const std::string &profileId, const std::string &seriesId) const;
 
         LiveProgress live() const;
+
+        // measurements of the transfer in progress, or of the last one (title empty: none yet)
+        TransferStats transferStats() const;
 
         Totals totals() const;
 
@@ -208,6 +221,8 @@ namespace dl {
         StopReason stopReason = StopReason::None;
         std::shared_ptr<std::atomic<bool>> activeCancel;
         LiveProgress liveProgress;
+        TransferStats lastStats;
+        std::atomic<int> manifestWrites{0};
         std::atomic<unsigned> gen{1};
         void *thread = nullptr;
     };

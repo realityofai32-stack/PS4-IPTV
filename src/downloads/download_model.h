@@ -142,6 +142,7 @@ namespace dl {
         ContentRange range;
         std::string etag;
         std::string lastModified;
+        std::string acceptRanges;   // "bytes", "none", "" (absent); diagnostics only
     };
 
     // What to do with a response to a request for `offset` bytes onwards (offset 0 = no Range header).
@@ -206,6 +207,73 @@ namespace dl {
         int64_t lastBytes = 0;
         double speed = 0;
         bool primed = false;
+    };
+
+    // ------------------------------------------------------------------ transfer diagnostics
+    // Measurements of one transfer session (request -> stop), for Settings > Diagnostics > Downloads and the
+    // log. Never contains a URL or credentials. Times are monotonic seconds (the manager's clock).
+    struct TransferStats {
+        bool active = false;
+        std::string title;
+        long httpStatus = 0;
+        bool lengthKnown = false;
+        int rangeSupport = -1;          // -1 unknown, 0 no, 1 yes (206 for a resume, or Accept-Ranges)
+        int64_t startOffset = 0;        // bytes already on the disk when the request was sent
+        int64_t bytes = 0;              // received and written in this session
+        int64_t total = -1;             // the whole file (-1 unknown)
+        double started = 0;             // when the request was sent
+        double elapsed = 0;             // since then
+        double firstByte = -1;          // seconds until the first body byte (-1 none yet)
+        int64_t callbacks = 0;          // body callbacks of the transport (one write each)
+        int64_t minCallback = 0;
+        int64_t maxCallback = 0;
+        double writeSeconds = 0;        // spent inside write() of the .part file
+        double syncSeconds = 0;         // spent flushing it to the disk
+        int syncs = 0;
+        int manifestWrites = 0;         // downloads.json writes during the session
+        double smoothed = 0;            // the speed the Downloads screen shows
+        double peak = 0;                // best 1-second window
+        int receiveBufferDefault = -1;  // the socket's SO_RCVBUF before the app's request (bytes, -1 unknown)
+        int receiveBuffer = -1;         // after it
+        long transferBuffer = 0;        // libcurl CURLOPT_BUFFERSIZE
+
+        // bytes / elapsed: what the user gets
+        double average() const;
+
+        // bytes / time the transfer spent waiting for and receiving data (elapsed minus the wait for the
+        // first byte, minus disk writes and flushes): the network side
+        double networkSpeed() const;
+
+        // bytes / time in write(): the disk side (0 unknown)
+        double diskSpeed() const;
+
+        double averageCallback() const;
+
+        double callbacksPerSecond() const;
+    };
+
+    // Collects TransferStats from the transfer thread (cheap per callback; 1-second windows for the peak)
+    class StatsMeter {
+    public:
+        void begin(double now, int64_t offset, long transferBuffer);
+
+        void head(double now, long status, int64_t total, int rangeSupport);
+
+        // one body callback of n bytes that took writeSeconds to write
+        void data(double now, size_t n, double writeSeconds);
+
+        void sync(double seconds);
+
+        void finish(double now);
+
+        TransferStats &stats() { return s; }
+
+        const TransferStats &stats() const { return s; }
+
+    private:
+        TransferStats s;
+        double windowStart = 0;
+        int64_t windowBytes = 0;
     };
 
     // ------------------------------------------------------------------ display helpers

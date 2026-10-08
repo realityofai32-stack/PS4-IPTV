@@ -453,6 +453,88 @@ namespace dl {
         return (double) remaining / speed;
     }
 
+    // ------------------------------------------------------------------ transfer diagnostics
+
+    double TransferStats::average() const {
+        return elapsed > 0 ? (double) bytes / elapsed : 0;
+    }
+
+    double TransferStats::networkSpeed() const {
+        double t = elapsed - (firstByte > 0 ? firstByte : 0) - writeSeconds - syncSeconds;
+        return t > 0 && bytes > 0 ? (double) bytes / t : 0;
+    }
+
+    double TransferStats::diskSpeed() const {
+        return writeSeconds > 0 ? (double) bytes / writeSeconds : 0;
+    }
+
+    double TransferStats::averageCallback() const {
+        return callbacks > 0 ? (double) bytes / (double) callbacks : 0;
+    }
+
+    double TransferStats::callbacksPerSecond() const {
+        return elapsed > 0 ? (double) callbacks / elapsed : 0;
+    }
+
+    void StatsMeter::begin(double now, int64_t offset, long transferBuffer) {
+        TransferStats fresh;
+        fresh.title = s.title;
+        fresh.receiveBufferDefault = s.receiveBufferDefault;
+        fresh.receiveBuffer = s.receiveBuffer;
+        s = fresh;
+        s.active = true;
+        s.started = now;
+        s.startOffset = offset;
+        s.transferBuffer = transferBuffer;
+        windowStart = now;
+        windowBytes = 0;
+    }
+
+    void StatsMeter::head(double now, long status, int64_t total, int rangeSupport) {
+        s.httpStatus = status;
+        s.total = total;
+        s.lengthKnown = total >= 0;
+        s.rangeSupport = rangeSupport;
+        s.elapsed = now - s.started;
+    }
+
+    void StatsMeter::data(double now, size_t n, double writeSeconds) {
+        if (s.callbacks == 0) {
+            s.firstByte = now - s.started;
+            windowStart = now;
+            windowBytes = 0;
+            s.minCallback = (int64_t) n;
+        }
+        s.callbacks++;
+        s.bytes += (int64_t) n;
+        s.minCallback = std::min(s.minCallback, (int64_t) n);
+        s.maxCallback = std::max(s.maxCallback, (int64_t) n);
+        s.writeSeconds += writeSeconds;
+        s.elapsed = now - s.started;
+        windowBytes += (int64_t) n;
+        double w = now - windowStart;
+        if (w >= 1.0) {
+            s.peak = std::max(s.peak, (double) windowBytes / w);
+            windowStart = now;
+            windowBytes = 0;
+        }
+    }
+
+    void StatsMeter::sync(double seconds) {
+        s.syncs++;
+        s.syncSeconds += seconds;
+    }
+
+    void StatsMeter::finish(double now) {
+        double w = now - windowStart;
+        if (windowBytes > 0 && w >= 0.5) {
+            s.peak = std::max(s.peak, (double) windowBytes / w);   // the last, partial window (not too short)
+        }
+        windowBytes = 0;
+        s.elapsed = now - s.started;
+        s.active = false;
+    }
+
     // ------------------------------------------------------------------ display helpers
 
     std::string formatBytes(int64_t bytes) {

@@ -1,6 +1,7 @@
 // Offline downloads: model, HTTP Range decisions, the queue engine against a scripted fake server, crash
 // recovery, free space, 64-bit sizes (sparse files past 4 GiB), offline playback source and progress identity.
 
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
@@ -67,6 +68,11 @@ namespace {
         int64_t hookAfter = -1;       // calls hook once after this many body bytes
         std::function<void()> hook;
         size_t chunk = 16 * 1024;
+        double *clock = nullptr;      // advanced by secondsPerChunk for every body chunk
+        double secondsPerChunk = 0;
+        std::string acceptRanges = "bytes";
+        std::vector<int> receiveBuffers;
+        std::vector<long> transferBuffers;
         std::vector<int64_t> offsets;
         std::vector<std::string> ifRanges;
         std::vector<std::string> urls;
@@ -75,6 +81,8 @@ namespace {
             offsets.push_back(req.offset);
             ifRanges.push_back(req.ifRange);
             urls.push_back(req.url);
+            receiveBuffers.push_back(req.receiveBuffer);
+            transferBuffers.push_back(req.transferBuffer);
             TransferResult r;
             if (networkDown > 0) {
                 networkDown--;
@@ -82,8 +90,10 @@ namespace {
                 r.detail = "Could not connect";
                 return r;
             }
+            sink.onSocket(32 * 1024, req.receiveBuffer > 0 ? req.receiveBuffer : 32 * 1024);
             ResponseHead h;
             h.etag = etag;
+            h.acceptRanges = rangeSupport ? acceptRanges : "none";
             if (failCount > 0) {
                 failCount--;
                 h.status = failStatus;
@@ -138,6 +148,9 @@ namespace {
                     return r;
                 }
                 std::string d = content(pos, n);
+                if (clock) {
+                    *clock += secondsPerChunk;
+                }
                 if (!sink.onData(d.data(), d.size())) {
                     r.outcome = TransferResult::Outcome::Aborted;
                     return r;
@@ -935,4 +948,162 @@ TEST(downloads_offline_source_and_shared_progress) {
         records += x.id == "123";
     }
     CHECK_EQ(records, 1);
+}
+
+// ---------------------------------------------------------------------- speed / diagnostics (Checkpoint 3.1)
+
+TEST(downloads_transfer_stats_math) {
+    StatsMeter m;
+    m.stats().title = "Movie";
+    m.begin(10.0, 1000, 256 * 1024);
+    CHECK(m.stats().active && m.stats().startOffset == 1000 && m.stats().transferBuffer == 256 * 1024);
+    CHECK_EQ(m.stats().title, std::string("Movie"));   // kept across begin()
+    m.head(10.5, 206, 5000000, 1);
+    CHECK(m.stats().lengthKnown && m.stats().httpStatus == 206 && m.stats().rangeSupport == 1);
+    // first byte after 1 s, then 100 KB every 0.1 s (1 MB/s) for 3 s; each write takes 1 ms
+    double t = 11.0;
+    for (int i = 0; i < 30; i++) {
+        m.data(t, 100000, 0.001);
+        t += 0.1;
+    }
+    m.sync(0.2);
+    m.finish(t - 0.1 + 0.2);
+    const TransferStats &s = m.stats();
+    CHECK(!s.active);
+    CHECK_EQ(s.callbacks, (int64_t) 30);
+    CHECK_EQ(s.bytes, (int64_t) 3000000);
+    CHECK_EQ(s.minCallback, (int64_t) 100000);
+    CHECK_EQ(s.maxCallback, (int64_t) 100000);
+    CHECK(std::fabs(s.firstByte - 1.0) < 1e-9);
+    CHECK(std::fabs(s.elapsed - 4.1) < 1e-6);
+    CHECK(std::fabs(s.writeSeconds - 0.03) < 1e-9);
+    CHECK_EQ(s.syncs, 1);
+    CHECK(std::fabs(s.average() - 3000000 / 4.1) < 1);
+    // network side: elapsed minus the wait for the first byte, the writes and the flush
+    CHECK(std::fabs(s.networkSpeed() - 3000000 / (4.1 - 1.0 - 0.03 - 0.2)) < 1);
+    CHECK(std::fabs(s.diskSpeed() - 1e8) < 1);
+    CHECK(std::fabs(s.averageCallback() - 100000) < 1e-6);
+    CHECK(std::fabs(s.callbacksPerSecond() - 30 / 4.1) < 1e-6);
+    // peak: the best 1-second window (1 MB/s here)
+    CHECK(s.peak > 0.95e6 && s.peak < 1.12e6);
+    // nothing transferred: no division by zero
+    TransferStats empty;
+    CHECK(empty.average() == 0 && empty.networkSpeed() == 0 && empty.diskSpeed() == 0 && empty.averageCallback() == 0);
+}
+
+TEST(downloads_instrumentation_callbacks_and_buffers) {
+    Harness h("dl_stats");
+    h.mgr->load(true, nullptr);
+    CHECK(h.mgr->transferStats().title.empty());   // nothing ran yet
+    h.transport.clock = &h.now;
+    h.transport.secondsPerChunk = 0.05;            // 16 KB every 50 ms
+    h.mgr->enqueue(Harness::movie("s1"));
+    CHECK(h.mgr->step());
+    CHECK(h.get("s1").state == State::Completed);
+    TransferStats s = h.mgr->transferStats();
+    CHECK(!s.active);
+    CHECK_EQ(s.title, std::string("Movie s1"));
+    // one callback per 16 KB chunk; the last one is the remainder
+    int64_t chunks = (h.transport.size + 16383) / 16384;
+    CHECK_EQ(s.callbacks, chunks);
+    CHECK_EQ(s.bytes, h.transport.size);
+    CHECK_EQ(s.maxCallback, (int64_t) 16384);
+    CHECK_EQ(s.minCallback, h.transport.size - (chunks - 1) * 16384);
+    CHECK(s.httpStatus == 200 && s.lengthKnown && s.rangeSupport == 1);   // Accept-Ranges: bytes
+    // the receive buffer and libcurl buffer of the configuration reach the transport; the socket's are reported
+    CHECK_EQ(h.transport.receiveBuffers[0], 1024 * 1024);
+    CHECK_EQ(h.transport.transferBuffers[0], 256L * 1024);
+    CHECK_EQ(s.receiveBufferDefault, 32 * 1024);
+    CHECK_EQ(s.receiveBuffer, 1024 * 1024);
+    CHECK_EQ(s.transferBuffer, 256L * 1024);
+    // speeds from the transferred bytes and the (monotonic) clock: 16384 B / 0.05 s
+    CHECK(std::fabs(s.average() - 327680) < 30000);
+    CHECK(s.peak > 300000 && s.peak < 360000);
+    CHECK(s.smoothed > 300000 && s.smoothed < 360000);
+    // a resume answered with 206 counts as Range support
+    Harness r("dl_stats_range");
+    r.mgr->load(true, nullptr);
+    r.mgr->enqueue(Harness::movie("s2"));
+    r.transport.hookAfter = 100000;
+    r.transport.hook = [&r] { r.mgr->pause(makeKey("p1", Kind::Movie, "s2")); };
+    r.mgr->step();
+    r.mgr->resume(makeKey("p1", Kind::Movie, "s2"));
+    r.mgr->step();
+    s = r.mgr->transferStats();
+    CHECK(s.httpStatus == 206 && s.rangeSupport == 1 && s.startOffset >= 100000);
+    CHECK_EQ(s.bytes, r.transport.size - s.startOffset);
+    // a server that ignores Range on a resume: no Range support
+    Harness n("dl_stats_norange");
+    n.mgr->load(true, nullptr);
+    n.mgr->enqueue(Harness::movie("s3"));
+    n.transport.hookAfter = 20000;
+    n.transport.hook = [&n] { n.mgr->pause(makeKey("p1", Kind::Movie, "s3")); };
+    n.mgr->step();
+    n.transport.rangeSupport = false;
+    n.mgr->resume(makeKey("p1", Kind::Movie, "s3"));
+    n.mgr->step();
+    CHECK_EQ(n.mgr->transferStats().rangeSupport, 0);
+}
+
+TEST(downloads_flush_and_manifest_are_bounded) {
+    // byte bound: the harness flushes every 64 KB; the manifest is written with each flush, never per callback
+    Harness h("dl_flush");
+    h.mgr->load(true, nullptr);
+    h.transport.size = 1000000;
+    h.mgr->enqueue(Harness::movie("f1"));
+    CHECK(h.mgr->step());
+    TransferStats s = h.mgr->transferStats();
+    CHECK_EQ(s.callbacks, (int64_t) 62);
+    CHECK_EQ(s.syncs, 15 + 1);              // 15 x 64 KB while writing + the one when the transfer ends
+    CHECK_EQ(s.manifestWrites, 15);         // one per durable flush; 62 callbacks wrote none
+    CHECK(h.get("f1").state == State::Completed);
+
+    // the production policy: 32 MiB or 15 s, whichever first, and only while data arrives
+    Harness t("dl_flush_time");
+    ManagerConfig defaults;
+    CHECK_EQ(defaults.syncEvery, 32ll * 1024 * 1024);
+    CHECK(defaults.syncInterval == 15);
+    CHECK_EQ(defaults.receiveBuffer, 1024 * 1024);
+    CHECK_EQ(defaults.transferBuffer, 256L * 1024);
+    t.mgr.reset();
+    {
+        ManagerConfig c;
+        c.root = t.dir;
+        c.transport = &t.transport;
+        c.clock = [&t] { return t.now; };
+        c.freeSpace = [](const std::string &) { return (int64_t) 1 << 40; };
+        c.buildUrl = [](const Credentials &, Kind, const std::string &id, const std::string &) { return "u/" + id; };
+        t.mgr.reset(new DownloadManager(c));
+        t.mgr->setProfiles({Harness::creds()});
+    }
+    t.mgr->load(true, nullptr);
+    t.transport.size = 16384 * 40;          // 40 callbacks, 1 s apart (a slow link): 40 s
+    t.transport.clock = &t.now;
+    t.transport.secondsPerChunk = 1.0;
+    t.mgr->enqueue(Harness::movie("f2"));
+    unsigned before = t.mgr->generation();
+    CHECK(t.mgr->step());
+    s = t.mgr->transferStats();
+    CHECK_EQ(s.callbacks, (int64_t) 40);
+    CHECK_EQ(s.syncs, 2 + 1);               // at 15 s and 30 s, then at the end
+    CHECK_EQ(s.manifestWrites, 2);
+    // live progress for the UI: at most 4 updates per second of transfer time, not one per callback
+    unsigned updates = t.mgr->generation() - before;
+    CHECK(updates <= 40 + 8);
+    CHECK(t.get("f2").state == State::Completed);
+}
+
+TEST(downloads_progress_rate_is_ui_rate_not_callback_rate) {
+    Harness h("dl_ui_rate");
+    h.mgr->load(true, nullptr);
+    h.transport.size = 16384 * 400;         // 400 callbacks in 2 s (5 ms apart)
+    h.transport.clock = &h.now;
+    h.transport.secondsPerChunk = 0.005;
+    h.mgr->enqueue(Harness::movie("u1"));
+    unsigned before = h.mgr->generation();
+    CHECK(h.mgr->step());
+    unsigned changes = h.mgr->generation() - before;
+    // 2 s at 4 updates per second + a few state changes; never one per callback
+    CHECK(changes >= 6 && changes <= 16);
+    CHECK_EQ(h.mgr->transferStats().callbacks, (int64_t) 400);
 }

@@ -13,6 +13,14 @@
 //                                             the final response (reset on each new status line)
 //   CURLOPT_XFERINFOFUNCTION                  cancellation (pause / cancel / playback started)
 //   CURLOPT_CAINFO                            the packaged CA bundle for HTTPS
+//   CURLOPT_BUFFERSIZE                        TransferRequest::transferBuffer (largest body callback)
+//   CURLOPT_SOCKOPTFUNCTION                   SO_RCVBUF = TransferRequest::receiveBuffer on each new socket,
+//                                             before connect (so the TCP window scale is negotiated for it).
+//                                             A smaller value is tried when the system refuses; the result is
+//                                             reported to the sink (getsockopt), never fatal.
+// Not used, on purpose: CURLOPT_MAX_RECV_SPEED_LARGE (no bandwidth cap), CURLOPT_TIMEOUT (files take hours),
+// CURLOPT_HTTP_VERSION (HTTP/1.1, the only version this libcurl is built with), CURLOPT_TCP_KEEPALIVE (one
+// long transfer that never idles; a stall ends through LOW_SPEED_TIME). TCP_NODELAY is libcurl's default.
 // No Accept-Encoding: media is stored byte for byte and Content-Length must describe the file.
 
 #ifndef PS4IPTV_DOWNLOADS_CURL_TRANSPORT_H

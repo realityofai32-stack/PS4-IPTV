@@ -171,6 +171,14 @@ TEST(it_plain_download_with_length) {
     CHECK_EQ(it.downloadedBytes, (int64_t) 1500000);
     CHECK(fileMatches(t.finalPath("1500000"), 1500000));
     CHECK_EQ(it.etag, std::string("\"1500000-1500000\""));
+    // the real socket: libcurl called the socket hook before connecting, the receive buffer was enlarged and
+    // read back; every body callback was counted
+    TransferStats s = t.mgr->transferStats();
+    CHECK(s.receiveBufferDefault > 0);
+    CHECK(s.receiveBuffer >= 1024 * 1024);
+    CHECK_EQ(s.bytes, (int64_t) 1500000);
+    CHECK(s.callbacks > 0 && s.maxCallback <= 256 * 1024);
+    CHECK(s.httpStatus == 200 && s.lengthKnown);
 }
 
 TEST(it_redirect_is_followed) {
