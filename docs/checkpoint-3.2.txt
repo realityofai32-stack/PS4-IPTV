@@ -1,6 +1,6 @@
 PS4 IPTV - HARDWARE CHECKPOINT 3.2: M3U / M3U8 SOURCES + NEAR-BLACK UI + FAST DS4 SCROLLING + FONTS
 =====================================================================================================
-Build @BUILD@ (v0.2.0, title IPTV00002). PKG IV0001-IPTV00002_00-IPTV000020002000.pkg sha256 @SHA@
+Build 87f5bcd (v0.2.0, title IPTV00002). PKG IV0001-IPTV00002_00-IPTV000020002000.pkg sha256 63e072d4a47d9c8f7b5caddbad761ca53e8b4ec039093f07e683440c70eb9dbd
 
 What changed since Checkpoint 3.1 (build 941f8ec):
   - Sources: "Add Source" offers Xtream Codes or M3U / M3U8 Playlist. Playlist sources are LIVE TV ONLY:
