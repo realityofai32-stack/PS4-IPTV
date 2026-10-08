@@ -1,6 +1,7 @@
 #include <curl/curl.h>
 
 #include "http.h"
+#include "../i18n/i18n.h"
 #include "../platform/log.h"
 
 namespace http {
@@ -56,6 +57,14 @@ namespace http {
 
     void globalShutdown() {
         curl_global_cleanup();
+    }
+
+    const std::string &userAgent() {
+        return g_userAgent;
+    }
+
+    const std::string &caBundle() {
+        return g_caBundle;
     }
 
     Response get(const Request &req) {
@@ -145,23 +154,24 @@ namespace http {
     std::string describe(const Response &r) {
         switch (r.error) {
             case Error::None:
-                return r.status >= 200 && r.status < 300 ? "OK" : "HTTP error " + std::to_string(r.status);
+                return r.status >= 200 && r.status < 300 ? i18n::tr("net.ok")
+                                                         : i18n::tr("net.http_error", {std::to_string(r.status)});
             case Error::Canceled:
-                return "Canceled";
+                return i18n::tr("net.canceled");
             case Error::Timeout:
-                return "Server timeout";
+                return i18n::tr("net.timeout");
             case Error::Dns:
-                return "Server name not found (DNS)";
+                return i18n::tr("net.dns");
             case Error::Connect:
-                return "Unable to connect to the server";
+                return i18n::tr("net.connect");
             case Error::Tls:
-                return "Secure connection (HTTPS) failed";
+                return i18n::tr("net.tls");
             case Error::TooLarge:
-                return "Server response too large";
+                return i18n::tr("net.too_large");
             case Error::HttpsUnsupported:
-                return "Unsupported protocol";
+                return i18n::tr("net.unsupported_protocol");
             default:
-                return "Network error";
+                return i18n::tr("net.failed");
         }
     }
 }

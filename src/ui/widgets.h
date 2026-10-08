@@ -70,6 +70,8 @@ namespace ui {
     private:
         void refresh();
 
+        void fit();
+
         Label *caption;
         bool focused = false;
         bool enabled = true;
@@ -164,6 +166,9 @@ namespace ui {
 
         void setWatched(bool watched);
 
+        // a small corner mark: the movie / series has downloaded content (playable offline)
+        void setDownloaded(bool downloaded);
+
         void setFocused(bool focused);
 
     private:
@@ -173,6 +178,7 @@ namespace ui {
         c2d::RectangleShape *barFill;
         c2d::CircleShape *badge;
         Label *badgeMark;
+        c2d::CircleShape *downloadBadge;
         std::shared_ptr<c2d::Texture> shown;
         std::string currentTitle;
         bool showingImage = false;

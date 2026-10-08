@@ -41,7 +41,7 @@ $h = "$RepoRoot\tests\host"
 Invoke-TestBuild 'app_tests' @(
     "$h\test_main.cpp", "$h\test_core.cpp", "$h\test_iptv.cpp", "$h\test_storage.cpp", "$h\test_jobs.cpp",
     "$h\test_live.cpp", "$h\test_text.cpp", "$h\test_input.cpp", "$h\test_images.cpp", "$h\test_playback.cpp", "$h\test_vod.cpp", "$h\test_tracks.cpp",
-    "$h\test_search.cpp", "$h\test_progress.cpp", "$h\test_catalog.cpp",
+    "$h\test_search.cpp", "$h\test_progress.cpp", "$h\test_catalog.cpp", "$h\test_downloads.cpp", "$h\test_i18n.cpp", "$h\test_display.cpp",
     "$h\stb_impl.cpp",
     "$s\core\utf8.cpp", "$s\core\json.cpp", "$s\core\url.cpp", "$s\iptv\xtream.cpp", "$s\iptv\catalog.cpp",
     "$s\iptv\search_index.cpp", "$s\app\vod_progress.cpp", "$s\app\series_plan.cpp",
@@ -51,7 +51,9 @@ Invoke-TestBuild 'app_tests' @(
     "$s\platform\input_logic.cpp", "$s\ui\scroll_math.cpp", "$s\player\stability.cpp",
     "$s\images\image_key.cpp", "$s\images\disk_cache.cpp", "$s\images\image_decode.cpp",
     "$s\images\image_scheduler.cpp", "$s\images\image_pipeline.cpp", "$s\core\format.cpp",
-    "$s\player\tracks.cpp")
+    "$s\player\tracks.cpp", "$s\player\display.cpp", "$s\i18n\i18n.cpp", "$s\i18n\strings_en.cpp",
+    "$s\i18n\strings_tr.cpp", "$s\downloads\download_model.cpp", "$s\downloads\part_file.cpp",
+    "$s\downloads\download_manager.cpp", "$s\app\offline.cpp")
 
 # playback test app
 $t = "$RepoRoot\tests\playback-test"
@@ -62,6 +64,7 @@ $samples = Join-Path $RepoRoot 'build\xtream-samples'   # optional, from scripts
 if (Test-Path $samples) { $env:PS4IPTV_SAMPLES = $samples } else { Remove-Item Env:\PS4IPTV_SAMPLES -ErrorAction SilentlyContinue }
 $icons = Join-Path $RepoRoot 'build\icon-samples'      # optional: real provider logos (never committed)
 if (Test-Path $icons) { $env:PS4IPTV_ICON_SAMPLES = $icons } else { Remove-Item Env:\PS4IPTV_ICON_SAMPLES -ErrorAction SilentlyContinue }
+$env:PS4IPTV_SOURCE_DIR = $s   # localization checks scan the sources
 $env:PS4IPTV_TEST_TMP = Join-Path $Out 'tmp'
 New-Item -ItemType Directory -Force $env:PS4IPTV_TEST_TMP | Out-Null
 & "$Out\app_tests.exe"

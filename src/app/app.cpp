@@ -3,6 +3,8 @@
 #include "app.h"
 #include "build_info.h"
 #include "screens.h"
+#include "../i18n/i18n.h"
+#include "../iptv/xtream.h"
 #include "../network/http.h"
 #include "../platform/clock.h"
 #include "../platform/fs.h"
@@ -62,6 +64,9 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     if (!warning.empty()) {
         LOG_W("storage", "%s", warning.c_str());
     }
+    // the UI language is Settings > Language (English unless the user chose otherwise), before any screen exists
+    i18n::setLanguage(i18n::fromCode(settingsStore.get().language));
+    LOG_I("app", "UI language: %s", i18n::code(i18n::language()));
     LOG_I("storage", "%d profile(s), active '%s'", (int) profileStore.profiles().size(),
           profileStore.activeId().c_str());
     warning.clear();
@@ -70,6 +75,39 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
         LOG_W("storage", "%s", warning.c_str());
     }
     imageLoader.setEnabled(settingsStore.get().loadImages);
+
+    // offline downloads: libcurl transport (like the API), files under <data>/downloads/
+    downloadTransport.reset(new dl::CurlTransport(http::userAgent(), http::caBundle()));
+    {
+        dl::ManagerConfig dc;
+        dc.root = APP_DATA_DIR "downloads/";
+        dc.transport = downloadTransport.get();
+        dc.clock = [] { return clockx::monotonic(); };
+        dc.wallClock = [] { return clockx::unixNow(); };
+        dc.buildUrl = [](const dl::Credentials &c, dl::Kind kind, const std::string &id, const std::string &ext) {
+            iptv::Profile p;
+            p.id = c.profileId;
+            p.server = c.server;
+            p.username = c.username;
+            p.password = c.password;
+            return kind == dl::Kind::Episode ? xtream::seriesUrl(p, id, ext) : xtream::movieUrl(p, id, ext);
+        };
+#ifdef __PS4__
+        dc.probeLargeFiles = true;
+#endif
+        downloadManager.reset(new dl::DownloadManager(dc));
+        warning.clear();
+        downloadManager->load(settingsStore.get().resumeDownloadsOnStart, &warning);
+        if (!warning.empty()) {
+            LOG_W("downloads", "%s", warning.c_str());
+        }
+        downloadManager->setAutoRetry(settingsStore.get().retryDownloads);
+        syncDownloadProfiles();
+        int64_t free = downloadManager->freeBytes();
+        LOG_I("downloads", "storage %s: %s free", dc.root.c_str(),
+              free >= 0 ? (std::to_string(free / (1024 * 1024)) + " MiB").c_str() : "unknown");
+        downloadManager->startWorker();
+    }
 
     // the proven pPlay playback backend; created once, like pPlay's Player (needs the GL context)
     std::string mpvDir = std::string(APP_DATA_DIR) + "mpv";
@@ -112,8 +150,9 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     toastText->setMaxWidth(860);
     toastBox->setVisibility(Visibility::Hidden);
 
-    // first screen
-#if PS4IPTV_TEXT_TEST_AT_START
+    // first screen: onboarding, or the active profile. The text rendering test never opens by itself in a
+    // release: only a Debug build configured with PS4IPTV_TEXT_TEST_AT_START (CMake refuses it otherwise).
+#if defined(PS4IPTV_DEBUG) && defined(PS4IPTV_TEXT_TEST_AT_START)
     push(screens::makeTextTest(*this, true));
 #else
     push(firstScreen());
@@ -134,6 +173,10 @@ App::~App() {
     LOG_I("app", "shutting down");
     player.stop();
     player.shutdown();
+    if (downloadManager) {
+        downloadManager->shutdown();     // the active transfer stops where it is (resumed next start)
+        downloadManager->stopWorker();
+    }
     jobSystem.stop();
     for (auto *s: graveyard) {
         delete s;
@@ -146,7 +189,35 @@ void App::saveLibrary() {
     std::string err;
     if (!libraryStore.save(&err)) {
         LOG_E("storage", "library save failed: %s", err.c_str());
-        toast("Could not save favorites/history", ToastKind::Error);
+        toast(i18n::tr("library.save_failed"), ToastKind::Error);
+    }
+}
+
+void App::syncDownloadProfiles() {
+    std::vector<dl::Credentials> creds;
+    for (const auto &p: profileStore.profiles()) {
+        dl::Credentials c;
+        c.profileId = p.id;
+        c.name = p.name;
+        c.server = p.server;
+        c.username = p.username;
+        c.password = p.password;
+        creds.push_back(c);
+    }
+    downloadManager->setProfiles(creds);
+}
+
+void App::setPlaybackActive(bool active) {
+    downloadManager->setPlaybackActive(active);
+}
+
+void App::applyLanguage(bool rebuildScreens) {
+    i18n::setLanguage(i18n::fromCode(settingsStore.get().language));
+    LOG_I("app", "UI language changed to %s", i18n::code(i18n::language()));
+    if (rebuildScreens) {
+        // every screen builds its labels when it is created: start over at the root, back in Settings
+        replaceAll(currentSession.connected || currentSession.offline ? screens::makeHome(*this) : firstScreen());
+        push(screens::makeSettings(*this));
     }
 }
 

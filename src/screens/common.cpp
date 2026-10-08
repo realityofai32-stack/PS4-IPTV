@@ -37,15 +37,16 @@ namespace screens {
     }
 
     std::string accountSummary(const iptv::AccountInfo &a) {
-        std::string s = a.status.empty() ? "Active" : a.status;
+        // the provider's status word is shown as sent; only the app's own words are translated
+        std::string s = a.status.empty() ? i18n::tr("account.active") : a.status;
         if (a.trial) {
-            s += " (trial)";
+            s = i18n::tr("account.trial", {s});
         }
-        s += a.expiresAt > 0 ? "  \xE2\x80\xA2  expires " + clockx::localDate(a.expiresAt)
-                             : "  \xE2\x80\xA2  no expiry date";
+        s += "  \xE2\x80\xA2  " + (a.expiresAt > 0 ? i18n::tr("account.expires", {clockx::localDate(a.expiresAt)})
+                                                   : i18n::tr("account.no_expiry"));
         if (a.maxConnections > 0) {
-            s += "  \xE2\x80\xA2  " + std::to_string(a.activeConnections) + " / " + std::to_string(a.maxConnections)
-                 + " connections in use";
+            s += "  \xE2\x80\xA2  " + i18n::tr("account.connections", {std::to_string(a.activeConnections),
+                                                                        std::to_string(a.maxConnections)});
         }
         return s;
     }

@@ -9,6 +9,7 @@
 #include <cmath>
 
 #include "common.h"
+#include "../player/display.h"
 #include "../iptv/xtream.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
@@ -32,6 +33,7 @@ namespace {
                                                               : stability::FormatSetting::Auto;
     }
 
+    // i18n-exempt-begin: English status names for the log
     const char *statusName(stability::Status s) {
         switch (s) {
             case stability::Status::Opening:
@@ -48,6 +50,29 @@ namespace {
                 return "failed";
         }
     }
+    // i18n-exempt-end
+
+    const char *statusKey(stability::Status s) {
+        switch (s) {
+            case stability::Status::Opening:
+                return "recovery.status.opening";
+            case stability::Status::Playing:
+                return "recovery.status.playing";
+            case stability::Status::Buffering:
+                return "recovery.status.buffering";
+            case stability::Status::Reconnecting:
+                return "recovery.status.reconnecting";
+            case stability::Status::Refused:
+                return "recovery.status.refused";
+            default:
+                return "recovery.status.failed";
+        }
+    }
+
+    const char *stabilityKey(StabilityPreset p) {
+        return p == StabilityPreset::Fast ? "stability.fast" : p == StabilityPreset::MaxStability ? "stability.max"
+                                                                                                  : "stability.balanced";
+    }
 
     class LivePlayerScreen : public Screen {
     public:
@@ -55,6 +80,7 @@ namespace {
                          std::function<void(const std::string &)> exitCallback)
                 : Screen(a), list(std::move(channelList)), index(start), onExit(std::move(exitCallback)) {
             setFillColor(Color::Black);
+            app.setPlaybackActive(true);   // downloads pause while a stream is decoded
             video = new VideoTexture(app.playback().backend(), {theme::SCREEN_W, theme::SCREEN_H});
             add(video);
 
@@ -76,9 +102,9 @@ namespace {
             hints = new ui::HintBar();
             hints->setPosition(theme::SAFE_X, 92);
             bottom->add(hints);
-            hints->setHints({{ui::Glyph::Cross, "Controls"}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, "Channel"},
-                             {ui::Glyph::Square, "Favorite"}, {ui::Glyph::Triangle, "Info"},
-                             {ui::Glyph::Circle, "Back"}});
+            hints->setHints({{ui::Glyph::Cross, tr("live.controls")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.channel")},
+                             {ui::Glyph::Square, tr("common.favorite")}, {ui::Glyph::Triangle, tr("player.info")},
+                             {ui::Glyph::Circle, tr("common.back")}});
 
             // centre: opening / reconnecting / HTTP 403 countdown / failure
             centre = ui::box(this, FloatRect((theme::SCREEN_W - CENTRE_W) / 2, 380, CENTRE_W, CENTRE_H),
@@ -110,7 +136,7 @@ namespace {
             // technical info
             info = ui::box(this, FloatRect(theme::SCREEN_W - theme::SAFE_X - 660, 220, 660, 560),
                            Color(12, 16, 22, 230), theme::RADIUS);
-            ui::label(info, "Stream information", theme::HEADING, 36, 30, ui::Weight::SemiBold);
+            ui::label(info, tr("info.title"), theme::HEADING, 36, 30, ui::Weight::SemiBold);
             infoText = ui::label(info, "", theme::LABEL, 36, 96, ui::Weight::Regular, theme::textDim());
             infoText->setMaxWidth(600);
             infoText->setMaxLines(15);
@@ -119,6 +145,7 @@ namespace {
 
         ~LivePlayerScreen() override {
             app.playback().stop();
+            app.setPlaybackActive(false);
         }
 
         const char *name() const override { return "live-player"; }
@@ -201,7 +228,7 @@ namespace {
                     if (!e.repeat) {
                         bool on = app.library().toggleFavorite(ContentType::Live, channel(index).streamId);
                         app.saveLibrary();
-                        app.toast(on ? "Added to favorites" : "Removed from favorites");
+                        app.toast(tr(on ? "favorites.added" : "favorites.removed"));
                         setOverlay(true);
                     }
                     return;
@@ -263,6 +290,10 @@ namespace {
         void open() {
             Playback &pb = app.playback();
             pb.applyOptions(stability::mpvOptions(preset));
+            // the default display mode / zoom (mpv keeps vo properties between files: a change made in a movie's
+            // Options panel must not carry over to Live TV)
+            const Settings &st = app.settings().get();
+            pb.applyOptions(display::mpvOptions(st.displayMode, st.zoomPercent));
             std::string url = xtream::liveUrl(app.session().profile, channel(index).streamId, format);
             pb.open(url, format == "ts" ? "MPEG-TS" : "HLS");
             video->resetFrameStats();
@@ -354,35 +385,36 @@ namespace {
             title->setText((c.num > 0 ? std::to_string(c.num) + "   " : std::string()) + c.name);
             subtitle->setText(categoryName(c.categoryId));
             clock->setText(clockx::localTime());
-            fav->setText(app.library().isFavorite(ContentType::Live, c.streamId) ? "\xE2\x98\x85 Favorite" : "");
+            fav->setText(app.library().isFavorite(ContentType::Live, c.streamId) ? "\xE2\x98\x85 " + tr("common.favorite") : "");
 
             const StreamInfo &si = pb.info();
             stability::Status rs = recovery.status();
             int secondsLeft = (int) std::ceil(recovery.secondsLeft(now));
-            std::string attempt = std::to_string(recovery.attempts()) + " of " + std::to_string(recovery.maxAttempts());
+            std::string attempt = tr("player.attempt_of", {std::to_string(recovery.attempts()),
+                                                           std::to_string(recovery.maxAttempts())});
             bool zapping = pendingIndex >= 0;
 
             std::string st;
             if (zapping) {
-                st = "Switching channel" "\xE2\x80\xA6";
+                st = tr("live.switching");
             } else if (rs == stability::Status::Playing) {
-                st = "LIVE";
+                st = tr("live.live");
                 if (si.height > 0) {
                     st += "   \xC2\xB7   " + std::to_string(si.height) + "p";
                 }
                 if (!pb.hasAudio()) {
-                    st += "   \xC2\xB7   no audio";
+                    st += "   \xC2\xB7   " + tr("live.no_audio");
                 }
             } else if (rs == stability::Status::Buffering) {
-                st = "Buffering" "\xE2\x80\xA6";
+                st = tr("player.buffering");
             } else if (rs == stability::Status::Reconnecting) {
-                st = "Reconnecting" "\xE2\x80\xA6";
+                st = tr("player.reconnecting");
             } else if (rs == stability::Status::Refused) {
-                st = "Retrying in " + std::to_string(secondsLeft) + " s" "\xE2\x80\xA6";
+                st = tr("live.retrying_in", {std::to_string(secondsLeft)});
             } else if (rs == stability::Status::Failed) {
-                st = "Stream unavailable";
+                st = tr("live.unavailable");
             } else {
-                st = "Opening" "\xE2\x80\xA6";
+                st = tr("player.opening");
             }
             status->setText(st);
             status->setColor(rs == stability::Status::Failed ? theme::danger() : theme::text());
@@ -401,27 +433,23 @@ namespace {
             if (rs == stability::Status::Opening) {
                 centreTitle->setText(c.name);
                 double secs = pb.openSeconds(now);
-                centreText->setText(secs > 15 ? "The server is slow to respond" "\xE2\x80\xA6" " still trying."
-                                              : format == "ts" ? "Opening" "\xE2\x80\xA6"
-                                                               : "Opening (HLS)" "\xE2\x80\xA6");
+                centreText->setText(secs > 15 ? tr("live.slow_server")
+                                              : format == "ts" ? tr("player.opening") : tr("live.opening_hls"));
             } else if (rs == stability::Status::Reconnecting) {
-                centreTitle->setText("Reconnecting" "\xE2\x80\xA6");
-                centreText->setText(secondsLeft > 0 ? "Connection lost. Next attempt in " + std::to_string(secondsLeft)
-                                                      + " s  (attempt " + attempt + ")"
-                                                    : "Attempt " + attempt + (format == "ts" ? "" : "  (HLS)"));
+                centreTitle->setText(tr("player.reconnecting"));
+                centreText->setText(secondsLeft > 0 ? tr("player.next_attempt", {std::to_string(secondsLeft), attempt})
+                                                    : tr("player.attempt", {attempt}) + (format == "ts" ? "" : "  (HLS)"));
             } else if (rs == stability::Status::Refused) {
-                centreTitle->setText("Provider temporarily refused the stream (HTTP 403)");
-                centreText->setText("Retrying in " + std::to_string(secondsLeft) + " s" "\xE2\x80\xA6"
-                                    "  (attempt " + attempt + ")");
-                centreHint->setText("X  Retry now          Circle  Cancel");
+                centreTitle->setText(tr("player.http_403"));
+                centreText->setText(tr("player.retrying_in", {std::to_string(secondsLeft), attempt}));
+                centreHint->setText(tr("player.hint_retry_now"));
             } else if (rs == stability::Status::Failed) {
                 bool stopped = pb.state() == PlaybackState::Error;
-                centreTitle->setText(stopped && !pb.errorMessage().empty() ? pb.errorMessage() : "Stream unavailable");
-                centreText->setText(recovery.attempts() > 0 ? "Automatic reconnect gave up after "
-                                                              + std::to_string(recovery.attempts()) + " attempts."
+                centreTitle->setText(stopped && !pb.errorMessage().empty() ? pb.errorMessage() : tr("live.unavailable"));
+                centreText->setText(recovery.attempts() > 0 ? tr("player.gave_up", {std::to_string(recovery.attempts())})
                                                             : pb.state() == PlaybackState::Ended
-                                                              ? "The stream ended." : "");
-                centreHint->setText("X  Retry          Circle  Back");
+                                                              ? tr("live.ended") : "");
+                centreHint->setText(tr("player.hint_retry"));
             }
 
             // buffering pill over the (frozen) picture
@@ -429,35 +457,34 @@ namespace {
             pill->setVisibility(pillShown ? Visibility::Visible : Visibility::Hidden);
             if (pillShown) {
                 bool manual = !app.settings().get().retryOnStall && !recovery.reason().empty();
-                pillText->setText(manual ? "Buffering" "\xE2\x80\xA6" "  X reconnects" : "Buffering" "\xE2\x80\xA6");
+                pillText->setText(manual ? tr("live.buffering_manual") : tr("player.buffering"));
                 pillSpinner->tick(now);
             }
 
             if (info->isVisible()) {
-                char buf[1400];
-                snprintf(buf, sizeof(buf),
-                         "Type          %s\nResolution    %s\nFrame rate    %s\nVideo codec   %s\nPixel format  %s\n"
-                         "Audio codec   %s\nAudio         %s\nOutput        %s\nBuffer        %.1f s\n"
-                         "Network       %s\nDropped       %lld\nStability     %s\nState         %s\n"
-                         "Recovery      %s",
-                         si.format.c_str(),
-                         si.width > 0 ? (std::to_string(si.width) + " x " + std::to_string(si.height)).c_str() : "-",
-                         si.fps > 0 ? diag::format("%.2f fps", si.fps).c_str() : "-",
-                         si.videoCodec.empty() ? "-" : si.videoCodec.c_str(),
-                         si.pixelFormat.empty() ? "-" : si.pixelFormat.c_str(),
-                         si.audioCodec.empty() ? "-" : si.audioCodec.c_str(),
-                         si.sampleRate > 0 ? diag::format("%d Hz, %s", si.sampleRate,
-                                                          si.channels == 1 ? "mono" : si.channels == 2 ? "stereo"
-                                                          : (std::to_string(si.channels) + " channels").c_str()).c_str()
-                                           : "-",
-                         si.audioOutput.empty() ? "-" : ("PS4 audio (" + si.audioOutput + ")").c_str(),
-                         si.cacheSeconds,
-                         si.cacheSpeed > 0 ? diag::format("%lld KB/s", si.cacheSpeed / 1000).c_str() : "-",
-                         si.droppedFrames, stabilityName(preset), statusName(rs),
-                         (std::to_string(recovery.attempts()) + " / " + std::to_string(recovery.maxAttempts())
-                          + (recovery.fallbackUsed() ? ", format fallback used" : "")
-                          + (recovery.reason().empty() ? "" : ", last: " + recovery.reason())).c_str());
-                infoText->setText(buf);
+                std::string reason = recovery.reasonText();
+                std::vector<std::pair<const char *, std::string>> lines = {
+                        {"info.type", si.format},
+                        {"info.resolution", si.width > 0 ? std::to_string(si.width) + " x " + std::to_string(si.height) : "-"},
+                        {"info.frame_rate", si.fps > 0 ? diag::format("%.2f fps", si.fps) : "-"},
+                        {"info.video_codec", si.videoCodec.empty() ? "-" : si.videoCodec},
+                        {"info.pixel_format", si.pixelFormat.empty() ? "-" : si.pixelFormat},
+                        {"info.audio_codec", si.audioCodec.empty() ? "-" : si.audioCodec},
+                        {"info.audio", si.sampleRate > 0 ? diag::format("%d Hz, ", si.sampleRate) + tracks::channelsName(si.channels) : "-"},
+                        {"info.output", si.audioOutput.empty() ? "-" : tr("info.output_value", {si.audioOutput})},
+                        {"info.buffer", diag::format("%.1f s", si.cacheSeconds)},
+                        {"info.network", si.cacheSpeed > 0 ? diag::format("%lld KB/s", si.cacheSpeed / 1000) : "-"},
+                        {"info.dropped", std::to_string(si.droppedFrames)},
+                        {"info.stability", tr(stabilityKey(preset))},
+                        {"info.state", tr(statusKey(rs))},
+                        {"info.recovery", std::to_string(recovery.attempts()) + " / " + std::to_string(recovery.maxAttempts())
+                                          + (recovery.fallbackUsed() ? ", " + tr("info.fallback_used") : "")
+                                          + (reason.empty() ? "" : ", " + tr("info.last", {reason}))}};
+                std::string text;
+                for (const auto &l: lines) {
+                    text += (text.empty() ? "" : "\n") + tr(l.first) + ":  " + l.second;
+                }
+                infoText->setText(text);
             }
         }
 

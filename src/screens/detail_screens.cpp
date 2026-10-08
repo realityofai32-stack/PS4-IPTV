@@ -3,10 +3,16 @@
 // Both open at once with what the catalog already has (title, year, rating, poster; for series also plot,
 // cast, genre) and request their detail response lazily (get_vod_info / get_series_info). The large poster
 // is loaded as its own image kind; the grid poster (usually cached already) is shown until it arrives.
+//
+// Downloads: Movie details offer Download (then "Download 42%" with its actions, then Delete download once it
+// is complete); Play / Resume use the downloaded file when there is one. Episode rows show their download
+// state; Square downloads the focused episode, OPTIONS opens its actions (incl. downloading the whole season
+// after a confirmation).
 
 #include <cctype>
 
 #include "common.h"
+#include "../app/offline.h"
 #include "../app/series_plan.h"
 #include "../core/format.h"
 #include "../platform/log.h"
@@ -39,6 +45,53 @@ namespace {
             c = (char) toupper((unsigned char) c);
         }
         return join({video, audio, ext});
+    }
+
+    // short state of a download for buttons and rows: "Download 42%", "Queued", "Paused" ...
+    std::string downloadLabel(const dl::Item &d, const dl::LiveProgress &live) {
+        switch (d.state) {
+            case dl::State::Downloading: {
+                int64_t bytes = d.key == live.key ? live.bytes : d.downloadedBytes;
+                int64_t total = d.key == live.key ? live.total : d.expectedBytes;
+                int pct = dl::percent(bytes, total);
+                return pct >= 0 ? tr("download.button_pct", {std::to_string(pct)}) : tr("download.state.downloading");
+            }
+            case dl::State::Queued:
+                return tr("download.state.queued");
+            case dl::State::Paused:
+                return tr("download.state.paused");
+            case dl::State::WaitingForNetwork:
+                return tr("download.state.waiting");
+            case dl::State::Failed:
+                return tr("download.state.failed");
+            default:
+                return tr("download.state.completed");
+        }
+    }
+
+    // toast for an enqueue result
+    void announceEnqueue(App &app, dl::DownloadManager::Enqueue r) {
+        switch (r) {
+            case dl::DownloadManager::Enqueue::Added:
+                app.toast(tr(app.downloads().playbackActive() ? "download.queued_playback" : "download.queued"),
+                          ToastKind::Success);
+                break;
+            case dl::DownloadManager::Enqueue::Resumed:
+                app.toast(tr("download.resumed"), ToastKind::Success);
+                break;
+            case dl::DownloadManager::Enqueue::Exists:
+                app.toast(tr("download.exists"));
+                break;
+            case dl::DownloadManager::Enqueue::Completed:
+                app.toast(tr("download.already"));
+                break;
+            case dl::DownloadManager::Enqueue::NoProfile:
+                app.toast(tr("download.problem.profile_missing"), ToastKind::Error);
+                break;
+            case dl::DownloadManager::Enqueue::NoSpace:
+                app.toast(tr("download.problem.no_space"), ToastKind::Error);
+                break;
+        }
     }
 
     // poster: the large version when ready, else the grid version, else the title
@@ -75,12 +128,12 @@ namespace {
             progressText = ui::label(this, "", theme::LABEL, x, 760, ui::Weight::SemiBold, theme::textDim());
             barTrack = ui::box(this, FloatRect(x, 800, 600, 8), Color(255, 255, 255, 50), 4);
             barFill = ui::box(barTrack, FloatRect(0, 0, 8, 8), theme::accent(), 4);
-            for (int i = 0; i < 3; i++) {
-                buttons[i] = new ui::Button("", FloatRect(x + (float) i * 360, 850, 340, 84), i == 0);
+            for (int i = 0; i < BUTTONS; i++) {
+                buttons[i] = new ui::Button("", FloatRect(x + (float) i * 320, 850, 300, 84), i == 0);
                 add(buttons[i]);
             }
-            screens::hintBar(this, {{ui::Glyph::Cross, "Select"}, {ui::Glyph::Square, "Favorite"},
-                                    {ui::Glyph::Circle, "Back"}});
+            screens::hintBar(this, {{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Square, tr("common.favorite")},
+                                    {ui::Glyph::Circle, tr("common.back")}});
             app.vod().requestMovieInfo(app.session().profile, movie.streamId);
             refresh();
         }
@@ -104,9 +157,11 @@ namespace {
             app.images().want(std::vector<ImageRequest>());
         }
 
-        void tick(double) override {
-            if (app.vod().generation() != vodGen || app.images().generation() != imageGen
+        void tick(double now) override {
+            bool downloads = app.downloads().generation() != downloadsGen && now - lastDownloadRefresh >= 0.25;
+            if (downloads || app.vod().generation() != vodGen || app.images().generation() != imageGen
                 || app.library().generation() != libraryGen) {
+                lastDownloadRefresh = now;
                 refresh();
                 redraw();
             }
@@ -130,6 +185,12 @@ namespace {
                 case PadButton::Cross:
                     activate(actions[focus]);
                     return;
+                case PadButton::Options:
+                case PadButton::Triangle:
+                    if (hasDownload) {
+                        activate(Action::DownloadActions);
+                    }
+                    return;
                 case PadButton::Square:
                     activate(Action::Favorite);
                     return;
@@ -148,8 +209,13 @@ namespace {
             Play,
             StartOver,
             Favorite,
-            ResetProgress
+            ResetProgress,
+            Download,
+            DownloadActions,
+            DeleteDownload
         };
+
+        static const int BUTTONS = 4;
 
         void requestImages() {
             if (app.settings().get().loadImages) {
@@ -167,7 +233,80 @@ namespace {
             it.year = movie.year;
             std::shared_ptr<const MovieInfo> info = app.vod().movieInfo(movie.streamId);
             it.durationHint = info ? info->durationSeconds : 0;
+            offline::preferLocal(app.downloads(), it, app.session().profile.id);   // the downloaded copy, if any
             return it;
+        }
+
+        dl::Item downloadItem() const {
+            dl::Item d;
+            d.kind = dl::Kind::Movie;
+            d.profileId = app.session().profile.id;
+            d.contentId = movie.streamId;
+            d.title = movie.title;
+            d.year = movie.year;
+            d.extension = movie.extension.empty() ? "mkv" : movie.extension;
+            d.poster = movie.icon;
+            std::shared_ptr<const MovieInfo> info = app.vod().movieInfo(movie.streamId);
+            d.durationHint = info ? info->durationSeconds : 0;
+            return d;
+        }
+
+        void downloadActions() {
+            dl::Item d;
+            if (!app.downloads().find(app.session().profile.id, dl::Kind::Movie, movie.streamId, d)) {
+                return;
+            }
+            std::vector<std::string> names;
+            std::vector<std::function<void()>> acts;
+            std::string key = d.key;
+            if (d.state == dl::State::Completed) {
+                names.push_back(tr("download.delete"));
+                acts.push_back([this] { activate(Action::DeleteDownload); });
+            } else {
+                bool running = d.state == dl::State::Downloading || d.state == dl::State::Queued
+                               || d.state == dl::State::WaitingForNetwork;
+                if (d.problem == dl::Problem::RestartNeeded) {
+                    names.push_back(tr("download.restart"));
+                    acts.push_back([this, key] { app.downloads().confirmRestart(key); });
+                } else {
+                    names.push_back(tr(running ? "download.pause" : d.state == dl::State::Failed ? "download.retry"
+                                                                                                  : "download.resume"));
+                    acts.push_back([this, key, running] {
+                        if (running) {
+                            app.downloads().pause(key);
+                        } else {
+                            app.downloads().resume(key);
+                        }
+                    });
+                }
+                names.push_back(tr("download.cancel"));
+                acts.push_back([this, key] {
+                    app.push(screens::makeDialog(app, tr("download.cancel_title"), tr("download.cancel_text", {movie.title}),
+                                                 {tr("common.cancel"), tr("download.cancel")}, guarded2([this, key](int c) {
+                                if (c == 1) {
+                                    app.downloads().cancel(key);
+                                    app.toast(tr("download.cancelled"));
+                                }
+                            }), true));
+                });
+            }
+            names.push_back(tr("downloads.open"));
+            acts.push_back([this] { app.push(screens::makeDownloads(app)); });
+            std::weak_ptr<bool> w = token;
+            app.push(screens::makeMenu(app, tr("downloads.title"), names, -1, [w, acts](int i) {
+                if (w.lock() && i >= 0 && i < (int) acts.size()) {
+                    acts[(size_t) i]();
+                }
+            }));
+        }
+
+        std::function<void(int)> guarded2(std::function<void(int)> f) {
+            std::weak_ptr<bool> w = token;
+            return [w, f](int c) {
+                if (w.lock()) {
+                    f(c);
+                }
+            };
         }
 
         void activate(Action a) {
@@ -184,15 +323,41 @@ namespace {
                 case Action::Favorite: {
                     bool on = app.library().toggleFavorite(ContentType::Movie, movie.streamId);
                     app.saveLibrary();
-                    app.toast(on ? "Added to favorites" : "Removed from favorites", on ? ToastKind::Success
-                                                                                        : ToastKind::Info);
+                    app.toast(tr(on ? "favorites.added" : "favorites.removed"), on ? ToastKind::Success
+                                                                                  : ToastKind::Info);
                     break;
                 }
                 case Action::ResetProgress:
                     app.library().resetProgress(ContentType::Movie, movie.streamId);
                     app.saveLibrary();
-                    app.toast("Marked as not watched");
+                    app.toast(tr("progress.marked_unwatched"));
                     break;
+                case Action::Download:
+                    announceEnqueue(app, app.downloads().enqueue(downloadItem()));
+                    break;
+                case Action::DownloadActions:
+                    downloadActions();
+                    return;
+                case Action::DeleteDownload: {
+                    dl::Item d;
+                    if (!app.downloads().find(app.session().profile.id, dl::Kind::Movie, movie.streamId, d)) {
+                        return;
+                    }
+                    std::string key = d.key;
+                    app.push(screens::makeDialog(app, tr("download.delete_title"), tr("download.delete_text", {movie.title}),
+                                                 {tr("common.cancel"), tr("download.delete")}, guarded2([this, key](int c) {
+                                if (c != 1) {
+                                    return;
+                                }
+                                if (app.downloads().remove(key)) {
+                                    app.toast(tr("download.deleted"), ToastKind::Success);   // progress is kept
+                                } else {
+                                    app.toast(tr("download.delete_failed"), ToastKind::Error);
+                                }
+                                refresh();
+                            }), true));
+                    return;
+                }
             }
             refresh();
         }
@@ -216,10 +381,10 @@ namespace {
                     c += info->genre + "\n";
                 }
                 if (!info->director.empty()) {
-                    c += "Director: " + info->director + "\n";
+                    c += tr("detail.director", {info->director}) + "\n";
                 }
                 if (!info->cast.empty()) {
-                    c += "Cast: " + info->cast;
+                    c += tr("detail.cast", {info->cast});
                 }
             }
             credits->setText(c);
@@ -227,8 +392,7 @@ namespace {
                 plot->setText(info->plot.empty() ? "" : info->plot);
                 plot->setColor(theme::text());
             } else {
-                plot->setText(error.empty() ? "Loading details" "\xE2\x80\xA6"
-                                            : "Details unavailable (" + error + "). You can still play the movie.");
+                plot->setText(error.empty() ? tr("detail.loading") : tr("detail.movie_unavailable", {error}));
                 plot->setColor(theme::textMuted());
             }
             // stack the text blocks under the title
@@ -245,10 +409,10 @@ namespace {
             bool resumable = p && progress::inProgress(p->position, p->duration, p->watched);
             bool watched = p && p->watched;
             if (resumable) {
-                progressText->setText(fmt::remaining(p->position, p->duration) + "  (stopped at "
-                                      + fmt::clock(p->position) + ")");
+                progressText->setText(tr("detail.stopped_at", {fmt::remaining(p->position, p->duration),
+                                                               fmt::clock(p->position)}));
             } else {
-                progressText->setText(watched ? "\xE2\x9C\x93  Watched" : "");
+                progressText->setText(watched ? "\xE2\x9C\x93  " + tr("progress.watched") : "");
             }
             progressText->setColor(watched ? theme::success() : theme::textDim());
             barTrack->setVisibility(resumable ? Visibility::Visible : Visibility::Hidden);
@@ -257,6 +421,12 @@ namespace {
             }
 
             bool fav = app.library().isFavorite(ContentType::Movie, movie.streamId);
+            downloadsGen = app.downloads().generation();
+            dl::Item d;
+            hasDownload = app.downloads().find(app.session().profile.id, dl::Kind::Movie, movie.streamId, d);
+            bool local = hasDownload && d.state == dl::State::Completed
+                         && !offline::localFile(app.downloads(), app.session().profile.id, ContentType::Movie,
+                                                movie.streamId).empty();
             buttonCount = 0;
             auto addButton = [this](Action a, const std::string &text) {
                 actions[buttonCount] = a;
@@ -264,21 +434,32 @@ namespace {
                 buttonCount++;
             };
             if (resumable) {
-                addButton(Action::Resume, "\xE2\x96\xB6  Resume " + fmt::clock(p->position));   // exactly there
-                addButton(Action::StartOver, "Start over");
+                // exactly there; from the downloaded file when there is one
+                addButton(Action::Resume, "\xE2\x96\xB6  " + tr(local ? "detail.resume_offline" : "detail.resume",
+                                                                {fmt::clock(p->position)}));
+                addButton(Action::StartOver, tr("common.start_over"));
             } else {
-                addButton(Action::Play, watched ? "\xE2\x96\xB6  Play again" : "\xE2\x96\xB6  Play");
+                addButton(Action::Play, "\xE2\x96\xB6  " + tr(local ? (watched ? "detail.play_again_offline" : "download.play_offline")
+                                                                     : (watched ? "detail.play_again" : "common.play")));
                 if (watched) {
-                    addButton(Action::ResetProgress, "Mark as not watched");
+                    addButton(Action::ResetProgress, tr("progress.mark_unwatched"));
                 }
             }
-            addButton(Action::Favorite, fav ? "\xE2\x98\x85  In favorites" : "\xE2\x98\x86  Add to favorites");
+            if (local) {
+                addButton(Action::DeleteDownload, tr("download.delete"));
+            } else if (hasDownload) {
+                addButton(Action::DownloadActions, "\xE2\x86\x93  " + downloadLabel(d, app.downloads().live()));
+            } else {
+                addButton(Action::Download, "\xE2\x86\x93  " + tr("download.download"));
+            }
+            addButton(Action::Favorite, fav ? "\xE2\x98\x85  " + tr("favorites.in_favorites")
+                                            : "\xE2\x98\x86  " + tr("favorites.add"));
             focus = std::min(focus, buttonCount - 1);
             refreshButtons();
         }
 
         void refreshButtons() {
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < BUTTONS; i++) {
                 buttons[i]->setVisibility(i < buttonCount ? Visibility::Visible : Visibility::Hidden);
                 buttons[i]->setFocused(i == focus);
             }
@@ -294,14 +475,18 @@ namespace {
         ui::Label *progressText;
         RectangleShape *barTrack;
         RectangleShape *barFill;
-        ui::Button *buttons[3];
-        Action actions[3] = {Action::Play, Action::Favorite, Action::Favorite};
+        ui::Button *buttons[BUTTONS];
+        Action actions[BUTTONS] = {Action::Play, Action::Favorite, Action::Favorite, Action::Favorite};
         int buttonCount = 0;
         int focus = 0;
         bool backFromPlayback = false;
+        bool hasDownload = false;
         unsigned vodGen = 0;
         unsigned imageGen = 0;
         unsigned libraryGen = 0;
+        unsigned downloadsGen = 0;
+        double lastDownloadRefresh = 0;
+        std::shared_ptr<bool> token = std::make_shared<bool>(true);
     };
 
     // ------------------------------------------------------------------ series
@@ -393,6 +578,13 @@ namespace {
                 refreshAll();
                 redraw();
             }
+            if (app.downloads().generation() != downloadsGen && now - lastDownloadRefresh >= 0.25) {
+                lastDownloadRefresh = now;   // episode download states / percentages
+                downloadsGen = app.downloads().generation();
+                liveDownload = app.downloads().live();
+                episodes->reload();
+                redraw();
+            }
             if (app.images().generation() != imageGen) {
                 imageGen = app.images().generation();
                 bindPoster(app, cover, series.title, series.cover);
@@ -443,12 +635,27 @@ namespace {
                     continue;
                 }
                 r.code->setText(fmt::episodeCode(ep.season, ep.number));
-                r.name->setText(ep.title.empty() ? "Episode " + std::to_string(ep.number) : ep.title);
+                r.name->setText(ep.title.empty() ? tr("episode.number", {std::to_string(ep.number)}) : ep.title);
                 r.name->setWeight(focused ? ui::Weight::SemiBold : ui::Weight::Regular);
                 r.name->setColor(focused ? Color::White : theme::text());
                 r.detail->setText(join({fmt::duration(ep.durationSeconds),
                                         fmt::resolution(ep.media.width, ep.media.height)}));
-                r.state->setText(state == seriesplan::EpisodeState::Watched ? "\xE2\x9C\x93  Watched" : "");
+                // "✓ Watched", and the download: "↓ Downloaded" / "↓ 42%" / "↓ Queued"...
+                std::string st = state == seriesplan::EpisodeState::Watched ? "\xE2\x9C\x93  " + tr("progress.watched") : "";
+                dl::Item d;
+                bool hasDl = app.downloads().find(app.session().profile.id, dl::Kind::Episode, ep.id, d);
+                if (hasDl) {
+                    std::string ds = "\xE2\x86\x93 " + (d.state == dl::State::Completed ? tr("download.badge")
+                                                                                         : downloadLabel(d, liveDownload));
+                    if (partial) {
+                        // the right side shows the position and its bar: the download goes on the detail line
+                        r.detail->setText(r.detail->getText() + (r.detail->getText().empty() ? "" : "   \xC2\xB7   ") + ds);
+                    } else {
+                        st = st.empty() ? ds : ds + "   " + st;
+                    }
+                }
+                r.state->setText(st);
+                r.state->setColor(hasDl && d.state == dl::State::Failed ? theme::danger() : theme::success());
                 double total = p && p->duration > 0 ? p->duration : ep.durationSeconds;
                 r.time->setText(partial ? (total > 0 ? fmt::clock(p->position) + " / " + fmt::clock(total)
                                                      : fmt::clock(p->position)) : "");
@@ -527,7 +734,17 @@ namespace {
                     return;
                 case PadButton::Square:
                     if (!e.repeat) {
-                        activate(Action::Favorite);
+                        if (focus == 2 && count() > 0) {
+                            episodeDownload(seasonIndex, episodes->selected());   // download / pause / resume
+                        } else {
+                            activate(Action::Favorite);
+                        }
+                    }
+                    return;
+                case PadButton::Options:
+                case PadButton::Triangle:
+                    if (!e.repeat && focus == 2 && count() > 0) {
+                        episodeMenu(seasonIndex, episodes->selected());
                     }
                     return;
                 case PadButton::Circle:
@@ -589,10 +806,149 @@ namespace {
                     it.season = ep.season;
                     it.episode = ep.number;
                     it.durationHint = ep.durationSeconds;
+                    offline::preferLocal(app.downloads(), it, app.session().profile.id);   // downloaded episodes
                     q.push_back(it);
                 }
             }
             return q;
+        }
+
+        dl::Item episodeItem(const Episode &ep) const {
+            dl::Item d;
+            d.kind = dl::Kind::Episode;
+            d.profileId = app.session().profile.id;
+            d.contentId = ep.id;
+            d.seriesId = series.seriesId;
+            d.seriesName = series.title;
+            d.season = ep.season;
+            d.episode = ep.number;
+            d.title = ep.title;
+            d.year = series.year;
+            d.extension = ep.extension.empty() ? "mkv" : ep.extension;
+            d.poster = series.cover;
+            d.durationHint = ep.durationSeconds;
+            return d;
+        }
+
+        // Square on an episode: download it, or pause / resume its download
+        void episodeDownload(int season, int index) {
+            const Episode &ep = info->seasons[(size_t) season].episodes[(size_t) index];
+            dl::Item d;
+            if (app.downloads().find(app.session().profile.id, dl::Kind::Episode, ep.id, d)) {
+                if (d.state == dl::State::Completed) {
+                    episodeMenu(season, index);
+                } else if (d.state == dl::State::Downloading || d.state == dl::State::Queued
+                           || d.state == dl::State::WaitingForNetwork) {
+                    app.downloads().pause(d.key);
+                    app.toast(tr("download.paused_toast"));
+                } else if (d.problem == dl::Problem::RestartNeeded) {
+                    episodeMenu(season, index);
+                } else {
+                    app.downloads().resume(d.key);
+                    app.toast(tr("download.resumed"));
+                }
+                return;
+            }
+            announceEnqueue(app, app.downloads().enqueue(episodeItem(ep)));
+        }
+
+        void episodeMenu(int season, int index) {
+            const Episode &ep = info->seasons[(size_t) season].episodes[(size_t) index];
+            std::vector<std::string> names;
+            std::vector<std::function<void()>> acts;
+            const HistoryEntry *p = app.library().progressOf(ContentType::Series, ep.id);
+            bool partial = seriesplan::episodeState(p) == seriesplan::EpisodeState::InProgress;
+            dl::Item d;
+            bool hasDl = app.downloads().find(app.session().profile.id, dl::Kind::Episode, ep.id, d);
+            bool local = hasDl && d.state == dl::State::Completed;
+            names.push_back(partial ? tr(local ? "detail.resume_offline" : "detail.resume", {fmt::clock(p->position)})
+                                    : tr(local ? "download.play_offline" : "common.play"));
+            acts.push_back([this, season, index] { playEpisode(season, index, true); });
+            std::string key = hasDl ? d.key : "";
+            std::string name = fmt::episodeCode(ep.season, ep.number);
+            if (!hasDl) {
+                names.push_back(tr("download.download_episode"));
+                acts.push_back([this, season, index] { episodeDownload(season, index); });
+            } else if (local) {
+                names.push_back(tr("download.delete"));
+                acts.push_back([this, key, name] {
+                    app.push(screens::makeDialog(app, tr("download.delete_title"), tr("download.delete_text", {name}),
+                                                 {tr("common.cancel"), tr("download.delete")}, guardedChoice([this, key](int c) {
+                                if (c == 1) {
+                                    app.toast(tr(app.downloads().remove(key) ? "download.deleted" : "download.delete_failed"));
+                                    episodes->reload();
+                                }
+                            }), true));
+                });
+            } else {
+                bool running = d.state == dl::State::Downloading || d.state == dl::State::Queued
+                               || d.state == dl::State::WaitingForNetwork;
+                if (d.problem == dl::Problem::RestartNeeded) {
+                    names.push_back(tr("download.restart"));
+                    acts.push_back([this, key] { app.downloads().confirmRestart(key); });
+                } else {
+                    names.push_back(tr(running ? "download.pause" : d.state == dl::State::Failed ? "download.retry"
+                                                                                                  : "download.resume"));
+                    acts.push_back([this, key, running] {
+                        if (running) {
+                            app.downloads().pause(key);
+                        } else {
+                            app.downloads().resume(key);
+                        }
+                    });
+                }
+                names.push_back(tr("download.cancel"));
+                acts.push_back([this, key] { app.downloads().cancel(key); });
+            }
+            const Season &s = info->seasons[(size_t) season];
+            names.push_back(tr("download.download_season", {std::to_string(s.number)}));
+            acts.push_back([this, season] { confirmSeasonDownload(season); });
+            names.push_back(tr("downloads.open"));
+            acts.push_back([this] { app.push(screens::makeDownloads(app)); });
+            std::weak_ptr<bool> w = aliveToken;
+            app.push(screens::makeMenu(app, name + "  " + (ep.title.empty() ? tr("episode.number", {std::to_string(ep.number)})
+                                                                            : ep.title),
+                                       names, -1, [w, acts](int i) {
+                        if (w.lock() && i >= 0 && i < (int) acts.size()) {
+                            acts[(size_t) i]();
+                        }
+                    }));
+        }
+
+        // every episode of a season that is not downloaded yet, after the user agrees
+        void confirmSeasonDownload(int season) {
+            const Season &s = info->seasons[(size_t) season];
+            int missing = 0;
+            for (const Episode &ep: s.episodes) {
+                dl::Item d;
+                missing += app.downloads().find(app.session().profile.id, dl::Kind::Episode, ep.id, d) ? 0 : 1;
+            }
+            if (missing == 0) {
+                app.toast(tr("download.season_done"));
+                return;
+            }
+            app.push(screens::makeDialog(app, tr("download.season_title", {std::to_string(s.number)}),
+                                         tr("download.season_text", {i18n::count("download.episodes", missing)}),
+                                         {tr("common.cancel"), tr("download.download")}, guardedChoice([this, season](int c) {
+                        if (c != 1 || !info || season >= (int) info->seasons.size()) {
+                            return;
+                        }
+                        int added = 0;
+                        for (const Episode &ep: info->seasons[(size_t) season].episodes) {
+                            added += app.downloads().enqueue(episodeItem(ep)) == dl::DownloadManager::Enqueue::Added;
+                        }
+                        app.toast(i18n::count("download.season_queued", added), ToastKind::Success);
+                        episodes->reload();
+                    })));
+        }
+
+        std::function<void(int)> guardedChoice(std::function<void(int)> f) {
+            std::weak_ptr<bool> w = aliveToken;
+            return [w, f](int c) {
+                if (w.lock()) {
+                    f(c);
+                }
+            };
         }
 
         void playEpisode(int season, int episode, bool resume) {
@@ -622,8 +978,8 @@ namespace {
                 case Action::Favorite: {
                     bool on = app.library().toggleFavorite(ContentType::Series, series.seriesId);
                     app.saveLibrary();
-                    app.toast(on ? "Added to favorites" : "Removed from favorites", on ? ToastKind::Success
-                                                                                        : ToastKind::Info);
+                    app.toast(tr(on ? "favorites.added" : "favorites.removed"), on ? ToastKind::Success
+                                                                                  : ToastKind::Info);
                     refreshAll();
                     return;
                 }
@@ -660,12 +1016,13 @@ namespace {
             episodes->setFocused(focus == 2);
             buildChips();
             if (focus == 2) {
-                hints->setHints({{ui::Glyph::Cross, "Play"}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, "Season"},
-                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, "Page"}, {ui::Glyph::Square, "Favorite"},
-                                 {ui::Glyph::Circle, "Back"}});
+                hints->setHints({{ui::Glyph::Cross, tr("common.play")}, {ui::Glyph::Square, tr("download.download")},
+                                 {ui::Glyph::Options, tr("detail.episode_options")}, {ui::Glyph::L1, ""},
+                                 {ui::Glyph::R1, tr("detail.season")}, {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")},
+                                 {ui::Glyph::Circle, tr("common.back")}});
             } else {
-                hints->setHints({{ui::Glyph::Cross, "Select"}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, "Season"},
-                                 {ui::Glyph::Square, "Favorite"}, {ui::Glyph::Circle, "Back"}});
+                hints->setHints({{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("detail.season")},
+                                 {ui::Glyph::Square, tr("common.favorite")}, {ui::Glyph::Circle, tr("common.back")}});
             }
         }
 
@@ -690,7 +1047,7 @@ namespace {
                                      CHIP_H / 2);
                 chip->setOutlineColor(theme::withAlpha(Color::White, 220));
                 chip->setOutlineThickness(foc ? 3 : 0);
-                auto *l = ui::label(chip, s.number > 0 ? "Season " + std::to_string(s.number) : "Specials",
+                auto *l = ui::label(chip, s.number > 0 ? tr("detail.season_number", {std::to_string(s.number)}) : tr("detail.specials"),
                                     theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, CHIP_H),
                                     sel ? ui::Weight::SemiBold : ui::Weight::Regular,
                                     foc ? Color::White : sel ? theme::text() : theme::textDim());
@@ -728,11 +1085,10 @@ namespace {
             bindPoster(app, cover, series.title, series.cover);
             meta->setText(join({series.year > 0 ? std::to_string(series.year) : "", fmt::rating(series.rating),
                                 series.genre,
-                                series.runtimeMinutes > 0 ? std::to_string(series.runtimeMinutes) + " min per episode" : "",
-                                hasSeasons() ? std::to_string(info->seasons.size())
-                                               + (info->seasons.size() == 1 ? " season" : " seasons") : ""}));
-            credits->setText(join({series.director.empty() ? "" : "Director: " + series.director,
-                                   series.cast.empty() ? "" : "Cast: " + series.cast}));
+                                series.runtimeMinutes > 0 ? tr("detail.per_episode", {std::to_string(series.runtimeMinutes)}) : "",
+                                hasSeasons() ? i18n::count("detail.seasons", (long long) info->seasons.size()) : ""}));
+            credits->setText(join({series.director.empty() ? "" : tr("detail.director", {series.director}),
+                                   series.cast.empty() ? "" : tr("detail.cast", {series.cast})}));
             plot->setText(series.plot);
             float y = S_TOP + title->height() + 12;
             meta->setPosition(S_TEXT_X, y);
@@ -745,11 +1101,11 @@ namespace {
             bool loading = !info && error.empty();
             spinner->setVisibility(loading ? Visibility::Visible : Visibility::Hidden);
             if (loading) {
-                stateText->setText("Loading episodes" "\xE2\x80\xA6");
+                stateText->setText(tr("detail.loading_episodes"));
             } else if (!info) {
-                stateText->setText("Episodes could not be loaded (" + error + "). Press X to try again.");
+                stateText->setText(tr(app.session().offline ? "detail.episodes_offline" : "detail.episodes_failed", {error}));
             } else if (info->seasons.empty()) {
-                stateText->setText("The provider lists no episodes for this series.");
+                stateText->setText(tr("detail.no_episodes"));
             } else {
                 stateText->setText("");
             }
@@ -761,11 +1117,12 @@ namespace {
                 buttons[buttonCount++]->setText("\xE2\x96\xB6  " + seriesplan::label(a, *info));
             } else if (!info && !error.empty()) {
                 actions[buttonCount] = Action::Retry;
-                buttons[buttonCount++]->setText("Try again");
+                buttons[buttonCount++]->setText(tr("common.try_again"));
             }
             bool fav = app.library().isFavorite(ContentType::Series, series.seriesId);
             actions[buttonCount] = Action::Favorite;
-            buttons[buttonCount++]->setText(fav ? "\xE2\x98\x85  In favorites" : "\xE2\x98\x86  Add to favorites");
+            buttons[buttonCount++]->setText(fav ? "\xE2\x98\x85  " + tr("favorites.in_favorites")
+                                                : "\xE2\x98\x86  " + tr("favorites.add"));
             buttonFocus = std::min(buttonFocus, buttonCount - 1);
             if (focus != 0 && !hasSeasons()) {
                 focus = 0;
@@ -798,6 +1155,9 @@ namespace {
         unsigned vodGen = 0;
         unsigned imageGen = 0;
         unsigned libraryGen = 0;
+        unsigned downloadsGen = 0;
+        double lastDownloadRefresh = 0;
+        dl::LiveProgress liveDownload;
     };
 }
 

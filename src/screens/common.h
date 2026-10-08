@@ -9,9 +9,13 @@
 
 #include "../app/app.h"
 #include "../app/screens.h"
+#include "../i18n/i18n.h"
 #include "../ui/text.h"
 #include "../ui/theme.h"
 #include "../ui/widgets.h"
+
+// every screen text comes from the localization tables (src/i18n): tr("key"), tr("key", {args})
+using i18n::tr;
 
 namespace screens {
 

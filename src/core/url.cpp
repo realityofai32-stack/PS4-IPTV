@@ -2,6 +2,7 @@
 #include <cctype>
 
 #include "url.h"
+#include "../i18n/i18n.h"
 
 namespace url {
 
@@ -43,7 +44,7 @@ namespace url {
         Server r;
         std::string s = trim(input);
         if (s.empty()) {
-            r.error = "Enter the server address";
+            r.error = i18n::tr("profile.error.server_empty");
             return r;
         }
 
@@ -55,7 +56,7 @@ namespace url {
             s = s.substr(schemeEnd + 3);
         }
         if (r.scheme != "http" && r.scheme != "https") {
-            r.error = "Server address must start with http:// or https://";
+            r.error = i18n::tr("profile.error.scheme");
             return r;
         }
 
@@ -82,7 +83,7 @@ namespace url {
             authority = authority.substr(at + 1);  // never keep user:pass@ in the server address
         }
         if (authority.empty()) {
-            r.error = "Server address has no host name";
+            r.error = i18n::tr("profile.error.no_host");
             return r;
         }
         size_t colon = authority.rfind(':');
@@ -92,12 +93,12 @@ namespace url {
             r.port = authority.substr(colon + 1);
             if (r.port.empty() || r.port.size() > 5
                 || !std::all_of(r.port.begin(), r.port.end(), [](unsigned char c) { return std::isdigit(c); })) {
-                r.error = "Server port must be a number";
+                r.error = i18n::tr("profile.error.port_number");
                 return r;
             }
             int portNum = std::stoi(r.port);
             if (portNum < 1 || portNum > 65535) {
-                r.error = "Server port must be between 1 and 65535";
+                r.error = i18n::tr("profile.error.port_range");
                 return r;
             }
             if ((r.scheme == "http" && r.port == "80") || (r.scheme == "https" && r.port == "443")) {
@@ -109,7 +110,7 @@ namespace url {
         r.host = lower(r.host);
         for (unsigned char c: r.host) {
             if (!(std::isalnum(c) || c == '.' || c == '-' || c == '_' || c == '[' || c == ']' || c == ':')) {
-                r.error = "Server address contains invalid characters";
+                r.error = i18n::tr("profile.error.invalid_chars");
                 return r;
             }
         }

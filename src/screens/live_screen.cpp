@@ -50,9 +50,9 @@ namespace {
     public:
         LiveScreen(App &a, bool startOnFavorites) : Screen(a), categoriesAdapter(this), channelsAdapter(this) {
             ui::background(this);
-            screens::header(this, "Live TV", app.session().liveNotice);
+            screens::header(this, tr("home.live_tv"), app.session().liveNotice);
 
-            ui::label(this, "CATEGORIES", theme::CAPTION, CAT_X + 20, TOP - 40, ui::Weight::SemiBold,
+            ui::label(this, tr("live.categories_caption"), theme::CAPTION, CAT_X + 20, TOP - 40, ui::Weight::SemiBold,
                       theme::textMuted());
             channelCaption = ui::label(this, "", theme::CAPTION, CH_X + 20, TOP - 40, ui::Weight::SemiBold,
                                        theme::textMuted());
@@ -232,10 +232,10 @@ namespace {
                     std::string name;
                     int n;
                     if (index == FAVORITES_ROW) {
-                        name = "\xE2\x98\x85  Favorites";
+                        name = "\xE2\x98\x85  " + tr("home.favorites");
                         n = (int) live.favorites(screen->app.library().favorites(ContentType::Live)).size();
                     } else if (index == ALL_ROW) {
-                        name = "All channels";
+                        name = tr("live.all_channels");
                         n = (int) live.channels().size();
                     } else {
                         const Category &c = live.categories()[(size_t) (index - FIRST_CATEGORY_ROW)];
@@ -338,7 +338,7 @@ namespace {
 
             const float bw = PANE_W - 56;
             watch = ui::box(pane, FloatRect(28, LIST_H - 28 - 72, bw, 72), theme::surfaceRaised(), 36);
-            auto *wl = ui::label(watch, "Watch", theme::BODY, 0, ui::Label::centerOffset(theme::BODY, 72),
+            auto *wl = ui::label(watch, tr("live.watch"), theme::BODY, 0, ui::Label::centerOffset(theme::BODY, 72),
                                  ui::Weight::SemiBold);
             float textW = wl->width();
             const float glyph = 36;
@@ -370,13 +370,13 @@ namespace {
             if (!detailCategory->getText().empty()) {
                 y += detailCategory->height() + 6;
             }
-            detailNumber->setText(c->num > 0 ? "Channel " + std::to_string(c->num) : "");
+            detailNumber->setText(c->num > 0 ? tr("live.channel_number", {std::to_string(c->num)}) : "");
             detailNumber->setPosition(28, y);
             if (c->num > 0) {
                 y += detailNumber->height() + 6;
             }
             detailFav->setText(app.library().isFavorite(ContentType::Live, c->streamId)
-                               ? "\xE2\x98\x85  In favorites" : "");
+                               ? "\xE2\x98\x85  " + tr("favorites.in_favorites") : "");
             detailFav->setPosition(28, y + 8);
             watch->setFillColor(focus == 1 ? theme::accent() : theme::surfaceRaised());
         }
@@ -410,13 +410,13 @@ namespace {
             std::string caption;
             if (row == FAVORITES_ROW) {
                 visible = live.favorites(app.library().favorites(ContentType::Live));
-                caption = "FAVORITES";
+                caption = tr("live.favorites_caption");
             } else if (row == ALL_ROW) {
                 visible.resize(live.channels().size());
                 for (size_t i = 0; i < visible.size(); i++) {
                     visible[i] = (int) i;
                 }
-                caption = "ALL CHANNELS";
+                caption = tr("live.all_caption");
             } else {
                 const Category &cat = live.categories()[(size_t) (row - FIRST_CATEGORY_ROW)];
                 visible = live.inCategory(cat.id);
@@ -434,10 +434,9 @@ namespace {
             }
             channelList->setSelected(index);
             if (!app.session().liveLoaded) {
-                empty->setText("The channel list could not be loaded. Go back and reconnect from Profiles.");
+                empty->setText(tr("live.list_failed"));
             } else if (visible.empty()) {
-                empty->setText(row == FAVORITES_ROW ? "No favorite channels yet. Press the square button on a "
-                                                      "channel to add it here." : "No channels in this category.");
+                empty->setText(tr(row == FAVORITES_ROW ? "live.no_favorites" : "live.empty_category"));
             } else {
                 empty->setText("");
             }
@@ -452,14 +451,14 @@ namespace {
             categoryList->setFocused(focus == 0);
             channelList->setFocused(focus == 1);
             if (focus == 0) {
-                hints->setHints({{ui::Glyph::Cross, "Open"}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, "Category"},
-                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, "Page"}, {ui::Glyph::Triangle, "Search"},
-                                 {ui::Glyph::Circle, "Back"}});
+                hints->setHints({{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
+                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::Triangle, tr("home.search")},
+                                 {ui::Glyph::Circle, tr("common.back")}});
             } else {
-                hints->setHints({{ui::Glyph::Cross, "Watch"}, {ui::Glyph::Square, "Favorite"},
-                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, "Page"}, {ui::Glyph::L1, ""},
-                                 {ui::Glyph::R1, "Category"}, {ui::Glyph::Triangle, "Search"},
-                                 {ui::Glyph::Circle, "Categories"}});
+                hints->setHints({{ui::Glyph::Cross, tr("live.watch")}, {ui::Glyph::Square, tr("common.favorite")},
+                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::L1, ""},
+                                 {ui::Glyph::R1, tr("live.category")}, {ui::Glyph::Triangle, tr("home.search")},
+                                 {ui::Glyph::Circle, tr("live.categories")}});
             }
             refreshDetails();
         }
@@ -507,7 +506,7 @@ namespace {
             const LiveChannel *c = selectedChannel();
             bool on = app.library().toggleFavorite(ContentType::Live, c->streamId);
             app.saveLibrary();
-            app.toast(on ? "Added to favorites" : "Removed from favorites", on ? ToastKind::Success : ToastKind::Info);
+            app.toast(tr(on ? "favorites.added" : "favorites.removed"), on ? ToastKind::Success : ToastKind::Info);
             if (currentCategoryRow == FAVORITES_ROW) {
                 selectCategory(FAVORITES_ROW, true);
             } else {

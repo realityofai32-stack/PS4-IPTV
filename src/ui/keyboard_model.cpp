@@ -2,6 +2,7 @@
 
 #include "keyboard_model.h"
 #include "../core/utf8.h"
+#include "../i18n/i18n.h"
 
 namespace {
     Key ch(char c) {
@@ -44,34 +45,34 @@ KeyboardModel::KeyboardModel(std::string initial, size_t maxLength, Layout kind)
     // every row is COLUMNS units wide
     if (kind == Layout::Search) {
         std::vector<Key> s0 = chars("1234567890");
-        s0.push_back(special(KeyAction::Backspace, "BACKSPACE", 2));
+        s0.push_back(special(KeyAction::Backspace, "keyboard.backspace", 2));
         std::vector<Key> s1 = chars("qwertyuiop'-");
         std::vector<Key> s2 = chars("asdfghjkl:&.");
         std::vector<Key> s3 = chars("zxcvbnm,()!?");
         std::vector<Key> s4;
-        s4.push_back(special(KeyAction::Space, "SPACE", 6));
-        s4.push_back(special(KeyAction::Clear, "CLEAR", 3));
-        s4.push_back(special(KeyAction::Ok, "RESULTS", 3));
+        s4.push_back(special(KeyAction::Space, "keyboard.space", 6));
+        s4.push_back(special(KeyAction::Clear, "keyboard.clear", 3));
+        s4.push_back(special(KeyAction::Ok, "keyboard.results", 3));
         layout = {s0, s1, s2, s3, s4};
         return;
     }
     std::vector<Key> r0 = chars("1234567890");
-    r0.push_back(special(KeyAction::Backspace, "BACKSPACE", 2));
+    r0.push_back(special(KeyAction::Backspace, "keyboard.backspace", 2));
     std::vector<Key> r1 = chars("qwertyuiop-_");
     std::vector<Key> r2 = chars("asdfghjkl@.:");
     std::vector<Key> r3;
-    r3.push_back(special(KeyAction::Shift, "SHIFT", 2));
+    r3.push_back(special(KeyAction::Shift, "keyboard.shift", 2));
     for (const auto &k: chars("zxcvbnm/?=")) {
         r3.push_back(k);
     }
     std::vector<Key> r4 = chars("&%#+!");
     r4.push_back(textKey("http://", 2));
     r4.push_back(textKey(".com", 2));
-    r4.push_back(special(KeyAction::Space, "SPACE", 3));
+    r4.push_back(special(KeyAction::Space, "keyboard.space", 3));
     std::vector<Key> r5;
-    r5.push_back(special(KeyAction::Clear, "CLEAR", 3));
-    r5.push_back(special(KeyAction::Cancel, "CANCEL", 3));
-    r5.push_back(special(KeyAction::Ok, "OK", 6));
+    r5.push_back(special(KeyAction::Clear, "keyboard.clear", 3));
+    r5.push_back(special(KeyAction::Cancel, "keyboard.cancel", 3));
+    r5.push_back(special(KeyAction::Ok, "keyboard.ok", 6));
     layout = {r0, r1, r2, r3, r4, r5};
 }
 
@@ -112,6 +113,9 @@ bool KeyboardModel::move(int dx, int dy) {
 }
 
 std::string KeyboardModel::label(const Key &key) const {
+    if (key.action != KeyAction::Char && key.action != KeyAction::Text) {
+        return i18n::tr(key.lower.c_str());   // special keys hold a localization key ("keyboard.space")
+    }
     return shifted ? key.upper : key.lower;
 }
 

@@ -126,19 +126,29 @@ namespace ui {
             return;
         }
         current = hints;
-        for (auto *child: getChilds()) {
-            remove(child);
-            delete child;
-        }
-        float x = 0;
-        for (const auto &h: hints) {
-            auto *g = new ButtonGlyph(h.first, 36);
-            g->setPosition(x, 2);
-            add(g);
-            x += g->getSize().x + 12;
-            auto *l = label(this, h.second, theme::LABEL, x, Label::centerOffset(theme::LABEL, 40), Weight::Regular,
-                            theme::textDim());
-            x += l->width() + 40;
+        // regular spacing first; a compact layout when the hints do not fit (longer translations)
+        const struct {
+            unsigned size;
+            float gap;
+        } layouts[] = {{theme::LABEL, 40}, {theme::CAPTION, 22}};
+        for (const auto &layout: layouts) {
+            for (auto *child: getChilds()) {
+                remove(child);
+                delete child;
+            }
+            float x = 0;
+            for (const auto &h: hints) {
+                auto *g = new ButtonGlyph(h.first, 36);
+                g->setPosition(x, 2);
+                add(g);
+                x += g->getSize().x + 10;
+                auto *l = label(this, h.second, layout.size, x, Label::centerOffset(layout.size, 40), Weight::Regular,
+                                theme::textDim());
+                x += l->width() + layout.gap;
+            }
+            if (x - layout.gap <= getSize().x) {
+                break;
+            }
         }
     }
 
@@ -150,10 +160,25 @@ namespace ui {
         setCornerPointCount(10);
         caption = new Label(text, theme::BODY, Weight::SemiBold, theme::text());
         caption->setAlign(Align::Center, rect.width);
-        caption->setMaxWidth(rect.width - 32);
-        caption->setPosition(0, Label::centerOffset(theme::BODY, rect.height));
         add(caption);
+        fit();
         refresh();
+    }
+
+    // longer captions (translations, "Resume offline 1:02:15") get a smaller size before being shortened
+    void Button::fit() {
+        float room = getSize().x - 32;
+        caption->setMaxWidth(0);
+        unsigned size = theme::BODY;
+        for (unsigned s: {theme::BODY, theme::LABEL, theme::CAPTION}) {
+            size = s;
+            caption->setCharSize(s);
+            if (caption->width() <= room) {
+                break;
+            }
+        }
+        caption->setMaxWidth(room);
+        caption->setPosition(0, Label::centerOffset(size, getSize().y));
     }
 
     void Button::setFocused(bool f) {
@@ -167,7 +192,10 @@ namespace ui {
     }
 
     void Button::setText(const std::string &text) {
-        caption->setText(text);
+        if (text != caption->getText()) {
+            caption->setText(text);
+            fit();
+        }
     }
 
     void Button::refresh() {
@@ -386,6 +414,22 @@ namespace ui {
         badgeMark->setPosition(0, Label::centerOffset((unsigned) (r * 1.3f), 2 * r));
         badge->add(badgeMark);
         badge->setVisibility(Visibility::Hidden);
+        downloadBadge = new CircleShape(r);
+        downloadBadge->setPointCount(20);
+        downloadBadge->setFillColor(Color(12, 16, 22, 210));
+        downloadBadge->setOutlineColor(theme::accent());
+        downloadBadge->setOutlineThickness(2);
+        downloadBadge->setPosition(8, 8);
+        add(downloadBadge);
+        auto *arrow = new Label("\xE2\x86\x93", (unsigned) (r * 1.3f), Weight::SemiBold, theme::accent());  // down arrow
+        arrow->setAlign(Align::Center, 2 * r);
+        arrow->setPosition(0, Label::centerOffset((unsigned) (r * 1.3f), 2 * r));
+        downloadBadge->add(arrow);
+        downloadBadge->setVisibility(Visibility::Hidden);
+    }
+
+    void PosterView::setDownloaded(bool downloaded) {
+        downloadBadge->setVisibility(downloaded ? Visibility::Visible : Visibility::Hidden);
     }
 
     void PosterView::set(const std::string &title, const std::shared_ptr<Texture> &texture, const Vector2i &size) {

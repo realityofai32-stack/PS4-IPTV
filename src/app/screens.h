@@ -50,6 +50,10 @@ namespace screens {
         int season = 0;
         int episode = 0;
         double durationHint = 0;      // from the provider metadata, until mpv knows better
+        // offline playback: the downloaded file (played instead of the provider URL) and the profile the
+        // download belongs to (its progress is kept there). Both "" when streaming in the signed-in profile.
+        std::string localPath;
+        std::string profileId;
     };
 
     // categories + poster grid; opening loads the catalog lazily (saved copy first)
@@ -72,9 +76,18 @@ namespace screens {
     // Search across Live TV, Movies and Series; filter: 0 All, 1 Movies, 2 Series, 3 Live TV
     Screen *makeSearch(App &app, int filter = 0);
 
-    Screen *makeSettings(App &app);
+    enum class SettingsPage {
+        Main,
+        Storage,        // Storage & downloads: sizes, free space, deleting downloads and caches
+        Diagnostics     // text rendering test, build information
+    };
+
+    Screen *makeSettings(App &app, SettingsPage page = SettingsPage::Main);
 
     Screen *makeAbout(App &app);
+
+    // Downloads: in progress / downloaded movies and episodes (works offline, from the manifest)
+    Screen *makeDownloads(App &app);
 
     // deterministic text rendering check; atStartup: Cross continues to App::firstScreen()
     Screen *makeTextTest(App &app, bool atStartup);

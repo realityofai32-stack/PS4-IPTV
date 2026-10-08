@@ -20,7 +20,7 @@ namespace iptv {
 
     // virtual category of the items whose category_id is missing or not in the category list
     extern const char *const UNCATEGORIZED_ID;
-    extern const char *const UNCATEGORIZED_NAME;
+    const char *uncategorizedName();   // localized ("Uncategorized")
 
     class LiveCatalog {
 
@@ -172,7 +172,7 @@ namespace iptv {
             }
             cats = std::move(kept);
             if (!uncategorized.empty()) {
-                cats.push_back({UNCATEGORIZED_ID, UNCATEGORIZED_NAME, ""});
+                cats.push_back({UNCATEGORIZED_ID, uncategorizedName(), ""});
                 byCategory[UNCATEGORIZED_ID] = std::move(uncategorized);
             }
             diag.visible = (int) list.size();

@@ -2,11 +2,14 @@
 
 #include "catalog.h"
 #include "xtream.h"
+#include "../i18n/i18n.h"
 
 namespace iptv {
 
     const char *const UNCATEGORIZED_ID = "\x01uncategorized";
-    const char *const UNCATEGORIZED_NAME = "Uncategorized";
+    const char *uncategorizedName() {
+        return i18n::tr("catalog.uncategorized").c_str();
+    }
 
     void LiveCatalog::assign(std::vector<Category> categories, std::vector<LiveChannel> channels) {
         cats = std::move(categories);
@@ -78,23 +81,23 @@ namespace iptv {
         bool series = type == ContentType::Series;
         switch (mode) {
             case SortMode::TitleAZ:
-                return "A \xE2\x86\x92 Z";
+                return i18n::tr("sort.az").c_str();
             case SortMode::TitleZA:
-                return "Z \xE2\x86\x92 A";
+                return i18n::tr("sort.za").c_str();
             case SortMode::AddedNewest:
-                return series ? "Recently updated" : "Newest added";
+                return i18n::tr(series ? "sort.updated_newest" : "sort.added_newest").c_str();
             case SortMode::AddedOldest:
-                return series ? "Least recently updated" : "Oldest added";
+                return i18n::tr(series ? "sort.updated_oldest" : "sort.added_oldest").c_str();
             case SortMode::YearNewest:
-                return "Year: Newest";
+                return i18n::tr("sort.year_newest").c_str();
             case SortMode::YearOldest:
-                return "Year: Oldest";
+                return i18n::tr("sort.year_oldest").c_str();
             case SortMode::RatingHigh:
-                return "Rating: High to low";
+                return i18n::tr("sort.rating").c_str();
             case SortMode::RecentlyWatched:
-                return "Recently watched";
+                return i18n::tr("sort.recently_watched").c_str();
             default:
-                return "Provider order";
+                return i18n::tr("sort.provider").c_str();
         }
     }
 

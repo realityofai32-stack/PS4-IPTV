@@ -3,6 +3,7 @@
 #ifndef PS4IPTV_APP_APP_H
 #define PS4IPTV_APP_APP_H
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -12,6 +13,8 @@
 #include "vod_library.h"
 #include "xtream_service.h"
 #include "../images/image_loader.h"
+#include "../downloads/curl_transport.h"
+#include "../downloads/download_manager.h"
 #include "../iptv/catalog.h"
 #include "../iptv/models.h"
 #include "../network/jobs.h"
@@ -30,6 +33,8 @@ namespace ui {
 // state of the signed-in profile
 struct Session {
     bool connected = false;
+    // the provider could not be reached at sign-in and the user continued with saved lists and downloads
+    bool offline = false;
     iptv::Profile profile;
     iptv::AccountInfo account;
     bool httpsWarning = false;
@@ -99,6 +104,19 @@ public:
 
     ImageLoader &images() { return imageLoader; }
 
+    // offline downloads (one transfer at a time on its own thread)
+    dl::DownloadManager &downloads() { return *downloadManager; }
+
+    // gives the download manager the current profiles (credentials stay in memory); call after every change
+    // of the profile list
+    void syncDownloadProfiles();
+
+    // a video player opened / closed: active downloads pause meanwhile (playback stability first)
+    void setPlaybackActive(bool active);
+
+    // applies Settings > Language and rebuilds the screens, so every label is in the new language
+    void applyLanguage(bool rebuildScreens);
+
     // persists favorites/history; logs and toasts on failure
     void saveLibrary();
 
@@ -132,6 +150,8 @@ private:
     LibraryStore libraryStore;
     Playback player;
     ImageLoader imageLoader;
+    std::unique_ptr<dl::CurlTransport> downloadTransport;
+    std::unique_ptr<dl::DownloadManager> downloadManager;
     Session currentSession;
     InputManager input;
     void *ownPad = nullptr;          // pad opened by us when libcross2d had none at startup

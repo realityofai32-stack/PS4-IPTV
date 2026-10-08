@@ -30,10 +30,12 @@ $cmake = "$Toolchain\cmake\bin\cmake.exe"
 if ($Clean -and (Test-Path "$Build\build.ninja")) {
     & $cmake --build $Build --target clean
 }
+# the launch-time text rendering test is a Debug-only diagnostic: always off here (a cached ON would be kept)
 & $cmake -G Ninja -S $RepoRoot -B $Build `
     "-DCMAKE_MAKE_PROGRAM=$Toolchain\ninja\ninja.exe" `
     "-DCMAKE_TOOLCHAIN_FILE=$RepoRoot\cmake\ps4-windows.cmake" `
-    "-DCMAKE_BUILD_TYPE=$BuildType"
+    "-DCMAKE_BUILD_TYPE=$BuildType" `
+    "-DPS4IPTV_TEXT_TEST_AT_START=OFF"
 if ($LASTEXITCODE -ne 0) { throw 'cmake configure failed' }
 & $cmake --build $Build
 if ($LASTEXITCODE -ne 0) { throw 'build failed' }

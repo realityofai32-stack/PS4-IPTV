@@ -2,6 +2,7 @@
 #include <cstdio>
 
 #include "format.h"
+#include "../i18n/i18n.h"
 
 namespace fmt {
 
@@ -30,14 +31,15 @@ namespace fmt {
     std::string duration(double seconds) {
         long minutes = seconds > 0 ? (long) std::lround(seconds / 60.0) : 0;
         if (minutes <= 0) {
-            return seconds > 0 ? "1 min" : "";
+            return seconds > 0 ? i18n::tr("duration.minutes", {"1"}) : "";
         }
         long h = minutes / 60;
         long m = minutes % 60;
         if (h == 0) {
-            return std::to_string(m) + " min";
+            return i18n::tr("duration.minutes", {std::to_string(m)});
         }
-        return m == 0 ? std::to_string(h) + " h" : std::to_string(h) + " h " + std::to_string(m) + " min";
+        return m == 0 ? i18n::tr("duration.hours", {std::to_string(h)})
+                      : i18n::tr("duration.hours_minutes", {std::to_string(h), std::to_string(m)});
     }
 
     std::string remaining(double position, double total) {
@@ -45,7 +47,7 @@ namespace fmt {
         if (total <= 0 || left <= 0) {
             return "";
         }
-        return duration(left) + " left";
+        return i18n::tr("duration.left", {duration(left)});
     }
 
     std::string episodeCode(int season, int episode) {

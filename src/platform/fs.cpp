@@ -69,8 +69,13 @@ namespace fs {
     }
 
     int64_t fileSize(const std::string &path) {
-        struct stat st{};
+#ifdef _WIN32
+        struct _stat64 st{};   // MSVC's plain stat has a 32-bit st_size; downloads exceed 4 GB
+        return _stat64(path.c_str(), &st) == 0 ? (int64_t) st.st_size : -1;
+#else
+        struct stat st{};      // PS4 (FreeBSD libkernel): off_t st_size is 64-bit
         return stat(path.c_str(), &st) == 0 ? (int64_t) st.st_size : -1;
+#endif
     }
 
     bool ensureDir(const std::string &path, std::string *error) {

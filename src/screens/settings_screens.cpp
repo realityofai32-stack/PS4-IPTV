@@ -1,18 +1,22 @@
-// Settings and About.
+// Settings (main page, Storage & downloads, Diagnostics) and About.
 //
 // Settings rows: caption on the left, the value in one right-aligned column - a choice (with dots showing
 // its position among the options), a switch for On/Off settings, or a short info text for actions. The
 // panel on the right explains the focused setting and its current value. Up/Down move, Left/Right or X
 // change a value, X runs an action.
+//
+// Language changes apply at once: the screens are rebuilt (App::applyLanguage) and Settings opens again.
 
 #include <algorithm>
 
 #include "common.h"
 #include "build_info.h"
+#include "../downloads/download_model.h"
 #include "../platform/log.h"
 #include "../storage/catalog_cache.h"
 
 using namespace c2d;
+using screens::SettingsPage;
 
 namespace {
 
@@ -47,14 +51,11 @@ namespace {
         std::function<std::string()> describe;    // text for the description panel
     };
 
-    std::string megabytes(int64_t bytes) {
+    std::string sizeText(int64_t bytes) {
         if (bytes < 0) {
-            return "\xE2\x80\xA6";
+            return tr("common.unknown");
         }
-        if (bytes < 1024 * 1024) {
-            return bytes == 0 ? "Empty" : std::to_string((bytes + 1023) / 1024) + " KB";
-        }
-        return diag::format("%.1f MB", (double) bytes / (1024.0 * 1024.0));
+        return bytes == 0 ? tr("settings.empty") : dl::formatBytes(bytes);
     }
 
     // one settings row (re-bound to different items while scrolling)
@@ -67,7 +68,8 @@ namespace {
             caption->setMaxWidth(w - 32 - 380);
             value = ui::label(this, "", theme::BODY, 0, ui::Label::centerOffset(theme::BODY, h), ui::Weight::SemiBold);
             value->setAlign(ui::Align::Right, w - VALUE_RIGHT);
-            for (int i = 0; i < 4; i++) {
+            value->setMaxWidth(360);
+            for (int i = 0; i < 6; i++) {
                 auto *d = new CircleShape(4);
                 d->setPointCount(12);
                 d->setVisibility(Visibility::Hidden);
@@ -107,7 +109,7 @@ namespace {
                 knob->setFillColor(on ? Color::White : Color(196, 203, 214));
                 float r = SWITCH_H / 2 - 5;
                 knob->setPosition(on ? SWITCH_W - 5 - 2 * r : 5, 5);
-                switchText->setText(on ? "On" : "Off");
+                switchText->setText(tr(on ? "common.on" : "common.off"));
                 switchText->setColor(focused ? theme::text() : theme::textDim());
                 return;
             }
@@ -143,9 +145,11 @@ namespace {
 
     class SettingsScreen : public Screen, public ui::ListView::Adapter {
     public:
-        explicit SettingsScreen(App &a) : Screen(a) {
+        SettingsScreen(App &a, SettingsPage p) : Screen(a), page(p) {
             ui::background(this);
-            screens::header(this, "Settings");
+            screens::header(this, tr(page == SettingsPage::Storage ? "settings.storage_title"
+                                     : page == SettingsPage::Diagnostics ? "settings.diagnostics_title"
+                                                                         : "settings.title"));
             buildItems();
             list = new ui::ListView(FloatRect(LIST_X, LIST_Y, LIST_W, LIST_H), ROW_H, ROW_GAP, this);
             add(list);
@@ -158,8 +162,9 @@ namespace {
             panelText->setMaxWidth(PANEL_W - 72);
             panelText->setMaxLines(14);
 
-            screens::hintBar(this, {{ui::Glyph::DPad, "Change"}, {ui::Glyph::Cross, "Select"},
-                                    {ui::Glyph::Circle, "Back"}});
+            screens::hintBar(this, {{ui::Glyph::DPad, tr("settings.hint_change")}, {ui::Glyph::Cross, tr("common.select")},
+                                    {ui::Glyph::Circle, tr("common.back")}});
+            refreshStorage();
             refreshPanel();
         }
 
@@ -170,8 +175,20 @@ namespace {
         }
 
         void onResume() override {
+            refreshStorage();
             list->reload();
             refreshPanel();
+        }
+
+        void tick(double now) override {
+            // Storage page: sizes follow the downloads (at most once per second)
+            if (page == SettingsPage::Storage && app.downloads().generation() != downloadsGen && now - lastStorage > 1) {
+                lastStorage = now;
+                refreshStorage();
+                list->reload();
+                refreshPanel();
+                redraw();
+            }
         }
 
         int count() override { return (int) items.size(); }
@@ -254,7 +271,7 @@ namespace {
             std::string err;
             if (!app.settings().save(&err)) {
                 LOG_E("settings", "save failed: %s", err.c_str());
-                app.toast("Could not save settings", ToastKind::Error);
+                app.toast(tr("settings.save_failed"), ToastKind::Error);
             }
         }
 
@@ -263,6 +280,12 @@ namespace {
                 list->reload();
                 redraw();
             }));
+        }
+
+        void refreshStorage() {
+            downloadsGen = app.downloads().generation();
+            totals = app.downloads().totals();
+            freeBytes = app.downloads().freeBytes();
         }
 
         // "" (Auto) + common languages + languages met in played files + the saved choices
@@ -285,8 +308,9 @@ namespace {
             return codes;
         }
 
-        void confirm(const std::string &title, const std::string &message, std::function<void()> action) {
-            app.push(screens::makeDialog(app, title, message, {"Cancel", "Clear"}, [action](int c) {
+        void confirm(const std::string &title, const std::string &message, const std::string &button,
+                     std::function<void()> action) {
+            app.push(screens::makeDialog(app, title, message, {tr("common.cancel"), button}, [action](int c) {
                 if (c == 1) {
                     action();
                 }
@@ -294,49 +318,70 @@ namespace {
         }
 
         void buildItems() {
-            Settings &s = app.settings().get();
             items.clear();
+            switch (page) {
+                case SettingsPage::Storage:
+                    buildStorage();
+                    break;
+                case SettingsPage::Diagnostics:
+                    buildDiagnostics();
+                    break;
+                default:
+                    buildMain();
+                    break;
+            }
+        }
+
+        // ------------------------------------------------------------------ main page
+        void buildMain() {
+            Settings &s = app.settings().get();
+
+            SettingItem language;
+            language.kind = Kind::Choice;
+            language.caption = tr("settings.language");
+            // each language in its own name: whoever picked the wrong one can still find theirs
+            language.options = {i18n::nativeName(i18n::Language::English), i18n::nativeName(i18n::Language::Turkish)};
+            language.choice = [&s] { return s.language == "tr" ? 1 : 0; };
+            language.setChoice = [this, &s](int i) {
+                std::string code = i == 1 ? "tr" : "en";
+                if (code == s.language) {
+                    return;
+                }
+                s.language = code;
+                save();
+                app.applyLanguage(true);   // rebuilds every screen in the new language
+            };
+            language.describe = [] { return tr("settings.language.desc"); };
+            items.push_back(language);
 
             SettingItem profiles;
-            profiles.caption = "Profiles";
-            profiles.info = [] { return std::string("Manage"); };
+            profiles.caption = tr("profiles.title");
+            profiles.info = [] { return tr("settings.manage"); };
             profiles.run = [this] { app.push(screens::makeProfiles(app)); };
-            profiles.describe = [] {
-                return std::string("Add, edit or switch between your IPTV provider accounts.");
-            };
+            profiles.describe = [] { return tr("settings.profiles.desc"); };
             items.push_back(profiles);
 
             SettingItem format;
             format.kind = Kind::Choice;
-            format.caption = "Live stream format";
-            format.options = {"Auto", "Prefer TS", "Prefer HLS"};
+            format.caption = tr("settings.stream_format");
+            format.options = {tr("settings.stream_format.auto"), tr("settings.stream_format.ts"),
+                              tr("settings.stream_format.hls")};
             format.choice = [&s] { return s.streamFormat == StreamFormat::Ts ? 1 : s.streamFormat == StreamFormat::Hls ? 2 : 0; };
             format.setChoice = [this, &s](int i) {
                 s.streamFormat = i == 1 ? StreamFormat::Ts : i == 2 ? StreamFormat::Hls : StreamFormat::Auto;
                 save();
             };
             format.describe = [&s] {
-                switch (s.streamFormat) {
-                    case StreamFormat::Ts:
-                        return std::string("Prefer TS: channels open as MPEG-TS first. If a channel cannot be "
-                                           "opened as TS, HLS is tried once.");
-                    case StreamFormat::Hls:
-                        return std::string("Prefer HLS: channels open as HLS first. HLS loads the stream in "
-                                           "segments, which can ride out short Wi-Fi drops better on some providers; "
-                                           "it usually starts a little later. If HLS cannot be opened, TS is tried "
-                                           "once.");
-                    default:
-                        return std::string("Auto: MPEG-TS first, HLS once if TS cannot be opened. When only the "
-                                           "fallback works, the app uses that format first for the rest of the "
-                                           "session.");
-                }
+                return tr(s.streamFormat == StreamFormat::Ts ? "settings.stream_format.ts_desc"
+                          : s.streamFormat == StreamFormat::Hls ? "settings.stream_format.hls_desc"
+                                                                : "settings.stream_format.auto_desc");
             };
             items.push_back(format);
 
             SettingItem stab;
             stab.kind = Kind::Choice;
-            stab.caption = "Playback stability";
-            stab.options = {"Fast", "Balanced", "Maximum stability"};
+            stab.caption = tr("settings.stability");
+            stab.options = {tr("stability.fast"), tr("stability.balanced"), tr("stability.max")};
             stab.choice = [&s] { return s.stability == StabilityPreset::Fast ? 0 : s.stability == StabilityPreset::MaxStability ? 2 : 1; };
             stab.setChoice = [this, &s](int i) {
                 s.stability = i == 0 ? StabilityPreset::Fast : i == 2 ? StabilityPreset::MaxStability
@@ -344,47 +389,28 @@ namespace {
                 save();
             };
             stab.describe = [&s] {
-                switch (s.stability) {
-                    case StabilityPreset::Fast:
-                        return std::string("Fast: channels start as soon as data arrives, with a small buffer. "
-                                           "Best on a fast, steady connection; short network drops may freeze the "
-                                           "picture sooner.");
-                    case StabilityPreset::MaxStability:
-                        return std::string("Maximum stability: about 8 seconds are buffered before a channel "
-                                           "starts and after every interruption, and the player waits longer "
-                                           "before reconnecting. Slower to start and further behind live, but "
-                                           "the most tolerant of weak Wi-Fi.");
-                    default:
-                        return std::string("Balanced: about 3 seconds are buffered before a channel starts and "
-                                           "after an interruption, enough for normal Wi-Fi jitter. Stalls are "
-                                           "detected and the stream reconnects automatically.");
-                }
+                return tr(s.stability == StabilityPreset::Fast ? "settings.stability.fast_desc"
+                          : s.stability == StabilityPreset::MaxStability ? "settings.stability.max_desc"
+                                                                         : "settings.stability.balanced_desc");
             };
             items.push_back(stab);
 
             SettingItem retry;
             retry.kind = Kind::Toggle;
-            retry.caption = "Retry on stall";
+            retry.caption = tr("settings.retry_stall");
             retry.toggle = [&s] { return s.retryOnStall; };
             retry.setToggle = [this, &s](bool on) {
                 s.retryOnStall = on;
                 save();
             };
-            retry.describe = [&s] {
-                return std::string(s.retryOnStall
-                                   ? "On: when a stream stops progressing or the connection drops, the player "
-                                     "reconnects by itself a limited number of times, waiting longer after each try. "
-                                     "If the provider refuses the stream (HTTP 403), it counts down and retries."
-                                   : "Off: the player keeps buffering after a stall and never reconnects by "
-                                     "itself. Press X during playback to reconnect.");
-            };
+            retry.describe = [&s] { return tr(s.retryOnStall ? "settings.retry_stall.on_desc" : "settings.retry_stall.off_desc"); };
             items.push_back(retry);
 
             // ---- movies / episodes: languages and subtitles
             std::vector<std::string> codes = languageCodes();
             std::vector<std::string> names;
             for (const auto &c: codes) {
-                names.push_back(c.empty() ? "Auto" : tracks::languageName(c));
+                names.push_back(c.empty() ? "" : tracks::languageName(c));
             }
             auto indexOfCode = [codes](const std::string &code) {
                 for (size_t i = 0; i < codes.size(); i++) {
@@ -397,282 +423,384 @@ namespace {
 
             SettingItem audio;
             audio.kind = Kind::Choice;
-            audio.caption = "Preferred audio language";
+            audio.caption = tr("settings.audio_language");
             audio.options = names;
-            audio.options[0] = "Auto (file default)";
+            audio.options[0] = tr("settings.audio_language.auto");
             audio.choice = [&s, indexOfCode] { return indexOfCode(s.audioLanguage); };
             audio.setChoice = [this, &s, codes](int i) {
                 s.audioLanguage = codes[(size_t) i];
                 save();
             };
-            audio.describe = [] {
-                return std::string("Movies and episodes start with an audio track in this language when the file has "
-                                   "one (commentary tracks are skipped). Auto plays the track the file marks as "
-                                   "default - usually the original or the provider's main language. You can switch "
-                                   "tracks during playback with the OPTIONS button.");
-            };
+            audio.describe = [] { return tr("settings.audio_language.desc"); };
             items.push_back(audio);
 
             SettingItem subMode;
             subMode.kind = Kind::Choice;
-            subMode.caption = "Subtitles";
-            subMode.options = {"Off", "Auto", "On when available"};
+            subMode.caption = tr("settings.subtitles");
+            subMode.options = {tr("common.off"), tr("settings.subtitles.auto"), tr("settings.subtitles.always")};
             subMode.choice = [&s] { return (int) s.subtitleMode; };
             subMode.setChoice = [this, &s](int i) {
                 s.subtitleMode = (tracks::SubtitleMode) i;
                 save();
             };
             subMode.describe = [&s] {
-                switch (s.subtitleMode) {
-                    case tracks::SubtitleMode::Off:
-                        return std::string("Off: subtitles never turn on by themselves. You can still choose one "
-                                           "during playback with the OPTIONS button.");
-                    case tracks::SubtitleMode::Always:
-                        return std::string("On when available: a subtitle track is shown whenever the file has one - "
-                                           "in your subtitle language if possible.");
-                    default:
-                        return std::string("Auto: subtitles in your subtitle language turn on when the audio is in "
-                                           "another language. Tracks the file marks as forced or default are also "
-                                           "shown.");
-                }
+                return tr(s.subtitleMode == tracks::SubtitleMode::Off ? "settings.subtitles.off_desc"
+                          : s.subtitleMode == tracks::SubtitleMode::Always ? "settings.subtitles.always_desc"
+                                                                           : "settings.subtitles.auto_desc");
             };
             items.push_back(subMode);
 
             SettingItem subLang;
             subLang.kind = Kind::Choice;
-            subLang.caption = "Preferred subtitle language";
+            subLang.caption = tr("settings.subtitle_language");
             subLang.options = names;
-            subLang.options[0] = "Same as audio";
+            subLang.options[0] = tr("settings.subtitle_language.same");
             subLang.choice = [&s, indexOfCode] { return indexOfCode(s.subtitleLanguage); };
             subLang.setChoice = [this, &s, codes](int i) {
                 s.subtitleLanguage = codes[(size_t) i];
                 save();
             };
-            subLang.describe = [] {
-                return std::string("The language subtitles are chosen in. \"Same as audio\" uses the preferred audio "
-                                   "language. Subtitles are embedded in the video files (the provider sends no separate "
-                                   "subtitle files).");
-            };
+            subLang.describe = [] { return tr("settings.subtitle_language.desc"); };
             items.push_back(subLang);
 
             SettingItem subSize;
             subSize.kind = Kind::Choice;
-            subSize.caption = "Subtitle size";
-            subSize.options = {"Small", "Medium", "Large"};
+            subSize.caption = tr("subtitle.size");
+            subSize.options = {tr("subtitle.size.small"), tr("subtitle.size.medium"), tr("subtitle.size.large")};
             subSize.choice = [&s] { return std::min(std::max(s.subtitleSize, 0), 2); };
             subSize.setChoice = [this, &s](int i) {
                 s.subtitleSize = i;
                 save();
             };
-            subSize.describe = [] {
-                return std::string("Text size of text subtitles (SRT, ASS). Also in the OPTIONS menu during playback.");
-            };
+            subSize.describe = [] { return tr("settings.subtitle_size.desc"); };
             items.push_back(subSize);
 
             SettingItem subPos;
             subPos.kind = Kind::Choice;
-            subPos.caption = "Subtitle position";
-            subPos.options = {"Bottom", "Raised"};
+            subPos.caption = tr("subtitle.position");
+            subPos.options = {tr("subtitle.position.bottom"), tr("subtitle.position.raised")};
             subPos.choice = [&s] { return s.subtitlePosition == 1 ? 1 : 0; };
             subPos.setChoice = [this, &s](int i) {
                 s.subtitlePosition = i;
                 save();
             };
-            subPos.describe = [] {
-                return std::string("Raised moves subtitles up, away from the bottom edge (useful when the TV crops "
-                                   "the picture).");
-            };
+            subPos.describe = [] { return tr("settings.subtitle_position.desc"); };
             items.push_back(subPos);
 
             SettingItem subShadow;
             subShadow.kind = Kind::Toggle;
-            subShadow.caption = "Subtitle shadow";
+            subShadow.caption = tr("subtitle.shadow");
             subShadow.toggle = [&s] { return s.subtitleShadow; };
             subShadow.setToggle = [this, &s](bool on) {
                 s.subtitleShadow = on;
                 save();
             };
-            subShadow.describe = [] {
-                return std::string("Adds a dark shadow behind the outlined subtitle text, for bright scenes.");
-            };
+            subShadow.describe = [] { return tr("settings.subtitle_shadow.desc"); };
             items.push_back(subShadow);
+
+            // ---- video display (defaults; the Options panel changes only the current playback)
+            SettingItem mode;
+            mode.kind = Kind::Choice;
+            mode.caption = tr("settings.display_mode");
+            for (int i = 0; i < display::MODE_COUNT; i++) {
+                mode.options.push_back(tr(display::modeNameKey((display::Mode) i)));
+            }
+            mode.choice = [&s] { return (int) s.displayMode; };
+            mode.setChoice = [this, &s](int i) {
+                s.displayMode = (display::Mode) i;
+                save();
+            };
+            mode.describe = [&s] {
+                return tr("settings.display_mode.desc", {tr(display::modeNameKey(s.displayMode)),
+                                                         tr(display::modeDescKey(s.displayMode))});
+            };
+            items.push_back(mode);
+
+            SettingItem zoom;
+            zoom.kind = Kind::Choice;
+            zoom.caption = tr("settings.zoom");
+            for (int z: display::zoomSteps()) {
+                zoom.options.push_back(std::to_string(z) + " %");
+            }
+            zoom.choice = [&s] {
+                const auto &steps = display::zoomSteps();
+                for (size_t i = 0; i < steps.size(); i++) {
+                    if (steps[i] == display::clampZoom(s.zoomPercent)) {
+                        return (int) i;
+                    }
+                }
+                return 0;
+            };
+            zoom.setChoice = [this, &s](int i) {
+                s.zoomPercent = display::zoomSteps()[(size_t) i];
+                save();
+            };
+            zoom.describe = [] { return tr("settings.zoom.desc"); };
+            items.push_back(zoom);
 
             SettingItem tech;
             tech.kind = Kind::Toggle;
-            tech.caption = "Show technical playback info";
+            tech.caption = tr("settings.tech_info");
             tech.toggle = [&s] { return s.showTechnicalInfo; };
             tech.setToggle = [this, &s](bool on) {
                 s.showTechnicalInfo = on;
                 save();
             };
-            tech.describe = [] {
-                return std::string("Shows the stream information panel (resolution, codecs, buffer, network speed, "
-                                   "reconnect attempts) when playback starts. Triangle toggles it at any time.");
-            };
+            tech.describe = [] { return tr("settings.tech_info.desc"); };
             items.push_back(tech);
 
             SettingItem images;
             images.kind = Kind::Toggle;
-            images.caption = "Load logos and posters";
+            images.caption = tr("settings.images");
             images.toggle = [&s] { return s.loadImages; };
             images.setToggle = [this, &s](bool on) {
                 s.loadImages = on;
                 app.images().setEnabled(on);
                 save();
             };
-            images.describe = [] {
-                return std::string("Downloads channel logos from your provider and keeps them on the console. "
-                                   "Off: channels show their initials and no images are downloaded.");
-            };
+            images.describe = [] { return tr("settings.images.desc"); };
             items.push_back(images);
 
             SettingItem resume;
             resume.kind = Kind::Toggle;
-            resume.caption = "Resume movies and episodes";
+            resume.caption = tr("settings.resume");
             resume.toggle = [&s] { return s.resumeVod; };
             resume.setToggle = [this, &s](bool on) {
                 s.resumeVod = on;
                 save();
             };
-            resume.describe = [] {
-                return std::string("On: movies and episodes continue where you stopped (Continue Watching on Home). "
-                                   "Off: they always start from the beginning; progress is still remembered. "
-                                   "Never applies to Live TV.");
-            };
+            resume.describe = [] { return tr("settings.resume.desc"); };
             items.push_back(resume);
 
             SettingItem autoNext;
             autoNext.kind = Kind::Toggle;
-            autoNext.caption = "Auto-play next episode";
+            autoNext.caption = tr("settings.autoplay");
             autoNext.toggle = [&s] { return s.autoPlayNextEpisode; };
             autoNext.setToggle = [this, &s](bool on) {
                 s.autoPlayNextEpisode = on;
                 save();
             };
-            autoNext.describe = [] {
-                return std::string("On: when an episode ends, the next one starts after a 10 second countdown. Off: "
-                                   "the next episode is offered and starts when you press X.");
-            };
+            autoNext.describe = [] { return tr("settings.autoplay.desc"); };
             items.push_back(autoNext);
 
+            // ---- downloads
+            SettingItem retryDl;
+            retryDl.kind = Kind::Toggle;
+            retryDl.caption = tr("settings.retry_downloads");
+            retryDl.toggle = [&s] { return s.retryDownloads; };
+            retryDl.setToggle = [this, &s](bool on) {
+                s.retryDownloads = on;
+                app.downloads().setAutoRetry(on);
+                save();
+            };
+            retryDl.describe = [] { return tr("settings.retry_downloads.desc"); };
+            items.push_back(retryDl);
+
+            SettingItem resumeDl;
+            resumeDl.kind = Kind::Toggle;
+            resumeDl.caption = tr("settings.resume_downloads");
+            resumeDl.toggle = [&s] { return s.resumeDownloadsOnStart; };
+            resumeDl.setToggle = [this, &s](bool on) {
+                s.resumeDownloadsOnStart = on;
+                save();
+            };
+            resumeDl.describe = [] { return tr("settings.resume_downloads.desc"); };
+            items.push_back(resumeDl);
+
+            SettingItem storage;
+            storage.caption = tr("settings.storage_title");
+            storage.info = [this] { return sizeText(totals.completedBytes); };
+            storage.run = [this] { app.push(screens::makeSettings(app, SettingsPage::Storage)); };
+            storage.describe = [] { return tr("settings.storage.desc"); };
+            items.push_back(storage);
+
+            SettingItem diagnostics;
+            diagnostics.caption = tr("settings.diagnostics_title");
+            diagnostics.info = [] { return tr("settings.open"); };
+            diagnostics.run = [this] { app.push(screens::makeSettings(app, SettingsPage::Diagnostics)); };
+            diagnostics.describe = [] { return tr("settings.diagnostics.desc"); };
+            items.push_back(diagnostics);
+
+            SettingItem about;
+            about.caption = tr("about.title");
+            about.info = [] { return std::string("v") + APP_VERSION; };
+            about.run = [this] { app.push(screens::makeAbout(app)); };
+            about.describe = [] { return tr("settings.about.desc"); };
+            items.push_back(about);
+        }
+
+        // ------------------------------------------------------------------ Storage & downloads
+        void buildStorage() {
+            SettingItem downloaded;
+            downloaded.caption = tr("storage.downloaded");
+            downloaded.info = [this] { return sizeText(totals.completedBytes); };
+            downloaded.run = [this] { app.push(screens::makeDownloads(app)); };
+            downloaded.describe = [this] {
+                return tr("storage.downloaded.desc", {i18n::count("storage.items", totals.completed)});
+            };
+            items.push_back(downloaded);
+
+            SettingItem partial;
+            partial.caption = tr("storage.partial");
+            partial.info = [this] { return sizeText(totals.partialBytes); };
+            partial.run = [this] {
+                if (totals.active == 0) {
+                    app.toast(tr("storage.partial_none"));
+                    return;
+                }
+                confirm(tr("storage.delete_partial_title"), tr("storage.delete_partial_text"), tr("common.delete"), [this] {
+                    int n = app.downloads().removePartials();
+                    app.toast(i18n::count("storage.deleted_count", n), ToastKind::Success);
+                    refreshStorage();
+                    list->reload();
+                });
+            };
+            partial.describe = [] { return tr("storage.partial.desc"); };
+            items.push_back(partial);
+
+            SettingItem free;
+            free.caption = tr("storage.available");
+            free.info = [this] { return sizeText(freeBytes); };
+            free.run = [this] {
+                refreshStorage();
+                list->reload();
+            };
+            free.describe = [] { return tr("storage.available.desc"); };
+            items.push_back(free);
+
+            SettingItem manage;
+            manage.caption = tr("storage.manage");
+            manage.info = [] { return tr("settings.open"); };
+            manage.run = [this] { app.push(screens::makeDownloads(app)); };
+            manage.describe = [] { return tr("storage.manage.desc"); };
+            items.push_back(manage);
+
+            SettingItem deleteAll;
+            deleteAll.caption = tr("storage.delete_completed");
+            deleteAll.info = [this] { return i18n::count("storage.items", totals.completed); };
+            deleteAll.run = [this] {
+                if (totals.completed == 0) {
+                    app.toast(tr("storage.completed_none"));
+                    return;
+                }
+                confirm(tr("storage.delete_completed_title"),
+                        tr("storage.delete_completed_text", {i18n::count("storage.items", totals.completed),
+                                                             dl::formatBytes(totals.completedBytes)}),
+                        tr("common.delete"), [this] {
+                            int n = app.downloads().removeAllCompleted();
+                            app.toast(i18n::count("storage.deleted_count", n), ToastKind::Success);
+                            refreshStorage();
+                            list->reload();
+                        });
+            };
+            deleteAll.describe = [] { return tr("storage.delete_completed.desc"); };
+            items.push_back(deleteAll);
+
             SettingItem clearImages;
-            clearImages.caption = "Clear image cache";
-            clearImages.info = [this] { return megabytes(app.images().diskBytes()); };
+            clearImages.caption = tr("storage.clear_images");
+            clearImages.info = [this] { return sizeText(app.images().diskBytes()); };
             clearImages.run = [this] {
-                confirm("Clear image cache?", "Channel logos are downloaded again when they are needed.", [this] {
+                confirm(tr("storage.clear_images_title"), tr("storage.clear_images_text"), tr("common.clear"), [this] {
                     std::function<void()> done = guarded([this] {
-                        app.toast("Image cache cleared", ToastKind::Success);
+                        app.toast(tr("storage.images_cleared"), ToastKind::Success);
                         list->reload();
                     });
                     app.images().clearCache([done](int64_t) { done(); });
                 });
             };
-            clearImages.describe = [] {
-                return std::string("Deletes the channel logos stored on the console (at most 48 MB; the oldest are "
-                                   "removed automatically when it is full).");
-            };
+            clearImages.describe = [] { return tr("storage.clear_images.desc"); };
             items.push_back(clearImages);
 
             SettingItem clearMeta;
-            clearMeta.caption = "Clear metadata cache";
+            clearMeta.caption = tr("storage.clear_metadata");
             clearMeta.run = [this] {
-                confirm("Clear metadata cache?", "The saved channel, movie and series lists are deleted. The lists "
-                                                 "loaded now stay until you reconnect.", [this] {
+                confirm(tr("storage.clear_metadata_title"), tr("storage.clear_metadata_text"), tr("common.clear"), [this] {
                     app.jobs().submit(JobPriority::High, "clear-metadata", [](const CancelToken &) {
                         CatalogCache(APP_DATA_DIR).clearAll();
                     }, guarded([this] {
                         LOG_I("settings", "metadata cache cleared");
-                        app.toast("Metadata cache cleared", ToastKind::Success);
+                        app.toast(tr("storage.metadata_cleared"), ToastKind::Success);
                     }));
                 });
             };
-            clearMeta.describe = [] {
-                return std::string("Deletes the saved copies of your channel, movie and series lists. They make "
-                                   "Movies and Series open instantly and are used when the provider cannot be "
-                                   "reached; they are downloaded again when needed.");
-            };
+            clearMeta.describe = [] { return tr("storage.clear_metadata.desc"); };
             items.push_back(clearMeta);
 
             SettingItem clearHistory;
-            clearHistory.caption = "Clear watch history";
+            clearHistory.caption = tr("storage.clear_history");
             clearHistory.info = [this] {
                 size_t n = app.library().history().size();
-                return n == 0 ? std::string("Empty") : std::to_string(n) + (n == 1 ? " entry" : " entries");
+                return n == 0 ? tr("settings.empty") : i18n::count("storage.entries", (long long) n);
             };
             clearHistory.run = [this] {
                 if (app.library().history().empty()) {
-                    app.toast("Watch history is empty");
+                    app.toast(tr("storage.history_empty"));
                     return;
                 }
-                confirm("Clear watch history?", "Your recently watched channels are removed for this profile.",
-                        [this] {
-                            app.library().clearHistory();
-                            app.saveLibrary();
-                            app.toast("Watch history cleared", ToastKind::Success);
-                            list->reload();
-                        });
+                confirm(tr("storage.clear_history_title"), tr("storage.clear_history_text"), tr("common.clear"), [this] {
+                    app.library().clearHistory();
+                    app.saveLibrary();
+                    app.toast(tr("storage.history_cleared"), ToastKind::Success);
+                    list->reload();
+                });
             };
-            clearHistory.describe = [] {
-                return std::string("Removes the list of recently watched channels of the active profile. Favorites "
-                                   "are kept.");
-            };
+            clearHistory.describe = [] { return tr("storage.clear_history.desc"); };
             items.push_back(clearHistory);
-
-            SettingItem textTest;
-            textTest.caption = "Text rendering test";
-            textTest.run = [this] { app.push(screens::makeTextTest(app, false)); };
-            textTest.describe = [] {
-                return std::string("A diagnostic page with sample text in several languages and sizes, to check "
-                                   "the on-screen font rendering.");
-            };
-            items.push_back(textTest);
-
-            SettingItem about;
-            about.caption = "About PS4 IPTV";
-            about.info = [] { return std::string("v") + APP_VERSION; };
-            about.run = [this] { app.push(screens::makeAbout(app)); };
-            about.describe = [] {
-                return std::string("Version, build and the open-source projects PS4 IPTV is built on.");
-            };
-            items.push_back(about);
         }
 
+        // ------------------------------------------------------------------ Diagnostics
+        void buildDiagnostics() {
+            SettingItem textTest;
+            textTest.caption = tr("diagnostics.text_test");
+            textTest.info = [] { return tr("settings.open"); };
+            textTest.run = [this] { app.push(screens::makeTextTest(app, false)); };
+            textTest.describe = [] { return tr("diagnostics.text_test.desc"); };
+            items.push_back(textTest);
+
+            SettingItem build;
+            build.caption = tr("diagnostics.build");
+            build.info = [] { return std::string(BUILD_GIT_HASH); };
+            build.describe = [] {
+                return tr("diagnostics.build.desc", {APP_VERSION, BUILD_GIT_HASH, BUILD_DATE, BUILD_TYPE});
+            };
+            items.push_back(build);
+        }
+
+        SettingsPage page;
         std::vector<SettingItem> items;
         ui::ListView *list = nullptr;
         ui::Label *panelTitle = nullptr;
         ui::Label *panelText = nullptr;
+        dl::Totals totals;
+        int64_t freeBytes = -1;
+        unsigned downloadsGen = 0;
+        double lastStorage = 0;
     };
 
     class AboutScreen : public Screen {
     public:
         explicit AboutScreen(App &a) : Screen(a) {
             ui::background(this);
-            screens::header(this, "About PS4 IPTV", std::string("Version ") + APP_VERSION + "  \xE2\x80\xA2  build "
-                                                    + BUILD_DATE + "  \xE2\x80\xA2  " + BUILD_GIT_HASH);
-            const char *text =
-                    "PS4 IPTV is free software: you can redistribute it and/or modify it under the terms of the GNU "
-                    "General Public License as published by the Free Software Foundation, version 3 or later. It is "
-                    "distributed WITHOUT ANY WARRANTY. See LICENSE (GPL-3.0).\n"
-                    "PS4 IPTV does not provide any content. Use it only with services you are entitled to access.\n"
-                    "\n"
-                    "Built on these projects - thank you:\n"
-                    "pPlay (Cpasjuste): PS4 playback integration - GPL-3.0\n"
-                    "libcross2d (Cpasjuste): rendering, input and platform layer - GPL-3.0\n"
-                    "mpv 0.34.1 with PS4 patches (PacBrew): media player library - GPL-2.0-or-later\n"
-                    "FFmpeg 5.0: decoding, demuxing, network protocols - LGPL-2.1-or-later / GPL\n"
-                    "SDL 2.0.18 PS4 port (PacBrew): video, audio, controller - zlib\n"
-                    "libass, FreeType, FriBidi, libpng, zlib, bzip2, Opus - ISC / FTL / LGPL / BSD / zlib\n"
-                    "stb_image (Sean Barrett, via libcross2d): channel logo decoding - public domain / MIT\n"
-                    "libcurl 7.80 (curl license) and Mbed TLS 2.16 (Apache-2.0): HTTP(S) for the Xtream API and logos\n"
-                    "OpenOrbis PS4 Toolchain (GPL-3.0), PacBrew musl (MIT), libc++ (Apache-2.0 with LLVM exception)\n"
-                    "Inter typeface by Rasmus Andersson - SIL Open Font License 1.1\n"
-                    "Mozilla CA certificate bundle - MPL-2.0\n"
-                    "\n"
-                    "Licenses and notices: LICENSE and NOTICE in the project source.";
+            screens::header(this, tr("about.title"), tr("about.version", {APP_VERSION, BUILD_DATE, BUILD_GIT_HASH}));
+            // the project names and licences are proper names, identical in every language
+            // i18n-exempt-begin
+            std::string text = tr("about.license") + "\n" + tr("about.no_content") + "\n\n" + tr("about.built_on") + "\n"
+                               "pPlay (Cpasjuste) - GPL-3.0\n"
+                               "libcross2d (Cpasjuste) - GPL-3.0\n"
+                               "mpv 0.34.1 + PS4 patches (PacBrew) - GPL-2.0-or-later\n"
+                               "FFmpeg 5.0 - LGPL-2.1-or-later / GPL\n"
+                               "SDL 2.0.18 PS4 port (PacBrew) - zlib\n"
+                               "libass, FreeType, FriBidi, libpng, zlib, bzip2, Opus - ISC / FTL / LGPL / BSD / zlib\n"
+                               "stb_image (Sean Barrett, via libcross2d) - public domain / MIT\n"
+                               "libcurl 7.80 (curl license), Mbed TLS 2.16 (Apache-2.0)\n"
+                               "OpenOrbis PS4 Toolchain (GPL-3.0), PacBrew musl (MIT), libc++ (Apache-2.0 WITH LLVM-exception)\n"
+                               "Inter (Rasmus Andersson) - SIL Open Font License 1.1\n"
+                               "Mozilla CA certificate bundle - MPL-2.0\n\n" + tr("about.notices");
+            // i18n-exempt-end
             auto *body = ui::label(this, text, theme::LABEL, theme::SAFE_X, 210, ui::Weight::Regular, theme::textDim());
             body->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
             body->setMaxLines(24);
-            screens::hintBar(this, {{ui::Glyph::Circle, "Back"}});
+            screens::hintBar(this, {{ui::Glyph::Circle, tr("common.back")}});
         }
 
         const char *name() const override { return "about"; }
@@ -686,8 +814,8 @@ namespace {
 }
 
 namespace screens {
-    Screen *makeSettings(App &app) {
-        return new SettingsScreen(app);
+    Screen *makeSettings(App &app, SettingsPage page) {
+        return new SettingsScreen(app, page);
     }
 
     Screen *makeAbout(App &app) {

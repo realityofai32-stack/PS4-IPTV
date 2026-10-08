@@ -38,7 +38,7 @@ namespace {
     const float LIST_H = 712;
     const float ROW_H = 104;
 
-    const char *FILTER_NAMES[] = {"All", "Movies", "Series", "Live TV"};
+    const char *FILTER_KEYS[] = {"search.filter_all", "home.movies", "home.series", "home.live_tv"};
 
     struct Result {
         ContentType type;
@@ -51,7 +51,7 @@ namespace {
         SearchScreen(App &a, int initialFilter) : Screen(a), keyboard("", 120, KeyboardModel::Layout::Search),
                                                   filter(initialFilter < 0 || initialFilter > 3 ? 0 : initialFilter) {
             ui::background(this);
-            screens::header(this, "Search");
+            screens::header(this, tr("home.search"));
 
             // query + keyboard
             field = ui::box(this, FloatRect(LEFT_X, FIELD_Y, LEFT_W, FIELD_H), theme::surface(), theme::RADIUS_SMALL);
@@ -190,18 +190,22 @@ namespace {
                     r.logo->set(c.name, img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
                     r.title->setText(c.name);
                     std::string category = categoryName(c.categoryId);
-                    r.meta->setText(category.empty() ? "Live TV" : "Live TV" + sep + category);
+                    r.meta->setText(category.empty() ? tr("home.kind_live") : tr("home.kind_live") + sep + category);
                 } else if (res.type == ContentType::Movie) {
                     const Movie &m = app.vod().movies().items()[(size_t) res.index];
                     std::shared_ptr<ImageSet> img = app.images().get(ImageKind::Poster, m.icon);
                     r.poster->set(m.title, img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
                     r.title->setText(m.title);
-                    std::string meta = "Movie";
+                    std::string meta = tr("home.kind_movie");
                     if (m.year > 0) {
                         meta += sep + std::to_string(m.year);
                     }
                     if (m.rating > 0) {
                         meta += sep + fmt::rating(m.rating);
+                    }
+                    dl::Item d;
+                    if (app.downloads().findCompleted(app.session().profile.id, dl::Kind::Movie, m.streamId, d)) {
+                        meta += sep + "\xE2\x86\x93 " + tr("download.badge");   // downloaded: plays offline
                     }
                     r.meta->setText(meta);
                 } else {
@@ -209,7 +213,7 @@ namespace {
                     std::shared_ptr<ImageSet> img = app.images().get(ImageKind::Poster, se.cover);
                     r.poster->set(se.title, img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
                     r.title->setText(se.title);
-                    std::string meta = "Series";
+                    std::string meta = tr("home.kind_series");
                     if (se.year > 0) {
                         meta += sep + std::to_string(se.year);
                     }
@@ -488,26 +492,28 @@ namespace {
         static std::string countText(int n) {
             std::string digits = std::to_string(n);
             std::string out;
+            const std::string &sep = tr("format.thousands_sep");   // 19,797 / 19.797
             for (size_t i = 0; i < digits.size(); i++) {
                 if (i > 0 && (digits.size() - i) % 3 == 0) {
-                    out += ',';
+                    out += sep;
                 }
                 out += digits[i];
             }
             return out;
         }
 
-        static std::string sectionState(const SectionStatus &st, size_t n, const char *noun) {
+        // keyPrefix "search.movies" -> .count / .unavailable / .none / .loading
+        static std::string sectionState(const SectionStatus &st, size_t n, const std::string &keyPrefix) {
             if (n > 0) {
-                return countText((int) n) + " " + noun;
+                return tr((keyPrefix + ".count").c_str(), {countText((int) n)});
             }
             switch (st.status) {
                 case CatalogStatus::Failed:
-                    return std::string(noun) + " unavailable";
+                    return tr((keyPrefix + ".unavailable").c_str());
                 case CatalogStatus::Ready:
-                    return std::string("no ") + noun;
+                    return tr((keyPrefix + ".none").c_str());
                 default:
-                    return std::string(noun) + " loading" "\xE2\x80\xA6";
+                    return tr((keyPrefix + ".loading").c_str());
             }
         }
 
@@ -529,7 +535,7 @@ namespace {
 
         void refresh() {
             const std::string &q = keyboard.text();
-            queryText->setText(q.empty() ? "Type a title or channel" : q + (zone == 0 ? "|" : ""));
+            queryText->setText(q.empty() ? tr("search.placeholder") : q + (zone == 0 ? "|" : ""));
             queryText->setColor(q.empty() ? theme::textMuted() : theme::text());
             field->setOutlineThickness(zone == 0 ? 2 : 0);
             refreshKeys();
@@ -538,47 +544,48 @@ namespace {
             for (int i = 0; i < 4; i++) {
                 bool sel = i == filter;
                 chips[i]->setFillColor(sel ? theme::accentDark() : theme::surface());
-                chipText[i]->setText(searched ? std::string(FILTER_NAMES[i]) + "  " + countText(totals[i])
-                                              : FILTER_NAMES[i]);
+                chipText[i]->setText(searched ? tr(FILTER_KEYS[i]) + "  " + countText(totals[i]) : tr(FILTER_KEYS[i]));
                 chipText[i]->setColor(sel ? Color::White : theme::textDim());
             }
             int n = searched ? totals[filter] : 0;
             if (!searched) {
                 summary->setText("");
             } else {
-                std::string what = filter == 0 ? "" : std::string(" in ") + FILTER_NAMES[filter];
-                summary->setText(countText(n) + (n == 1 ? " result" : " results") + what + " for \xE2\x80\x9C"
-                                 + lastQuery + "\xE2\x80\x9D"
-                                 + ((int) shown.size() < n ? "  (best " + countText((int) shown.size()) + " shown)" : ""));
+                std::string text = filter == 0 ? tr(n == 1 ? "search.summary.one" : "search.summary.other", {countText(n), lastQuery})
+                                               : tr(n == 1 ? "search.summary_in.one" : "search.summary_in.other",
+                                                    {countText(n), lastQuery, tr(FILTER_KEYS[filter])});
+                if ((int) shown.size() < n) {
+                    text += "  " + tr("search.best_shown", {countText((int) shown.size())});
+                }
+                summary->setText(text);
             }
             const SectionStatus &ms = app.vod().movieStatus();
             const SectionStatus &ss = app.vod().seriesStatus();
             bool loading = ms.status == CatalogStatus::Loading || ss.status == CatalogStatus::Loading
                            || ms.status == CatalogStatus::NotLoaded || ss.status == CatalogStatus::NotLoaded;
             if (!searched) {
-                empty->setText("Type to search movies, series and live channels.\n"
-                               "Turkish letters, apostrophes and small typos are fine.");
+                empty->setText(tr("search.intro"));
             } else if (shown.empty()) {
-                empty->setText("No results for \xE2\x80\x9C" + lastQuery + "\xE2\x80\x9D"
-                               + (filter != 0 && totals[0] > 0 ? std::string(" in ") + FILTER_NAMES[filter] : "")
-                               + (loading ? std::string("\nMovies and series are still loading" "\xE2\x80\xA6") : ""));
+                empty->setText((filter != 0 && totals[0] > 0 ? tr("search.no_results_in", {lastQuery, tr(FILTER_KEYS[filter])})
+                                                             : tr("search.no_results", {lastQuery}))
+                               + (loading ? "\n" + tr("search.still_loading") : ""));
             } else {
                 empty->setText("");
             }
             std::string sep = "   \xC2\xB7   ";
-            catalogsText->setText("Searching " + sectionState(ms, app.vod().movies().size(), "movies") + sep
-                                  + sectionState(ss, app.vod().series().size(), "series") + sep
-                                  + (app.session().liveLoaded ? countText((int) app.session().live.channels().size())
-                                                                + " channels" : std::string("channels unavailable")));
+            catalogsText->setText(tr("search.searching", {sectionState(ms, app.vod().movies().size(), "search.movies") + sep
+                                  + sectionState(ss, app.vod().series().size(), "search.series") + sep
+                                  + (app.session().liveLoaded ? tr("search.channels.count", {countText((int) app.session().live.channels().size())})
+                                                              : tr("search.channels.unavailable"))}));
             list->reload();
             if (zone == 0) {
-                hints->setHints({{ui::Glyph::Cross, "Type"}, {ui::Glyph::Square, "Delete"},
-                                 {ui::Glyph::Triangle, "Space"}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, "Filter"},
-                                 {ui::Glyph::R2, "Results"}, {ui::Glyph::Circle, "Back"}});
+                hints->setHints({{ui::Glyph::Cross, tr("keyboard.hint_type")}, {ui::Glyph::Square, tr("common.delete")},
+                                 {ui::Glyph::Triangle, tr("keyboard.hint_space")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("search.filter")},
+                                 {ui::Glyph::R2, tr("search.results")}, {ui::Glyph::Circle, tr("common.back")}});
             } else {
-                hints->setHints({{ui::Glyph::Cross, "Open"}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, "Filter"},
-                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, "Page"}, {ui::Glyph::Square, "Delete"},
-                                 {ui::Glyph::Circle, "Keyboard"}});
+                hints->setHints({{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("search.filter")},
+                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::Square, tr("common.delete")},
+                                 {ui::Glyph::Circle, tr("search.keyboard")}});
             }
         }
 

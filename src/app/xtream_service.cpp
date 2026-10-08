@@ -7,6 +7,7 @@
 #include "../platform/log.h"
 #include "../storage/catalog_cache.h"
 #include "../core/url.h"
+#include "../i18n/i18n.h"
 
 using namespace iptv;
 
@@ -48,10 +49,11 @@ CancelToken XtreamService::authenticate(const Profile &profile, AuthCallback cal
     });
 }
 
-CancelToken XtreamService::loadLive(const Profile &profile, const std::string &dataDir, LiveCallback callback) {
+CancelToken XtreamService::loadLive(const Profile &profile, const std::string &dataDir, LiveCallback callback,
+                                   bool cacheOnly) {
     auto out = std::make_shared<LiveOutcome>();
     Profile p = profile;
-    return jobs.submit(JobPriority::High, "live", [p, out, dataDir](const CancelToken &token) {
+    return jobs.submit(JobPriority::High, "live", [p, out, dataDir, cacheOnly](const CancelToken &token) {
         CatalogCache cache(dataDir);
         std::string catBody, streamBody, err;
 
@@ -59,7 +61,10 @@ CancelToken XtreamService::loadLive(const Profile &profile, const std::string &d
         req.cancel = token.shared();
         req.maxBytes = 8u * 1024 * 1024;
         req.url = xtream::apiUrl(p, "get_live_categories");
-        http::Response cats = http::get(req);
+        http::Response cats;
+        if (!cacheOnly) {
+            cats = http::get(req);
+        }
         http::Response streams;
         if (cats.ok()) {
             req.url = xtream::apiUrl(p, "get_live_streams");
@@ -85,7 +90,8 @@ CancelToken XtreamService::loadLive(const Profile &profile, const std::string &d
                   (int) out->channels.size(), (streamBody.size() + 1023) / 1024, cats.seconds + streams.seconds);
         } else {
             const http::Response &bad = !cats.ok() ? cats : streams;
-            std::string why = bad.ok() ? "Could not read the channel list" : http::describe(bad);
+            std::string why = cacheOnly ? i18n::tr("connect.offline_mode")
+                                        : bad.ok() ? i18n::tr("live.list_unreadable") : http::describe(bad);
             LOG_W("xtream", "live list from network failed: %s (%s%s)", why.c_str(), bad.detail.c_str(),
                   err.empty() ? "" : (", " + err).c_str());
             int64_t savedCats = 0, savedStreams = 0;
@@ -98,7 +104,7 @@ CancelToken XtreamService::loadLive(const Profile &profile, const std::string &d
                 out->ok = true;
                 out->fromCache = true;
                 out->savedAt = savedStreams;
-                out->message = why + " - showing the saved list";
+                out->message = i18n::tr("live.showing_saved", {why});
                 LOG_I("xtream", "live: using cache from %lld (%d channels)", (long long) savedStreams,
                       (int) out->channels.size());
             } else {
@@ -115,7 +121,7 @@ CancelToken XtreamService::loadCategories(const Profile &profile, ContentType ty
     Profile p = profile;
     const char *action = type == ContentType::Live ? "get_live_categories"
                          : type == ContentType::Movie ? "get_vod_categories" : "get_series_categories";
-    return jobs.submit(JobPriority::High, action, [p, out, action, type](const CancelToken &token) {
+    return jobs.submit(JobPriority::High, action, [p, out, action](const CancelToken &token) {
         http::Request req;
         req.url = xtream::apiUrl(p, action);
         req.cancel = token.shared();
@@ -129,7 +135,7 @@ CancelToken XtreamService::loadCategories(const Profile &profile, ContentType ty
         std::string err;
         out->ok = xtream::parseCategories(resp.body, out->categories, err);
         if (!out->ok) {
-            out->message = std::string("Could not read the ") + contentTypeName(type) + " categories";
+            out->message = i18n::tr("catalog.categories_unreadable");
             LOG_W("xtream", "%s: parse failed: %s", action, err.c_str());
             return;
         }
@@ -165,7 +171,7 @@ namespace {
             if (fromCache) {
                 CatalogCache::Meta catMeta;
                 if (!cache.load(p.id, catCache, catBody, catMeta) || !cache.load(p.id, listCache, listBody, listMeta)) {
-                    out->message = "no saved copy";
+                    out->message = i18n::tr("catalog.no_saved_copy");
                     return;
                 }
                 if (catMeta.savedAt != listMeta.savedAt) {
@@ -173,7 +179,7 @@ namespace {
                     LOG_W("xtream", "%s cache: categories and list saved apart, discarded", what);
                     cache.remove(p.id, catCache);
                     cache.remove(p.id, listCache);
-                    out->message = "no saved copy";
+                    out->message = i18n::tr("catalog.no_saved_copy");
                     return;
                 }
                 out->savedAt = listMeta.savedAt;
@@ -207,7 +213,7 @@ namespace {
             }
             double t0 = clockx::monotonic();
             if (!xtream::parseCategories(catBody, categories, err) || !parseList(listBody, items, err, &stats)) {
-                out->message = std::string("Could not read the ") + what + " list";
+                out->message = i18n::tr(std::string(what) == "movies" ? "catalog.movies_unreadable" : "catalog.series_unreadable");
                 LOG_W("xtream", "%s%s: parse failed: %s", what, fromCache ? " cache" : "", err.c_str());
                 if (fromCache) {
                     cache.remove(p.id, catCache);   // corrupt saved copy: never read it again
@@ -222,12 +228,12 @@ namespace {
                       listMeta.items);
                 cache.remove(p.id, catCache);
                 cache.remove(p.id, listCache);
-                out->message = "saved copy damaged";
+                out->message = i18n::tr("catalog.saved_damaged");
                 return;
             }
             if (!fromCache && stats.raw == 0) {
                 // validation: an empty provider answer never replaces a list (or the saved copy)
-                out->message = std::string("The provider returned an empty ") + what + " list";
+                out->message = i18n::tr(std::string(what) == "movies" ? "catalog.movies_empty" : "catalog.series_empty");
                 LOG_W("xtream", "%s: provider returned an empty list, kept the current one", what);
                 return;
             }
@@ -297,7 +303,7 @@ namespace {
             }
             std::string err;
             if (!parse(r.body, out->info, err)) {
-                out->message = "The provider sent unreadable details";
+                out->message = i18n::tr("detail.unreadable");
                 LOG_W("xtream", "%s %s: %s", action, id.c_str(), err.c_str());
                 return;
             }

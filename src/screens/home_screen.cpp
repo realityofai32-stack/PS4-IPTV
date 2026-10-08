@@ -7,6 +7,7 @@
 // Recently Watched shows at most RECENT_LIVE_MAX channels while movies/episodes can fill the row.
 
 #include "common.h"
+#include "../app/offline.h"
 #include "../core/format.h"
 #include "../platform/clock.h"
 
@@ -28,6 +29,16 @@ namespace {
     const float RECENT_H = 104;
     const int RECENT_MAX = 5;
     const int RECENT_LIVE_MAX = 3;
+    const int TILE_COUNT = 7;
+    enum Tile {
+        TILE_LIVE,
+        TILE_MOVIES,
+        TILE_SERIES,
+        TILE_DOWNLOADS,
+        TILE_FAVORITES,
+        TILE_SEARCH,
+        TILE_SETTINGS
+    };
 
     class HomeScreen : public Screen {
     public:
@@ -36,7 +47,7 @@ namespace {
             const Session &s = app.session();
 
             // top bar
-            ui::label(this, "PS4 IPTV", theme::HEADING, theme::SAFE_X, theme::SAFE_Y, ui::Weight::SemiBold,
+            ui::label(this, tr("app.name"), theme::HEADING, theme::SAFE_X, theme::SAFE_Y, ui::Weight::SemiBold,
                       theme::accent());
             clock = ui::label(this, clockx::localTime(), theme::HEADING, 0, theme::SAFE_Y, ui::Weight::SemiBold);
             clock->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
@@ -47,17 +58,19 @@ namespace {
             who->setAlign(ui::Align::Right, whoRight);
             auto *dot = new CircleShape(8);
             dot->setPointCount(16);
-            dot->setFillColor(s.connected ? theme::success() : theme::danger());
+            dot->setFillColor(s.connected ? theme::success() : s.offline ? theme::warning() : theme::danger());
             dot->setPosition(whoRight - who->width() - 28, theme::SAFE_Y + 15);
             add(dot);
 
             // account notice
             std::string notice;
             int64_t now = clockx::unixNow();
-            if (s.httpsWarning) {
-                notice = "This server uses HTTPS. This build currently supports HTTP streams only.";
+            if (s.offline) {
+                notice = tr("home.offline_notice");
+            } else if (s.httpsWarning) {
+                notice = tr("home.https_notice");
             } else if (s.account.expiresAt > 0 && s.account.expiresAt - now < 7 * 86400) {
-                notice = "Your subscription expires on " + clockx::localDate(s.account.expiresAt) + ".";
+                notice = tr("home.expiry_notice", {clockx::localDate(s.account.expiresAt)});
             }
             if (!notice.empty()) {
                 auto *n = ui::label(this, notice, theme::LABEL, theme::SAFE_X, 112, ui::Weight::Regular,
@@ -65,21 +78,24 @@ namespace {
                 n->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
             }
 
-            const char *titles[] = {"Live TV", "Movies", "Series", "Favorites", "Search", "Settings"};
-            const float gap = 24;
-            const float tileW = (theme::SCREEN_W - 2 * theme::SAFE_X - 5 * gap) / 6;
-            for (int i = 0; i < 6; i++) {
-                Tile &t = tiles[i];
+            const char *titles[TILE_COUNT] = {"home.live_tv", "home.movies", "home.series", "home.downloads",
+                                              "home.favorites", "home.search", "home.settings"};
+            const float gap = 20;
+            const float tileW = (theme::SCREEN_W - 2 * theme::SAFE_X - (TILE_COUNT - 1) * gap) / TILE_COUNT;
+            for (int i = 0; i < TILE_COUNT; i++) {
+                TileView &t = tiles[i];
                 t.bg = ui::box(this, FloatRect(theme::SAFE_X + (float) i * (tileW + gap), TILE_Y, tileW, TILE_H),
                                theme::surface(), 20);
-                t.accentBar = ui::box(t.bg, FloatRect(28, 30, 44, 6), theme::accent(), 3);
-                t.title = ui::label(t.bg, titles[i], theme::HEADING, 28, 96, ui::Weight::SemiBold);
-                t.title->setMaxWidth(tileW - 56);
-                t.subtitle = ui::label(t.bg, "", theme::LABEL, 28, 148, ui::Weight::Regular, theme::textDim());
-                t.subtitle->setMaxWidth(tileW - 56);
+                t.accentBar = ui::box(t.bg, FloatRect(24, 30, 44, 6), theme::accent(), 3);
+                t.title = ui::label(t.bg, tr(titles[i]), theme::HEADING - 2, 24, 76, ui::Weight::SemiBold);
+                t.title->setMaxWidth(tileW - 48);
+                // seven tiles are narrow: the subtitle may take two lines
+                t.subtitle = ui::label(t.bg, "", theme::CAPTION, 24, 126, ui::Weight::Regular, theme::textDim());
+                t.subtitle->setMaxWidth(tileW - 48);
+                t.subtitle->setMaxLines(2);
             }
 
-            auto *cwHeading = ui::label(this, "Continue Watching", theme::HEADING, theme::SAFE_X, CW_Y,
+            auto *cwHeading = ui::label(this, tr("home.continue_watching"), theme::HEADING, theme::SAFE_X, CW_Y,
                                         ui::Weight::SemiBold);
             // the focused card in full: "Series  ·  S01E03 · Title  ·  24:16 / 57:00"
             cwDetail = ui::label(this, "", theme::LABEL, theme::SAFE_X + cwHeading->width() + 32, CW_Y + 8,
@@ -88,19 +104,18 @@ namespace {
             cwLayer = new RectangleShape(FloatRect(theme::SAFE_X, CW_Y + 56, theme::SCREEN_W - 2 * theme::SAFE_X, 300));
             cwLayer->setFillColor(Color::Transparent);
             add(cwLayer);
-            cwEmpty = ui::label(this, "Movies and episodes you start appear here, ready to resume.", theme::BODY,
+            cwEmpty = ui::label(this, tr("home.continue_empty"), theme::BODY,
                                 theme::SAFE_X + 8, CW_Y + 140, ui::Weight::Regular, theme::textMuted());
 
-            ui::label(this, "Recently Watched", theme::HEADING, theme::SAFE_X, RECENT_Y, ui::Weight::SemiBold);
+            ui::label(this, tr("home.recently_watched"), theme::HEADING, theme::SAFE_X, RECENT_Y, ui::Weight::SemiBold);
             recentLayer = new RectangleShape(FloatRect(theme::SAFE_X, RECENT_Y + 56, theme::SCREEN_W - 2 * theme::SAFE_X,
                                                        RECENT_H));
             recentLayer->setFillColor(Color::Transparent);
             add(recentLayer);
-            recentEmpty = ui::label(this, "Channels, movies and episodes you watch appear here.", theme::BODY,
+            recentEmpty = ui::label(this, tr("home.recent_empty"), theme::BODY,
                                     theme::SAFE_X + 8, RECENT_Y + 90, ui::Weight::Regular, theme::textMuted());
 
-            hints = screens::hintBar(this, {{ui::Glyph::Cross, "Open"}, {ui::Glyph::Triangle, "Search"},
-                                            {ui::Glyph::Options, "Settings"}, {ui::Glyph::Circle, "Exit"}});
+            hints = screens::hintBar(this, {});
             rebuildRows();
             refresh();
         }
@@ -121,10 +136,16 @@ namespace {
             app.images().want(std::vector<ImageRequest>());
         }
 
-        void tick(double) override {
-            std::string t = clockx::localTime();
-            if (t != clock->getText()) {
-                clock->setText(t);
+        void tick(double t) override {
+            std::string time = clockx::localTime();
+            if (time != clock->getText()) {
+                clock->setText(time);
+                redraw();
+            }
+            if (app.downloads().generation() != downloadsGen && t - lastDownloadsRefresh > 1.0) {
+                lastDownloadsRefresh = t;   // the Downloads tile counts (at most once per second)
+                downloadsGen = app.downloads().generation();
+                refresh();
                 redraw();
             }
             if (app.vod().generation() != vodGen || app.images().generation() != imageGen
@@ -174,12 +195,12 @@ namespace {
                     return;
                 case PadButton::Triangle:
                     if (!e.repeat) {
-                        openTile(4);
+                        openTile(TILE_SEARCH);
                     }
                     return;
                 case PadButton::Options:
                     if (!e.repeat) {
-                        openTile(5);
+                        openTile(TILE_SETTINGS);
                     }
                     return;
                 case PadButton::Circle:
@@ -190,7 +211,8 @@ namespace {
                         zone = 0;
                         break;
                     }
-                    app.push(screens::makeDialog(app, "Exit PS4 IPTV?", "", {"Cancel", "Exit"}, [this](int c) {
+                    app.push(screens::makeDialog(app, tr("app.exit_title"), "", {tr("common.cancel"), tr("common.exit")},
+                                                 [this](int c) {
                         if (c == 1) {
                             app.quit();
                         }
@@ -203,7 +225,7 @@ namespace {
         }
 
     private:
-        struct Tile {
+        struct TileView {
             RectangleShape *bg;
             RectangleShape *accentBar;
             ui::Label *title;
@@ -217,20 +239,20 @@ namespace {
         };
 
         int zoneSize(int z) const {
-            return z == 0 ? 6 : z == 1 ? (int) cw.size() : (int) recent.size();
+            return z == 0 ? TILE_COUNT : z == 1 ? (int) cw.size() : (int) recent.size();
         }
 
-        static std::string sectionCount(const SectionStatus &st, size_t n, const char *noun) {
+        static std::string sectionCount(const SectionStatus &st, size_t n, const char *countKey) {
             if (n > 0) {
-                return std::to_string(n) + " " + noun;
+                return i18n::count(countKey, (long long) n);
             }
             switch (st.status) {
                 case CatalogStatus::Loading:
-                    return "Loading" "\xE2\x80\xA6";
+                    return tr("common.loading");
                 case CatalogStatus::Failed:
-                    return "Unavailable, open to retry";
+                    return tr("home.section_failed");
                 default:
-                    return "Open to load";
+                    return tr("home.section_open");
             }
         }
 
@@ -239,7 +261,7 @@ namespace {
             if (h.type == ContentType::Series) {
                 return fmt::episodeCode(h.season, h.episode);
             }
-            return h.type == ContentType::Movie ? "Movie" : "Live TV";
+            return tr(h.type == ContentType::Movie ? "home.kind_movie" : "home.kind_live");
         }
 
         static std::string titleOf(const HistoryEntry &h) {
@@ -249,7 +271,7 @@ namespace {
         // "S01E03 · Title" for an episode
         static std::string episodeLine(const HistoryEntry &h) {
             std::string code = fmt::episodeCode(h.season, h.episode);
-            return h.name.empty() ? code : code + " \xC2\xB7 " + h.name;
+            return code + " \xC2\xB7 " + (h.name.empty() ? tr("episode.number", {std::to_string(h.episode)}) : h.name);
         }
 
         static std::string cwDetailOf(const HistoryEntry &h) {
@@ -360,19 +382,22 @@ namespace {
 
         void openTile(int i) {
             switch (i) {
-                case 0:
+                case TILE_LIVE:
                     app.push(screens::makeLive(app));
                     break;
-                case 1:
+                case TILE_MOVIES:
                     app.push(screens::makeMovies(app));
                     break;
-                case 2:
+                case TILE_SERIES:
                     app.push(screens::makeSeries(app));
                     break;
-                case 3:
+                case TILE_DOWNLOADS:
+                    app.push(screens::makeDownloads(app));
+                    break;
+                case TILE_FAVORITES:
                     app.push(screens::makeFavorites(app));
                     break;
-                case 4:
+                case TILE_SEARCH:
                     app.push(screens::makeSearch(app));
                     break;
                 default:
@@ -400,7 +425,28 @@ namespace {
         void resume(const HistoryEntry &h) {
             std::vector<VodItem> queue = {itemOf(h)};
             int position = 0;
-            if (h.type == ContentType::Series) {
+            const std::string &profileId = app.session().profile.id;
+            std::vector<dl::Item> local = h.type == ContentType::Series
+                                          ? offline::seriesEpisodes(app.downloads(), profileId, h.seriesId)
+                                          : std::vector<dl::Item>();
+            if (h.type == ContentType::Series && app.session().offline && !local.empty()) {
+                // offline: the downloaded episodes are the queue (next episode works without the provider)
+                queue.clear();
+                for (const dl::Item &d: local) {
+                    if (d.contentId == h.id) {
+                        position = (int) queue.size();
+                    }
+                    queue.push_back(offline::itemFor(app.downloads(), d));
+                }
+                bool found = false;
+                for (const VodItem &it: queue) {
+                    found |= it.id == h.id;
+                }
+                if (!found) {
+                    queue.insert(queue.begin(), itemOf(h));
+                    position = 0;
+                }
+            } else if (h.type == ContentType::Series) {
                 if (std::shared_ptr<const SeriesInfo> info = app.vod().seriesInfo(h.seriesId)) {
                     queue.clear();
                     for (const auto &s: info->seasons) {
@@ -425,6 +471,9 @@ namespace {
                     app.vod().requestSeriesInfo(app.session().profile, h.seriesId);   // for the next time
                 }
             }
+            for (VodItem &it: queue) {
+                offline::preferLocal(app.downloads(), it, profileId);   // a downloaded copy plays from the disk
+            }
             app.push(screens::makeVodPlayer(app, queue, position, true));
         }
 
@@ -438,7 +487,7 @@ namespace {
                             return;
                         }
                     }
-                    app.toast("This channel is no longer in the list", ToastKind::Error);
+                    app.toast(tr("live.channel_gone"), ToastKind::Error);
                     return;
                 }
                 case ContentType::Movie: {
@@ -473,16 +522,22 @@ namespace {
 
         void refresh() {
             const Session &s = app.session();
-            std::string subs[6] = {
-                    s.liveLoaded ? std::to_string(s.live.channels().size()) + " channels" : "Unavailable",
-                    sectionCount(app.vod().movieStatus(), app.vod().movies().size(), "movies"),
-                    sectionCount(app.vod().seriesStatus(), app.vod().series().size(), "series"),
-                    "Channels, movies, series",
-                    "Channels, movies, series",
-                    "Profiles and playback"};
-            for (int i = 0; i < 6; i++) {
+            dl::Totals dt = app.downloads().totals();
+            std::string downloads = dt.completed == 0 && dt.active == 0 ? tr("home.downloads_sub")
+                                    : dt.active == 0 ? i18n::count("home.downloaded_count", dt.completed)
+                                                     : i18n::count("home.downloading_count", dt.active);
+            std::string subs[TILE_COUNT] = {
+                    s.liveLoaded ? i18n::count("home.channels", (long long) s.live.channels().size())
+                                 : tr("home.unavailable"),
+                    sectionCount(app.vod().movieStatus(), app.vod().movies().size(), "home.movie_count"),
+                    sectionCount(app.vod().seriesStatus(), app.vod().series().size(), "home.series_count"),
+                    downloads,
+                    tr("home.favorites_sub"),
+                    tr("home.search_sub"),
+                    tr("home.settings_sub")};
+            for (int i = 0; i < TILE_COUNT; i++) {
                 bool f = zone == 0 && i == index[0];
-                Tile &t = tiles[i];
+                TileView &t = tiles[i];
                 t.subtitle->setText(subs[i]);
                 t.bg->setFillColor(f ? theme::accentDark() : theme::surface());
                 t.bg->setOutlineColor(theme::withAlpha(Color::White, 220));
@@ -500,11 +555,12 @@ namespace {
                 recentCards[i].bg->setOutlineColor(theme::accent());
                 recentCards[i].bg->setOutlineThickness(f ? 3 : 0);
             }
-            hints->setHints({{ui::Glyph::Cross, zone == 1 ? "Resume" : "Open"}, {ui::Glyph::Triangle, "Search"},
-                             {ui::Glyph::Options, "Settings"}, {ui::Glyph::Circle, zone == 0 ? "Exit" : "Back"}});
+            hints->setHints({{ui::Glyph::Cross, tr(zone == 1 ? "common.resume" : "common.open")},
+                             {ui::Glyph::Triangle, tr("home.search")}, {ui::Glyph::Options, tr("home.settings")},
+                             {ui::Glyph::Circle, tr(zone == 0 ? "common.exit" : "common.back")}});
         }
 
-        Tile tiles[6];
+        TileView tiles[TILE_COUNT];
         RectangleShape *cwLayer;
         RectangleShape *recentLayer;
         ui::Label *cwEmpty;
@@ -521,6 +577,8 @@ namespace {
         unsigned vodGen = 0;
         unsigned imageGen = 0;
         unsigned libraryGen = 0;
+        unsigned downloadsGen = 0;
+        double lastDownloadsRefresh = 0;
     };
 
     class SectionScreen : public Screen {
@@ -532,7 +590,7 @@ namespace {
             m->setAlign(ui::Align::Center, theme::SCREEN_W);
             m->setMaxWidth(1200);
             m->setMaxLines(3);
-            screens::hintBar(this, {{ui::Glyph::Circle, "Back"}});
+            screens::hintBar(this, {{ui::Glyph::Circle, tr("common.back")}});
         }
 
         const char *name() const override { return "section"; }

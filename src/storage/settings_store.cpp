@@ -3,7 +3,7 @@
 #include "../platform/fs.h"
 
 namespace {
-    const int FORMAT_VERSION = 1;
+    const int FORMAT_VERSION = 2;   // 2: language choice, display mode / zoom, downloads
 
     // language codes come back from the file: letters only, short
     std::string cleanCode(const std::string &code) {
@@ -92,7 +92,11 @@ std::string SettingsStore::serialize() const {
     root.set("autoPlayNextEpisode", json::Value::makeBool(settings.autoPlayNextEpisode));
     root.set("showTechnicalInfo", json::Value::makeBool(settings.showTechnicalInfo));
     root.set("loadImages", json::Value::makeBool(settings.loadImages));
-    root.set("language", json::Value::makeString(settings.language));
+    root.set("displayMode", json::Value::makeString(display::modeKey(settings.displayMode)));
+    root.set("zoom", json::Value::makeInt(display::clampZoom(settings.zoomPercent)));
+    root.set("retryDownloads", json::Value::makeBool(settings.retryDownloads));
+    root.set("resumeDownloadsOnStart", json::Value::makeBool(settings.resumeDownloadsOnStart));
+    root.set("language", json::Value::makeString(settings.language == "tr" ? "tr" : "en"));
     json::Value orders = json::Value::makeObject();
     for (const auto &o: settings.sortOrders) {
         orders.set(o.first, json::Value::makeString(o.second));
@@ -127,7 +131,13 @@ bool SettingsStore::deserialize(const std::string &text, std::string *error) {
     s.autoPlayNextEpisode = root["autoPlayNextEpisode"].asBool(s.autoPlayNextEpisode);
     s.showTechnicalInfo = root["showTechnicalInfo"].asBool(s.showTechnicalInfo);
     s.loadImages = root["loadImages"].asBool(s.loadImages);
-    s.language = root["language"].asString(s.language);
+    s.displayMode = display::modeFromKey(root["displayMode"].asString("auto"));
+    s.zoomPercent = display::clampZoom((int) root["zoom"].asInt(100));
+    s.retryDownloads = root["retryDownloads"].asBool(s.retryDownloads);
+    s.resumeDownloadsOnStart = root["resumeDownloadsOnStart"].asBool(s.resumeDownloadsOnStart);
+    // the language is only honoured from files written since the Language setting exists (version 2)
+    std::string lang = root["version"].asInt(1) >= 2 ? root["language"].asString("en") : "en";
+    s.language = lang == "tr" ? "tr" : "en";
     for (const auto &o: root["sortOrders"].members()) {
         std::string key = o.second.asString();
         if (o.first.size() <= 80 && iptv::sortModeFromKey(key) != iptv::SortMode::Provider) {

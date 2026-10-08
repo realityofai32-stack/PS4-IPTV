@@ -93,7 +93,7 @@ bool VodProgress::record(double now, double finalPosition, bool atEnd) {
     HistoryEntry h;
     h.type = episode ? iptv::ContentType::Series : iptv::ContentType::Movie;
     h.id = it.id;
-    h.name = it.title.empty() && episode ? "Episode " + std::to_string(it.episode) : it.title;
+    h.name = it.title;   // an untitled episode stays "" (the UI shows "Episode N" in its language)
     h.icon = it.image;
     h.extension = it.extension;
     h.seriesId = it.seriesId;

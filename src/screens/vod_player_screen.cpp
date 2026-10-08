@@ -9,6 +9,12 @@
 //     episode and app exit the position is queried from mpv right before stopping and written at once
 //   - overlay: hides 4 s after the last input while playing (player/hud_logic.h)
 //   - episodes: L1/R1 previous/next, an "Up next" panel at the end (auto-play only when enabled in Settings)
+//   - video display mode / zoom (player/display): mpv vo properties set at runtime from the Options panel; the
+//     Settings defaults apply when the player opens, a change in the panel lasts for this playback only
+//   - offline: a downloaded item (VodItem::localPath) opens the local file through the same Playback /
+//     mpv path; tracks, display mode, resume and progress work identically. Progress is kept in the download's
+//     profile (the library switches to it while the player is open)
+//   - downloads pause while the player is open (App::setPlaybackActive): decoding comes first
 
 #include <cctype>
 #include <cmath>
@@ -19,6 +25,7 @@
 #include "../platform/clock.h"
 #include "../platform/log.h"
 #include "../app/vod_progress.h"
+#include "../player/display.h"
 #include "../player/hud_logic.h"
 #include "../player/pplay/video_texture.h"
 
@@ -33,9 +40,11 @@ namespace {
     const double AUTOPLAY_COUNTDOWN = 10;
     const float PANEL_W = 680;
 
-    const char *SIZE_NAMES[] = {"Small", "Medium", "Large"};
-    const char *POSITION_NAMES[] = {"Bottom", "Raised"};
+    const char *SIZE_KEYS[] = {"subtitle.size.small", "subtitle.size.medium", "subtitle.size.large"};
+    const char *POSITION_KEYS[] = {"subtitle.position.bottom", "subtitle.position.raised"};
 
+    // the log's English status names
+    // i18n-exempt-begin: English status names for the log
     const char *statusName(stability::Status s) {
         switch (s) {
             case stability::Status::Opening:
@@ -52,6 +61,33 @@ namespace {
                 return "failed";
         }
     }
+    // i18n-exempt-end
+
+    const char *statusKey(stability::Status s) {
+        switch (s) {
+            case stability::Status::Opening:
+                return "recovery.status.opening";
+            case stability::Status::Playing:
+                return "recovery.status.playing";
+            case stability::Status::Buffering:
+                return "recovery.status.buffering";
+            case stability::Status::Reconnecting:
+                return "recovery.status.reconnecting";
+            case stability::Status::Refused:
+                return "recovery.status.refused";
+            default:
+                return "recovery.status.failed";
+        }
+    }
+
+    const char *stabilityKey(StabilityPreset p) {
+        return p == StabilityPreset::Fast ? "stability.fast" : p == StabilityPreset::MaxStability ? "stability.max"
+                                                                                                  : "stability.balanced";
+    }
+
+    std::string episodeTitle(const VodItem &it) {
+        return it.title.empty() ? tr("episode.number", {std::to_string(it.episode)}) : it.title;
+    }
 
     class VodPlayerScreen : public Screen, public ui::ListView::Adapter {
     public:
@@ -60,6 +96,9 @@ namespace {
                 : Screen(a), queue(std::move(items)), index(start), resumeOnStart(resumeFirst),
                   onExit(std::move(exitCallback)), tracker(a.library(), &clockx::unixNow) {
             setFillColor(Color::Black);
+            displayMode = app.settings().get().displayMode;
+            zoom = display::clampZoom(app.settings().get().zoomPercent);
+            app.setPlaybackActive(true);
             video = new VideoTexture(app.playback().backend(), {theme::SCREEN_W, theme::SCREEN_H});
             add(video);
             buildOverlay();
@@ -70,6 +109,10 @@ namespace {
 
         ~VodPlayerScreen() override {
             app.playback().stop();
+            app.setPlaybackActive(false);
+            if (!previousProfile.empty()) {
+                app.library().setProfile(previousProfile);   // back to the signed-in profile
+            }
         }
 
         const char *name() const override { return "vod-player"; }
@@ -121,7 +164,7 @@ namespace {
             }
             if (pb.subtitlesDisabledByRenderer() && !subtitleWarningShown) {
                 subtitleWarningShown = true;
-                app.toast("These subtitles cannot be displayed on PS4: subtitles turned off", ToastKind::Error);
+                app.toast(tr("player.subtitles_unsupported"), ToastKind::Error);
             }
             if (finished && autoplayAt > 0 && now >= autoplayAt) {
                 autoplayAt = 0;
@@ -227,7 +270,7 @@ namespace {
                         const std::string &id = isEpisode() ? it.seriesId : it.id;
                         bool on = app.library().toggleFavorite(t, id);
                         app.saveLibrary();
-                        app.toast(on ? "Added to favorites" : "Removed from favorites");
+                        app.toast(tr(on ? "favorites.added" : "favorites.removed"));
                         setOverlay(true);
                     }
                     return;
@@ -245,6 +288,14 @@ namespace {
         // ------------------------------------------------------------------ playback
         void startItem(int i, bool resume) {
             index = i;
+            // a download of another (or a deleted) profile keeps its progress in that profile
+            const std::string &owner = queue[(size_t) i].profileId;
+            if (!owner.empty() && owner != app.library().profileId()) {
+                if (previousProfile.empty()) {
+                    previousProfile = app.library().profileId();
+                }
+                app.library().setProfile(owner);
+            }
             finished = false;
             autoplayAt = 0;
             endPanel->setVisibility(Visibility::Hidden);
@@ -258,9 +309,10 @@ namespace {
             recovery.begin(stability::policy(preset), s.retryOnStall, false, app.now());
             // exactly the saved position (no seconds subtracted), when resuming an item in progress
             double start = tracker.begin(item(), resume && s.resumeVod, app.now());
-            LOG_I("player", "%s %s (%s), %s, stability %s", isEpisode() ? "episode" : "movie", item().id.c_str(),
-                  item().extension.c_str(), start > 0 ? diag::format("resume at %.3fs", start).c_str() : "from the start",
-                  stabilityName(preset));
+            LOG_I("player", "%s %s (%s, %s), %s, stability %s, display %s %d%%", isEpisode() ? "episode" : "movie",
+                  item().id.c_str(), item().extension.c_str(), item().localPath.empty() ? "stream" : "downloaded file",
+                  start > 0 ? diag::format("resume at %.3fs", start).c_str() : "from the start", stabilityName(preset),
+                  display::modeKey(displayMode), zoom);
             lastActivity = app.now();
             open(start);
             setOverlay(true);
@@ -274,9 +326,12 @@ namespace {
             pb.applyOptions(tracks::appearanceOptions(s.subtitleSize, s.subtitlePosition, s.subtitleShadow));
             // precise absolute seeks for the resume start (mpv 0.34.1 default, set explicitly against configs)
             pb.applyOptions({{"hr-seek", "default"}});
+            pb.applyOptions(display::mpvOptions(displayMode, zoom));
             const VodItem &it = item();
-            std::string url = isEpisode() ? xtream::seriesUrl(app.session().profile, it.id, it.extension)
-                                          : xtream::movieUrl(app.session().profile, it.id, it.extension);
+            // a downloaded copy plays from the disk (same backend, no provider request)
+            std::string url = !it.localPath.empty() ? it.localPath
+                              : isEpisode() ? xtream::seriesUrl(app.session().profile, it.id, it.extension)
+                                            : xtream::movieUrl(app.session().profile, it.id, it.extension);
             Playback::OpenOptions o;
             o.start = start;
             o.chooseTracks = [this](const std::vector<tracks::Track> &list) { return chooseTracks(list); };
@@ -388,17 +443,16 @@ namespace {
             LOG_I("player", "%s finished", item().id.c_str());
             pb.stop();
             bool next = isEpisode() && index + 1 < (int) queue.size();
-            endTitle->setText(next ? "Up next" : isEpisode() ? "You finished the last episode" : "The end");
+            endTitle->setText(tr(next ? "player.up_next" : isEpisode() ? "player.last_episode" : "player.the_end"));
             if (next) {
                 const VodItem &n = queue[(size_t) index + 1];
-                endText->setText(fmt::episodeCode(n.season, n.episode) + "  "
-                                 + (n.title.empty() ? "Episode " + std::to_string(n.episode) : n.title));
+                endText->setText(fmt::episodeCode(n.season, n.episode) + "  " + episodeTitle(n));
                 bool autoplay = app.settings().get().autoPlayNextEpisode;
                 autoplayAt = autoplay ? app.now() + AUTOPLAY_COUNTDOWN : 0;
-                endHint->setText(autoplay ? "X  Play now          Circle  Back" : "X  Play next          Circle  Back");
+                endHint->setText(tr(autoplay ? "player.end_hint_play_now" : "player.end_hint_play_next"));
             } else {
                 endText->setText(isEpisode() ? item().seriesName : item().title);
-                endHint->setText("X  Watch again          Circle  Back");
+                endHint->setText(tr("player.end_hint_again"));
             }
             endPanel->setVisibility(Visibility::Visible);
             centre->setVisibility(Visibility::Hidden);
@@ -497,13 +551,13 @@ namespace {
             bottom->add(hints);
 
             pausePill = ui::box(this, FloatRect((theme::SCREEN_W - 260) / 2, 460, 260, 90), Color(12, 16, 22, 210), 45);
-            auto *pl = ui::label(pausePill, "Paused", theme::HEADING, 0, ui::Label::centerOffset(theme::HEADING, 90),
+            auto *pl = ui::label(pausePill, tr("player.paused"), theme::HEADING, 0, ui::Label::centerOffset(theme::HEADING, 90),
                                  ui::Weight::SemiBold);
             pl->setAlign(ui::Align::Center, 260);
             pausePill->setVisibility(Visibility::Hidden);
 
             pill = ui::box(this, FloatRect((theme::SCREEN_W - 460) / 2, 700, 460, 72), Color(12, 16, 22, 210), 36);
-            pillText = ui::label(pill, "Buffering" "\xE2\x80\xA6", theme::BODY, 84, ui::Label::centerOffset(theme::BODY, 72),
+            pillText = ui::label(pill, tr("player.buffering"), theme::BODY, 84, ui::Label::centerOffset(theme::BODY, 72),
                                  ui::Weight::SemiBold);
             pillSpinner = new ui::Spinner(12);
             pillSpinner->setPosition(30, (72 - 12) / 2);
@@ -542,7 +596,7 @@ namespace {
 
         void buildInfo() {
             info = ui::box(this, FloatRect(theme::SAFE_X, 220, 660, 560), Color(12, 16, 22, 230), theme::RADIUS);
-            ui::label(info, "Stream information", theme::HEADING, 36, 30, ui::Weight::SemiBold);
+            ui::label(info, tr("info.title"), theme::HEADING, 36, 30, ui::Weight::SemiBold);
             infoText = ui::label(info, "", theme::LABEL, 36, 96, ui::Weight::Regular, theme::textDim());
             infoText->setMaxWidth(600);
             infoText->setMaxLines(15);
@@ -567,10 +621,11 @@ namespace {
             const tracks::Track *a = tracks::selected(list, tracks::Kind::Audio);
             const tracks::Track *sub = tracks::selected(list, tracks::Kind::Subtitle);
             if (a) {
-                s += "Audio: " + tracks::label(*a, a->id);
+                s += tr("player.chip_audio", {tracks::label(*a, ordinalOf(*a))});
             }
             if (subCount > 0) {
-                s += std::string(s.empty() ? "" : "   \xC2\xB7   ") + "Subtitles: " + (sub ? tracks::label(*sub, sub->id) : "Off");
+                s += std::string(s.empty() ? "" : "   \xC2\xB7   ")
+                     + tr("player.chip_subtitles", {sub ? tracks::label(*sub, ordinalOf(*sub)) : tr("common.off")});
             }
             return s;
         }
@@ -579,13 +634,14 @@ namespace {
             Playback &pb = app.playback();
             const VodItem &it = item();
             const StreamInfo &si = pb.info();
+            std::string source = it.localPath.empty() ? "" : "   \xC2\xB7   " + tr("player.offline_copy");
             if (isEpisode()) {
                 title->setText(it.seriesName);
-                subtitle->setText(fmt::episodeCode(it.season, it.episode) + "  \xE2\x80\x94  "
-                                  + (it.title.empty() ? "Episode " + std::to_string(it.episode) : it.title));
+                subtitle->setText(fmt::episodeCode(it.season, it.episode) + "  \xE2\x80\x94  " + episodeTitle(it) + source);
             } else {
                 title->setText(it.title);
-                subtitle->setText(it.year > 0 ? std::to_string(it.year) : "");
+                std::string year = it.year > 0 ? std::to_string(it.year) : "";
+                subtitle->setText(!year.empty() ? year + source : it.localPath.empty() ? "" : tr("player.offline_copy"));
             }
             clock->setText(clockx::localTime());
 
@@ -607,13 +663,13 @@ namespace {
             }
             chips->setText(chipText);
             std::vector<std::pair<ui::Glyph, std::string>> h = {
-                    {ui::Glyph::Cross, pb.state() == PlaybackState::Paused ? "Play" : "Pause"},
-                    {ui::Glyph::DPad, "Seek 10 s"}, {ui::Glyph::L2, ""}, {ui::Glyph::R2, "1 min"},
-                    {ui::Glyph::Options, "Audio & subtitles"}, {ui::Glyph::Triangle, "Info"}};
+                    {ui::Glyph::Cross, tr(pb.state() == PlaybackState::Paused ? "common.play" : "player.pause")},
+                    {ui::Glyph::DPad, tr("player.seek_10")}, {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("player.seek_60")},
+                    {ui::Glyph::Options, tr("player.options")}, {ui::Glyph::Triangle, tr("player.info")}};
             if (isEpisode()) {
-                h.push_back({ui::Glyph::R1, "Next episode"});
+                h.push_back({ui::Glyph::R1, tr("player.next_episode")});
             }
-            h.push_back({ui::Glyph::Circle, "Back"});
+            h.push_back({ui::Glyph::Circle, tr("common.back")});
             hints->setHints(h);
 
             stability::Status rs = recovery.status();
@@ -630,26 +686,25 @@ namespace {
                 spinner->tick(now);
             }
             int secondsLeft = (int) std::ceil(recovery.secondsLeft(now));
-            std::string attempt = std::to_string(recovery.attempts()) + " of " + std::to_string(recovery.maxAttempts());
+            std::string attempt = tr("player.attempt_of", {std::to_string(recovery.attempts()),
+                                                           std::to_string(recovery.maxAttempts())});
             if (rs == stability::Status::Opening) {
                 centreTitle->setText(isEpisode() ? it.seriesName : it.title);
-                centreText->setText(tracker.position() > 1 ? "Resuming at " + fmt::clock(tracker.position()) + "\xE2\x80\xA6"
-                                                           : std::string("Opening" "\xE2\x80\xA6"));
+                centreText->setText(tracker.position() > 1 ? tr("player.resuming_at", {fmt::clock(tracker.position())})
+                                                           : tr("player.opening"));
             } else if (rs == stability::Status::Reconnecting) {
-                centreTitle->setText("Reconnecting" "\xE2\x80\xA6");
-                centreText->setText(secondsLeft > 0 ? "Connection lost. Next attempt in " + std::to_string(secondsLeft)
-                                                      + " s  (attempt " + attempt + ")" : "Attempt " + attempt);
+                centreTitle->setText(tr("player.reconnecting"));
+                centreText->setText(secondsLeft > 0 ? tr("player.next_attempt", {std::to_string(secondsLeft), attempt})
+                                                    : tr("player.attempt", {attempt}));
             } else if (rs == stability::Status::Refused) {
-                centreTitle->setText("Provider temporarily refused the stream (HTTP 403)");
-                centreText->setText("Retrying in " + std::to_string(secondsLeft) + " s" "\xE2\x80\xA6"
-                                    "  (attempt " + attempt + ")");
-                centreHint->setText("X  Retry now          Circle  Cancel");
+                centreTitle->setText(tr("player.http_403"));
+                centreText->setText(tr("player.retrying_in", {std::to_string(secondsLeft), attempt}));
+                centreHint->setText(tr("player.hint_retry_now"));
             } else if (rs == stability::Status::Failed) {
                 bool stopped = pb.state() == PlaybackState::Error;
-                centreTitle->setText(stopped && !pb.errorMessage().empty() ? pb.errorMessage() : "This title is unavailable");
-                centreText->setText(recovery.attempts() > 0 ? "Automatic reconnect gave up after "
-                                                              + std::to_string(recovery.attempts()) + " attempts." : "");
-                centreHint->setText("X  Retry          Circle  Back");
+                centreTitle->setText(stopped && !pb.errorMessage().empty() ? pb.errorMessage() : tr("player.title_unavailable"));
+                centreText->setText(recovery.attempts() > 0 ? tr("player.gave_up", {std::to_string(recovery.attempts())}) : "");
+                centreHint->setText(tr("player.hint_retry"));
             }
             bool pillShown = !finished && rs == stability::Status::Buffering;
             pill->setVisibility(pillShown ? Visibility::Visible : Visibility::Hidden);
@@ -658,26 +713,31 @@ namespace {
             }
 
             if (info->isVisible()) {
-                char buf[1400];
-                snprintf(buf, sizeof(buf),
-                         "Container     %s\nResolution    %s\nFrame rate    %s\nVideo codec   %s\nPixel format  %s\n"
-                         "Audio codec   %s\nAudio         %s\nBuffer        %.1f s\nNetwork       %s\nDropped       %lld\n"
-                         "Tracks        %d audio, %d subtitle\nStability     %s\nState         %s\nRecovery      %s",
-                         si.format.c_str(),
-                         si.width > 0 ? (std::to_string(si.width) + " x " + std::to_string(si.height)).c_str() : "-",
-                         si.fps > 0 ? diag::format("%.2f fps", si.fps).c_str() : "-",
-                         si.videoCodec.empty() ? "-" : si.videoCodec.c_str(),
-                         si.pixelFormat.empty() ? "-" : si.pixelFormat.c_str(),
-                         si.audioCodec.empty() ? "-" : si.audioCodec.c_str(),
-                         si.sampleRate > 0 ? diag::format("%d Hz, %s", si.sampleRate,
-                                                          tracks::channelsName(si.channels).c_str()).c_str() : "-",
-                         si.cacheSeconds,
-                         si.cacheSpeed > 0 ? diag::format("%lld KB/s", si.cacheSpeed / 1000).c_str() : "-",
-                         si.droppedFrames, countTracks(tracks::Kind::Audio), countTracks(tracks::Kind::Subtitle),
-                         stabilityName(preset), statusName(rs),
-                         (std::to_string(recovery.attempts()) + " / " + std::to_string(recovery.maxAttempts())
-                          + (recovery.reason().empty() ? "" : ", last: " + recovery.reason())).c_str());
-                infoText->setText(buf);
+                std::string reason = recovery.reasonText();
+                std::vector<std::pair<const char *, std::string>> lines = {
+                        {"info.container", si.format},
+                        {"info.source", tr(it.localPath.empty() ? "info.source_stream" : "info.source_file")},
+                        {"info.resolution", si.width > 0 ? std::to_string(si.width) + " x " + std::to_string(si.height) : "-"},
+                        {"info.frame_rate", si.fps > 0 ? diag::format("%.2f fps", si.fps) : "-"},
+                        {"info.video_codec", si.videoCodec.empty() ? "-" : si.videoCodec},
+                        {"info.pixel_format", si.pixelFormat.empty() ? "-" : si.pixelFormat},
+                        {"info.audio_codec", si.audioCodec.empty() ? "-" : si.audioCodec},
+                        {"info.audio", si.sampleRate > 0 ? diag::format("%d Hz, ", si.sampleRate) + tracks::channelsName(si.channels) : "-"},
+                        {"info.buffer", diag::format("%.1f s", si.cacheSeconds)},
+                        {"info.network", si.cacheSpeed > 0 ? diag::format("%lld KB/s", si.cacheSpeed / 1000) : "-"},
+                        {"info.dropped", std::to_string(si.droppedFrames)},
+                        {"info.tracks", tr("info.tracks_value", {std::to_string(countTracks(tracks::Kind::Audio)),
+                                                                 std::to_string(countTracks(tracks::Kind::Subtitle))})},
+                        {"info.display", tr(display::modeNameKey(displayMode)) + ", " + std::to_string(zoom) + " %"},
+                        {"info.stability", tr(stabilityKey(preset))},
+                        {"info.state", tr(statusKey(rs))},
+                        {"info.recovery", std::to_string(recovery.attempts()) + " / " + std::to_string(recovery.maxAttempts())
+                                          + (reason.empty() ? "" : ", " + tr("info.last", {reason}))}};
+                std::string text;
+                for (const auto &l: lines) {
+                    text += (text.empty() ? "" : "\n") + tr(l.first) + ":  " + l.second;
+                }
+                infoText->setText(text);
             }
         }
 
@@ -690,13 +750,30 @@ namespace {
         }
 
         // ------------------------------------------------------------------ options panel
+        // the track's position among the tracks of its kind (labels "Track 2" for untagged tracks)
+        int ordinalOf(const tracks::Track &track) {
+            int n = 0;
+            for (const auto &t: app.playback().trackList()) {
+                if (t.kind == track.kind) {
+                    n++;
+                    if (t.id == track.id) {
+                        return n;
+                    }
+                }
+            }
+            return track.id;
+        }
+
         enum class Row {
             AudioMenu,
             SubtitleMenu,
+            DisplayMode,
+            Zoom,
             SubtitleSize,
             SubtitlePosition,
             SubtitleShadow,
             TechInfo,
+            DisplayDefault, // the current display mode / zoom become the Settings defaults
             AudioTrack,     // level 1
             SubtitleTrack,  // level 1 (id 0 = off)
             BackRow
@@ -715,7 +792,8 @@ namespace {
             panel->add(panelList);
             auto *ph = new ui::HintBar();
             ph->setPosition(48, theme::SCREEN_H - theme::SAFE_Y - 40);
-            ph->setHints({{ui::Glyph::Cross, "Select"}, {ui::Glyph::Circle, "Back"}});
+            ph->setHints({{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::DPad, tr("settings.hint_change")},
+                          {ui::Glyph::Circle, tr("common.back")}});
             panel->add(ph);
             panel->setVisibility(Visibility::Hidden);
         }
@@ -745,38 +823,52 @@ namespace {
             switch (pi.row) {
                 case Row::AudioMenu: {
                     const tracks::Track *a = tracks::selected(list, tracks::Kind::Audio);
-                    name = "Audio";
-                    detail = a ? tracks::label(*a, a->id) + "  \xC2\xB7  " + tracks::details(*a)
-                               : list.empty() ? "Available once playback starts" : "-";
+                    name = tr("options.audio");
+                    detail = a ? tracks::label(*a, ordinalOf(*a)) + "  \xC2\xB7  " + tracks::details(*a)
+                               : list.empty() ? tr("options.available_later") : "-";
                     break;
                 }
                 case Row::SubtitleMenu: {
                     const tracks::Track *sub = tracks::selected(list, tracks::Kind::Subtitle);
-                    name = "Subtitles";
-                    detail = sub ? tracks::label(*sub, sub->id) : countTracks(tracks::Kind::Subtitle) > 0 ? "Off"
-                                                                                                         : "None in this file";
+                    name = tr("options.subtitles");
+                    detail = sub ? tracks::label(*sub, ordinalOf(*sub)) : countTracks(tracks::Kind::Subtitle) > 0
+                                                                          ? tr("common.off") : tr("options.no_subtitles");
                     break;
                 }
+                case Row::DisplayMode:
+                    name = tr("options.display_mode");
+                    detail = tr(display::modeNameKey(displayMode));
+                    break;
+                case Row::Zoom:
+                    name = tr("options.zoom");
+                    detail = display::zoomAvailable(displayMode) ? std::to_string(zoom) + " %" : tr("options.zoom_stretch");
+                    break;
                 case Row::SubtitleSize:
-                    name = "Subtitle size";
-                    detail = SIZE_NAMES[std::min(std::max(s.subtitleSize, 0), 2)];
+                    name = tr("subtitle.size");
+                    detail = tr(SIZE_KEYS[std::min(std::max(s.subtitleSize, 0), 2)]);
                     break;
                 case Row::SubtitlePosition:
-                    name = "Subtitle position";
-                    detail = POSITION_NAMES[s.subtitlePosition == 1 ? 1 : 0];
+                    name = tr("subtitle.position");
+                    detail = tr(POSITION_KEYS[s.subtitlePosition == 1 ? 1 : 0]);
                     break;
                 case Row::SubtitleShadow:
-                    name = "Subtitle shadow";
-                    detail = s.subtitleShadow ? "On" : "Off";
+                    name = tr("subtitle.shadow");
+                    detail = tr(s.subtitleShadow ? "common.on" : "common.off");
                     break;
                 case Row::TechInfo:
-                    name = "Technical info";
-                    detail = info->isVisible() ? "Shown" : "Hidden";
+                    name = tr("options.tech_info");
+                    detail = tr(info->isVisible() ? "options.shown" : "options.hidden");
                     break;
+                case Row::DisplayDefault: {
+                    bool same = s.displayMode == displayMode && display::clampZoom(s.zoomPercent) == zoom;
+                    name = tr("options.display_default");
+                    detail = tr(same ? "options.display_is_default" : "options.display_make_default");
+                    break;
+                }
                 case Row::AudioTrack:
                 case Row::SubtitleTrack: {
                     if (pi.trackId == 0) {
-                        name = "Off";
+                        name = tr("common.off");
                         checked = tracks::selected(list, tracks::Kind::Subtitle) == nullptr;
                         break;
                     }
@@ -796,7 +888,7 @@ namespace {
                     break;
                 }
                 default:
-                    name = "Back";
+                    name = tr("common.back");
                     break;
             }
             for (auto &r: panelRows) {
@@ -831,14 +923,14 @@ namespace {
             panelLevel = level;
             panelItems.clear();
             if (level == 0) {
-                panelTitle->setText("Playback options");
-                for (Row r: {Row::AudioMenu, Row::SubtitleMenu, Row::SubtitleSize, Row::SubtitlePosition,
-                             Row::SubtitleShadow, Row::TechInfo}) {
+                panelTitle->setText(tr("options.title"));
+                for (Row r: {Row::AudioMenu, Row::SubtitleMenu, Row::DisplayMode, Row::Zoom, Row::SubtitleSize,
+                             Row::SubtitlePosition, Row::SubtitleShadow, Row::TechInfo, Row::DisplayDefault}) {
                     panelItems.push_back({r, 0});
                 }
             } else {
                 tracks::Kind kind = level == 1 ? tracks::Kind::Audio : tracks::Kind::Subtitle;
-                panelTitle->setText(level == 1 ? "Audio" : "Subtitles");
+                panelTitle->setText(tr(level == 1 ? "options.audio" : "options.subtitles"));
                 if (kind == tracks::Kind::Subtitle) {
                     panelItems.push_back({Row::SubtitleTrack, 0});
                 }
@@ -908,6 +1000,44 @@ namespace {
                         showMenu(2);
                     }
                     return;
+                case Row::DisplayMode: {
+                    // cycles through the modes; applied at once, without a reload (position and tracks stay)
+                    int m = ((int) displayMode + (delta < 0 ? display::MODE_COUNT - 1 : 1)) % display::MODE_COUNT;
+                    displayMode = (display::Mode) m;
+                    applyDisplay();
+                    break;
+                }
+                case Row::Zoom: {
+                    if (!display::zoomAvailable(displayMode)) {
+                        app.toast(tr("options.zoom_stretch_toast"));
+                        return;
+                    }
+                    const auto &steps = display::zoomSteps();
+                    int at = 0;
+                    for (size_t k = 0; k < steps.size(); k++) {
+                        if (steps[k] == zoom) {
+                            at = (int) k;
+                        }
+                    }
+                    at = delta < 0 ? std::max(0, at - 1) : (at + 1 < (int) steps.size() ? at + 1 : 0);
+                    zoom = steps[(size_t) at];
+                    applyDisplay();
+                    break;
+                }
+                case Row::DisplayDefault:
+                    if (delta < 0) {
+                        return;
+                    }
+                    s.displayMode = displayMode;
+                    s.zoomPercent = zoom;
+                    {
+                        std::string err;
+                        if (!app.settings().save(&err)) {
+                            LOG_E("settings", "save failed: %s", err.c_str());
+                        }
+                    }
+                    app.toast(tr("options.display_saved"), ToastKind::Success);
+                    break;
                 case Row::SubtitleSize:
                     s.subtitleSize = std::min(2, std::max(0, s.subtitleSize + delta));
                     appearance = true;
@@ -963,6 +1093,12 @@ namespace {
             refresh(app.now());
         }
 
+        // the display mode / zoom of this playback (mpv vo properties, runtime: no reload)
+        void applyDisplay() {
+            LOG_I("player", "display %s, zoom %d%%", display::modeKey(displayMode), zoom);
+            app.playback().applyOptions(display::mpvOptions(displayMode, zoom));
+        }
+
         struct PanelRow {
             RectangleShape *bg;
             ui::Label *check;
@@ -993,6 +1129,9 @@ namespace {
         int manualSub = -2;
         std::string manualAudioLang;
         std::string manualSubLang;
+        display::Mode displayMode = display::Mode::Auto;
+        int zoom = 100;
+        std::string previousProfile;   // library profile before a download of another profile was played
 
         VideoTexture *video;
         RectangleShape *top;
@@ -1035,7 +1174,7 @@ namespace screens {
     Screen *makeVodPlayer(App &app, const std::vector<VodItem> &queue, int index, bool resume,
                           std::function<void(const std::string &)> onExit) {
         if (queue.empty()) {
-            return makeSection(app, "Playback", "Nothing to play.");
+            return makeSection(app, tr("player.title"), tr("player.nothing"));
         }
         int i = std::min(std::max(index, 0), (int) queue.size() - 1);
         return new VodPlayerScreen(app, queue, i, resume, std::move(onExit));

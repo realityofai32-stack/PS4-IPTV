@@ -1,6 +1,7 @@
 #include <algorithm>
 
 #include "stability.h"
+#include "../i18n/i18n.h"
 
 const char *stabilityName(StabilityPreset p) {
     switch (p) {
@@ -150,6 +151,16 @@ namespace stability {
         refused = 0;
         st = Status::Opening;
         why.clear();
+        whyKey = nullptr;
+        gaveUpAfter = 0;
+    }
+
+    std::string Recovery::reasonText() const {
+        if (whyKey == nullptr) {
+            return why;
+        }
+        std::string text = i18n::tr(whyKey);
+        return gaveUpAfter > 0 ? i18n::tr("recovery.gave_up", {text, std::to_string(gaveUpAfter)}) : text;
     }
 
     double Recovery::secondsLeft(double now) const {
@@ -168,6 +179,12 @@ namespace stability {
 
     Action Recovery::fail(FailKind kind, bool beforeFirstFrame, const char *reason, double now) {
         why = reason;
+        std::string r = reason;
+        whyKey = r == "HTTP 403" ? "recovery.http_403" : r == "playback error" ? "recovery.playback_error"
+               : r == "connection error" ? "recovery.connection_error" : r == "stream ended" ? "recovery.stream_ended"
+               : r == "no picture in time" ? "recovery.no_picture" : r == "playback stalled" ? "recovery.stalled"
+               : nullptr;
+        gaveUpAfter = 0;
         playingSince = -1;
         // the other format once, immediately, when this one never showed a picture (not for HTTP 403: the
         // provider refuses the account, not the format)
@@ -183,6 +200,7 @@ namespace stability {
         if (attempts_ >= pol.maxAttempts) {
             st = Status::Failed;
             why = std::string(reason) + " (gave up after " + std::to_string(attempts_) + " attempts)";
+            gaveUpAfter = attempts_;
             return Action::None;
         }
         attempts_++;
@@ -246,6 +264,7 @@ namespace stability {
         }
         if (give) {
             why = "playback stalled";   // automatic retry off: keep buffering, X reconnects
+            whyKey = "recovery.stalled";
         }
         return Action::None;
     }

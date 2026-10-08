@@ -16,38 +16,60 @@ namespace {
         explicit OnboardingScreen(App &a) : Screen(a) {
             ui::background(this);
             float cx = theme::SCREEN_W / 2;
-            auto *logo = ui::label(this, "PS4 IPTV", theme::DISPLAY, 0, 300, ui::Weight::SemiBold, theme::accent());
+            auto *logo = ui::label(this, tr("app.name"), theme::DISPLAY, 0, 300, ui::Weight::SemiBold, theme::accent());
             logo->setAlign(ui::Align::Center, theme::SCREEN_W);
-            auto *t = ui::label(this, "Welcome", theme::TITLE, 0, 400, ui::Weight::SemiBold);
+            auto *t = ui::label(this, tr("onboarding.welcome"), theme::TITLE, 0, 400, ui::Weight::SemiBold);
             t->setAlign(ui::Align::Center, theme::SCREEN_W);
-            auto *s = ui::label(this, "Add your IPTV provider to get started. You need the Xtream Codes server "
-                                      "address, username and password from your provider.", theme::BODY, 0, 470,
+            auto *s = ui::label(this, tr("onboarding.text"), theme::BODY, 0, 470,
                                 ui::Weight::Regular, theme::textDim());
             s->setMaxWidth(980);
             s->setMaxLines(3);
             s->setAlign(ui::Align::Center, theme::SCREEN_W);
-            button = new ui::Button("Add Xtream Profile", FloatRect(cx - 230, 620, 460, 88), true);
-            button->setFocused(true);
+            // downloads stay playable when every profile was deleted: they are reachable from here too
+            hasDownloads = !app.downloads().items().empty();
+            float bw = 460;
+            float bx = hasDownloads ? cx - bw - 12 : cx - bw / 2;
+            button = new ui::Button(tr("onboarding.add_profile"), FloatRect(bx, 620, bw, 88), true);
             add(button);
-            screens::hintBar(this, {{ui::Glyph::Cross, "Add profile"}, {ui::Glyph::Circle, "Exit"}});
+            downloadsButton = new ui::Button(tr("home.downloads"), FloatRect(cx + 12, 620, bw, 88));
+            downloadsButton->setVisibility(hasDownloads ? Visibility::Visible : Visibility::Hidden);
+            add(downloadsButton);
+            screens::hintBar(this, {{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("common.exit")}});
+            refresh();
         }
 
         const char *name() const override { return "onboarding"; }
 
         void handleInput(const InputEvent &e) override {
-            if (e.button == PadButton::Cross && !e.repeat) {
-                app.push(screens::makeProfileEdit(app, Profile()));
+            if ((e.button == PadButton::Left || e.button == PadButton::Right) && hasDownloads) {
+                focus = e.button == PadButton::Right ? 1 : 0;
+                refresh();
+            } else if (e.button == PadButton::Cross && !e.repeat) {
+                if (focus == 1) {
+                    app.push(screens::makeDownloads(app));
+                } else {
+                    app.push(screens::makeProfileEdit(app, Profile()));
+                }
             } else if (e.button == PadButton::Circle) {
-                app.push(screens::makeDialog(app, "Exit PS4 IPTV?", "", {"Cancel", "Exit"}, [this](int c) {
-                    if (c == 1) {
-                        app.quit();
-                    }
-                }));
+                app.push(screens::makeDialog(app, tr("app.exit_title"), "", {tr("common.cancel"), tr("common.exit")},
+                                             [this](int c) {
+                                                 if (c == 1) {
+                                                     app.quit();
+                                                 }
+                                             }));
             }
         }
 
     private:
+        void refresh() {
+            button->setFocused(focus == 0);
+            downloadsButton->setFocused(focus == 1);
+        }
+
         ui::Button *button;
+        ui::Button *downloadsButton;
+        bool hasDownloads = false;
+        int focus = 0;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -55,7 +77,7 @@ namespace {
     public:
         explicit ProfilesScreen(App &a) : Screen(a) {
             ui::background(this);
-            screens::header(this, "Profiles", "Choose the IPTV provider to watch, or add a new one.");
+            screens::header(this, tr("profiles.title"), tr("profiles.subtitle"));
             list = new ui::ListView(FloatRect(theme::SAFE_X, 220, 900, 720), 112, 16, this);
             add(list);
             detail = ui::box(this, FloatRect(1060, 220, 764, 720), theme::surface(), theme::RADIUS);
@@ -102,9 +124,9 @@ namespace {
                 r.bg->setOutlineThickness(focused ? theme::FOCUS_BORDER : 0);
                 (void) selected;
                 if (add) {
-                    r.title->setText("+  Add profile");
+                    r.title->setText("+  " + tr("profiles.add"));
                     r.title->setColor(theme::accent());
-                    r.sub->setText("Xtream Codes server, username and password");
+                    r.sub->setText(tr("profiles.add_sub"));
                     r.badge->setText("");
                 } else {
                     const Profile &p = profiles[(size_t) index];
@@ -113,7 +135,7 @@ namespace {
                     r.sub->setText(screens::hostOf(p.server) + (p.lastStatus.empty() ? "" : "   \xE2\x80\xA2   "
                                                                                             + p.lastStatus));
                     bool active = p.id == app.profiles().activeId();
-                    r.badge->setText(active ? "ACTIVE" : "");
+                    r.badge->setText(active ? tr("profiles.active_badge") : "");
                 }
             }
         }
@@ -155,10 +177,11 @@ namespace {
                     }
                     return;
                 case PadButton::Circle:
-                    if (app.session().connected) {
+                    if (app.session().connected || app.session().offline) {
                         app.replaceAll(screens::makeHome(app));
                     } else {
-                        app.push(screens::makeDialog(app, "Exit PS4 IPTV?", "", {"Cancel", "Exit"}, [this](int c) {
+                        app.push(screens::makeDialog(app, tr("app.exit_title"), "",
+                                                     {tr("common.cancel"), tr("common.exit")}, [this](int c) {
                             if (c == 1) {
                                 app.quit();
                             }
@@ -181,19 +204,19 @@ namespace {
 
         void confirmDelete(const Profile &p) {
             std::string id = p.id;
-            app.push(screens::makeDialog(app, "Delete profile?",
-                                         "\"" + p.name + "\" and its saved login will be removed from this console.",
-                                         {"Cancel", "Delete"}, [this, id](int c) {
+            app.push(screens::makeDialog(app, tr("profiles.delete_title"), tr("profiles.delete_text", {p.name}),
+                                         {tr("common.cancel"), tr("common.delete")}, [this, id](int c) {
                         if (c != 1) {
                             return;
                         }
-                        bool wasActive = app.session().connected && app.session().profile.id == id;
+                        bool wasActive = (app.session().connected || app.session().offline) && app.session().profile.id == id;
                         app.profiles().remove(id);
                         std::string err;
                         if (!app.profiles().save(&err)) {
                             LOG_E("profiles", "save failed: %s", err.c_str());
-                            app.toast("Could not save profiles", ToastKind::Error);
+                            app.toast(tr("profiles.save_failed"), ToastKind::Error);
                         }
+                        app.syncDownloadProfiles();   // completed downloads stay playable; queued ones stop
                         if (wasActive) {
                             app.session() = Session();
                         }
@@ -203,7 +226,7 @@ namespace {
                         }
                         list->reload();
                         refresh();
-                        app.toast("Profile deleted", ToastKind::Success);
+                        app.toast(tr("profiles.deleted"), ToastKind::Success);
                     }, true));
         }
 
@@ -211,26 +234,25 @@ namespace {
             const auto &profiles = app.profiles().profiles();
             int index = list->selected();
             if (index >= (int) profiles.size()) {
-                detailTitle->setText("Add a profile");
-                detailBody->setText("Enter the server address, username and password your IPTV provider gave you. "
-                                    "Use Test Connection to check them before saving.");
-                hints->setHints({{ui::Glyph::Cross, "Add"}, {ui::Glyph::Circle, "Back"}});
+                detailTitle->setText(tr("profiles.add_title"));
+                detailBody->setText(tr("profiles.add_text"));
+                hints->setHints({{ui::Glyph::Cross, tr("common.add")}, {ui::Glyph::Circle, tr("common.back")}});
                 return;
             }
             const Profile &p = profiles[(size_t) index];
             detailTitle->setText(p.name);
-            std::string body = "Server\n" + screens::hostOf(p.server) + "\n\nUsername\n" + p.username
-                               + "\n\nPassword\n" + screens::mask(p.password);
+            std::string body = tr("profile.server") + "\n" + screens::hostOf(p.server) + "\n\n" + tr("profile.username")
+                               + "\n" + p.username + "\n\n" + tr("profile.password") + "\n" + screens::mask(p.password);
             if (!p.lastStatus.empty()) {
-                body += "\n\nLast connection\n" + p.lastStatus;
+                body += "\n\n" + tr("profiles.last_connection") + "\n" + p.lastStatus;
                 if (p.lastUsedAt > 0) {
                     body += " (" + clockx::localDate(p.lastUsedAt) + ")";
                 }
             }
             detailBody->setText(body);
-            hints->setHints({{ui::Glyph::Cross, "Connect"}, {ui::Glyph::Square, "Edit"},
-                             {ui::Glyph::Triangle, "Delete"}, {ui::Glyph::Options, "Add"},
-                             {ui::Glyph::Circle, "Back"}});
+            hints->setHints({{ui::Glyph::Cross, tr("profiles.connect")}, {ui::Glyph::Square, tr("common.edit")},
+                             {ui::Glyph::Triangle, tr("common.delete")}, {ui::Glyph::Options, tr("common.add")},
+                             {ui::Glyph::Circle, tr("common.back")}});
         }
 
         ui::ListView *list;
@@ -250,24 +272,23 @@ namespace {
                 serverInput = p.server;
             }
             ui::background(this);
-            screens::header(this, isNew ? "Add Xtream profile" : "Edit profile",
-                            "Server address, username and password from your IPTV provider.");
-            const char *captions[] = {"Profile name", "Server URL", "Username", "Password"};
+            screens::header(this, tr(isNew ? "profile.add_title" : "profile.edit_title"), tr("profile.subtitle"));
+            const char *captions[] = {"profile.name", "profile.server_url", "profile.username", "profile.password"};
             for (int i = 0; i < 4; i++) {
                 fields[i] = new screens::FieldRow(FloatRect(theme::SAFE_X, 230 + (float) i * 104, 1000, 88),
-                                                  captions[i]);
+                                                  tr(captions[i]));
                 add(fields[i]);
             }
-            const char *labels[] = {"Test Connection", isNew ? "Save & Connect" : "Save & Connect", "Cancel"};
+            const char *labels[] = {"profile.test", "profile.save_connect", "common.cancel"};
             float x = theme::SAFE_X;
             for (int i = 0; i < 3; i++) {
                 float w = i == 2 ? 220.0f : 340.0f;
-                buttons[i] = new ui::Button(labels[i], FloatRect(x, 690, w, 84), i == 1);
+                buttons[i] = new ui::Button(tr(labels[i]), FloatRect(x, 690, w, 84), i == 1);
                 add(buttons[i]);
                 x += w + 24;
             }
             status = ui::box(this, FloatRect(1160, 230, 664, 544), theme::surface(), theme::RADIUS);
-            statusTitle = ui::label(status, "Connection", theme::HEADING, 40, 36, ui::Weight::SemiBold);
+            statusTitle = ui::label(status, tr("profile.connection"), theme::HEADING, 40, 36, ui::Weight::SemiBold);
             statusBody = ui::label(status, "", theme::BODY, 40, 100, ui::Weight::Regular, theme::textDim());
             statusBody->setMaxWidth(584);
             statusBody->setMaxLines(11);
@@ -275,9 +296,8 @@ namespace {
             spinner->setPosition(40, 110);
             spinner->setVisibility(Visibility::Hidden);
             status->add(spinner);
-            screens::hintBar(this, {{ui::Glyph::Cross, "Edit / select"}, {ui::Glyph::Circle, "Cancel"}});
-            setStatus(isNew ? "Fill in the fields, then use Test Connection." : "Test the connection after changes.",
-                      theme::textDim());
+            screens::hintBar(this, {{ui::Glyph::Cross, tr("profile.hint_edit")}, {ui::Glyph::Circle, tr("common.cancel")}});
+            setStatus(tr(isNew ? "profile.status_new" : "profile.status_edit"), theme::textDim());
             refresh();
         }
 
@@ -338,16 +358,16 @@ namespace {
         void activate() {
             switch (focus) {
                 case 0:
-                    edit("Profile name", profile.name, false, [this](const std::string &v) { profile.name = v; });
+                    edit(tr("profile.name"), profile.name, false, [this](const std::string &v) { profile.name = v; });
                     break;
                 case 1:
-                    edit("Server URL", serverInput, false, [this](const std::string &v) { serverInput = v; });
+                    edit(tr("profile.server_url"), serverInput, false, [this](const std::string &v) { serverInput = v; });
                     break;
                 case 2:
-                    edit("Username", profile.username, false, [this](const std::string &v) { profile.username = v; });
+                    edit(tr("profile.username"), profile.username, false, [this](const std::string &v) { profile.username = v; });
                     break;
                 case 3:
-                    edit("Password", profile.password, true, [this](const std::string &v) { profile.password = v; });
+                    edit(tr("profile.password"), profile.password, true, [this](const std::string &v) { profile.password = v; });
                     break;
                 case 4:
                     test(false);
@@ -361,7 +381,7 @@ namespace {
             }
         }
 
-        void edit(const char *title, const std::string &value, bool secret, std::function<void(const std::string &)> set) {
+        void edit(const std::string &title, const std::string &value, bool secret, std::function<void(const std::string &)> set) {
             app.push(screens::makeKeyboard(app, title, value, secret, [this, set](const std::string &v) {
                 set(v);
                 tested = false;
@@ -376,10 +396,10 @@ namespace {
                 return s.error;
             }
             if (url::trim(profile.username).empty()) {
-                return "Enter the username";
+                return tr("profile.error.username");
             }
             if (profile.password.empty()) {
-                return "Enter the password";
+                return tr("profile.error.password");
             }
             profile.server = s.base;
             profile.username = url::trim(profile.username);
@@ -406,18 +426,17 @@ namespace {
             testing = true;
             spinner->setVisibility(Visibility::Visible);
             setStatus("", theme::textDim());
-            statusTitle->setText("Testing connection" "\xE2\x80\xA6");
+            statusTitle->setText(tr("profile.testing"));
             LOG_I("profiles", "testing connection to %s", screens::hostOf(profile.server).c_str());
             testToken = app.xtream().authenticate(profile, [this, thenSave](const XtreamService::AuthOutcome &o) {
                 testing = false;
                 spinner->setVisibility(Visibility::Hidden);
-                statusTitle->setText("Connection");
+                statusTitle->setText(tr("profile.connection"));
                 if (o.result.status == AuthStatus::Ok) {
                     tested = true;
-                    std::string body = "Connected\n\n" + screens::accountSummary(o.result.account);
+                    std::string body = tr("auth.ok") + "\n\n" + screens::accountSummary(o.result.account);
                     if (o.httpsWarning) {
-                        body += "\n\nThis server uses HTTPS. This build currently supports HTTP streams only, so "
-                                "playback may not work.";
+                        body += "\n\n" + tr("profile.https_warning");
                     }
                     setStatus(body, o.httpsWarning ? theme::warning() : theme::success());
                     if (thenSave) {
@@ -427,14 +446,13 @@ namespace {
                     tested = false;
                     std::string body = o.message;
                     if (o.result.status == AuthStatus::Expired && o.result.account.expiresAt > 0) {
-                        body += "\nExpired on " + clockx::localDate(o.result.account.expiresAt);
+                        body += "\n" + tr("profile.expired_on", {clockx::localDate(o.result.account.expiresAt)});
                     }
                     if (!o.result.account.message.empty()) {
-                        body += "\n\nProvider message: " + o.result.account.message;
+                        body += "\n\n" + tr("profile.provider_message", {o.result.account.message});
                     }
                     if (thenSave) {
-                        body += "\n\nNot saved. Fix the details, or choose Save & Connect again after Test "
-                                "Connection succeeds.";
+                        body += "\n\n" + tr("profile.not_saved");
                     }
                     setStatus(body, theme::danger());
                 }
@@ -450,9 +468,10 @@ namespace {
             std::string err;
             if (!app.profiles().save(&err)) {
                 LOG_E("profiles", "save failed: %s", err.c_str());
-                setStatus("Could not save the profile on this console.", theme::danger());
+                setStatus(tr("profile.save_failed"), theme::danger());
                 return;
             }
+            app.syncDownloadProfiles();
             LOG_I("profiles", "profile %s saved (%s)", id.c_str(), screens::hostOf(p.server).c_str());
             app.replaceAll(screens::makeConnect(app, *app.profiles().find(id)));
         }
@@ -463,10 +482,10 @@ namespace {
         }
 
         void refresh() {
-            fields[0]->setValue(profile.name.empty() ? "Optional, e.g. My IPTV" : profile.name, profile.name.empty());
+            fields[0]->setValue(profile.name.empty() ? tr("profile.name_placeholder") : profile.name, profile.name.empty());
             fields[1]->setValue(serverInput.empty() ? "http://example.com:8080" : serverInput, serverInput.empty());
-            fields[2]->setValue(profile.username.empty() ? "Required" : profile.username, profile.username.empty());
-            fields[3]->setValue(profile.password.empty() ? "Required" : screens::mask(profile.password),
+            fields[2]->setValue(profile.username.empty() ? tr("profile.required") : profile.username, profile.username.empty());
+            fields[3]->setValue(profile.password.empty() ? tr("profile.required") : screens::mask(profile.password),
                                 profile.password.empty());
             for (int i = 0; i < 4; i++) {
                 fields[i]->setFocused(focus == i);

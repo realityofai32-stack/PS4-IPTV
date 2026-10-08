@@ -1,6 +1,7 @@
 #include <cstring>
 
 #include "tracks.h"
+#include "../i18n/i18n.h"
 
 namespace tracks {
 
@@ -8,61 +9,64 @@ namespace tracks {
         struct Language {
             const char *code;       // ISO 639-2/T
             const char *aliases;    // space separated, lowercase (639-1, 639-2/B, English name)
-            const char *name;       // shown to the user (native name when the UI font has the script)
+            const char *name;       // native name, shown in every UI language (the UI font has the script)
+            const char *key;        // else: localization key of the name in the UI language ("Japanese")
         };
 
-        // The UI font (Inter) covers Latin, Greek and Cyrillic: other scripts use the English name.
+        // The UI font (Inter) covers Latin, Greek and Cyrillic: those languages show their native name. Scripts it
+        // cannot draw (and Arabic / Hebrew, which would also need shaping and right-to-left layout) show the
+        // language's name in the UI language instead of empty boxes.
         const Language LANGUAGES[] = {
-                {"tur", "tr tur turkish t\xC3\xBCrk\xC3\xA7" "e", "T\xC3\xBCrk\xC3\xA7" "e"},
-                {"eng", "en eng english \xC4\xB0ngilizce ingilizce", "English"},
-                {"deu", "de deu ger german almanca deutsch", "Deutsch"},
-                {"fra", "fr fra fre french frans\xC4\xB1zca", "Fran\xC3\xA7" "ais"},
-                {"spa", "es spa spanish \xC4\xB0spanyolca ispanyolca", "Espa\xC3\xB1ol"},
-                {"ita", "it ita italian \xC4\xB0talyanca italyanca", "Italiano"},
-                {"por", "pt por portuguese", "Portugu\xC3\xAAs"},
-                {"rus", "ru rus russian rus\xC3\xA7" "a", "\xD0\xA0\xD1\x83\xD1\x81\xD1\x81\xD0\xBA\xD0\xB8\xD0\xB9"},
-                {"ara", "ar ara arabic arap\xC3\xA7" "a", "Arabic"},
-                {"nld", "nl nld dut dutch", "Nederlands"},
-                {"pol", "pl pol polish", "Polski"},
-                {"swe", "sv swe swedish", "Svenska"},
-                {"nor", "no nor nob nb nno nn norwegian", "Norsk"},
-                {"dan", "da dan danish", "Dansk"},
-                {"fin", "fi fin finnish", "Suomi"},
-                {"ell", "el ell gre greek", "\xCE\x95\xCE\xBB\xCE\xBB\xCE\xB7\xCE\xBD\xCE\xB9\xCE\xBA\xCE\xAC"},
-                {"jpn", "ja jpn japanese", "Japanese"},
-                {"kor", "ko kor korean", "Korean"},
-                {"zho", "zh zho chi cmn yue chinese", "Chinese"},
-                {"hin", "hi hin hindi", "Hindi"},
-                {"hun", "hu hun hungarian", "Magyar"},
-                {"ces", "cs ces cze czech", "\xC4\x8C" "e\xC5\xA1tina"},
-                {"slk", "sk slk slo slovak", "Sloven\xC4\x8Dina"},
-                {"ron", "ro ron rum mol romanian", "Rom\xC3\xA2n\xC4\x83"},
-                {"bul", "bg bul bulgarian", "\xD0\x91\xD1\x8A\xD0\xBB\xD0\xB3\xD0\xB0\xD1\x80\xD1\x81\xD0\xBA\xD0\xB8"},
-                {"ukr", "uk ukr ukrainian", "\xD0\xA3\xD0\xBA\xD1\x80\xD0\xB0\xD1\x97\xD0\xBD\xD1\x81\xD1\x8C\xD0\xBA\xD0\xB0"},
-                {"hrv", "hr hrv croatian", "Hrvatski"},
-                {"srp", "sr srp scc serbian", "Srpski"},
-                {"bos", "bs bos bosnian", "Bosanski"},
-                {"slv", "sl slv slovenian", "Sloven\xC5\xA1\xC4\x8Dina"},
-                {"sqi", "sq sqi alb albanian", "Shqip"},
-                {"mkd", "mk mkd mac macedonian", "\xD0\x9C\xD0\xB0\xD0\xBA\xD0\xB5\xD0\xB4\xD0\xBE\xD0\xBD\xD1\x81\xD0\xBA\xD0\xB8"},
-                {"heb", "he heb iw hebrew", "Hebrew"},
-                {"fas", "fa fas per persian farsi", "Persian"},
-                {"aze", "az aze azerbaijani", "Az\xC9\x99rbaycanca"},
-                {"kur", "ku kur kmr ckb kurdish", "Kurd\xC3\xAE"},
-                {"kat", "ka kat geo georgian", "Georgian"},
-                {"hye", "hy hye arm armenian", "Armenian"},
-                {"ind", "id ind indonesian", "Bahasa Indonesia"},
-                {"msa", "ms msa may malay", "Bahasa Melayu"},
-                {"tha", "th tha thai", "Thai"},
-                {"vie", "vi vie vietnamese", "Ti\xE1\xBA\xBFng Vi\xE1\xBB\x87t"},
-                {"cat", "ca cat catalan", "Catal\xC3\xA0"},
-                {"lit", "lt lit lithuanian", "Lietuvi\xC5\xB3"},
-                {"lav", "lv lav latvian", "Latvie\xC5\xA1u"},
-                {"est", "et est estonian", "Eesti"},
-                {"isl", "is isl ice icelandic", "\xC3\x8Dslenska"},
-                {"urd", "ur urd urdu", "Urdu"},
-                {"ben", "bn ben bengali", "Bengali"},
-                {"tam", "ta tam tamil", "Tamil"},
+                {"tur", "tr tur turkish t\xC3\xBCrk\xC3\xA7" "e", "T\xC3\xBCrk\xC3\xA7" "e", nullptr},
+                {"eng", "en eng english \xC4\xB0ngilizce ingilizce", "English", nullptr},
+                {"deu", "de deu ger german almanca deutsch", "Deutsch", nullptr},
+                {"fra", "fr fra fre french frans\xC4\xB1zca français francais", "Fran\xC3\xA7" "ais", nullptr},
+                {"spa", "es spa spanish \xC4\xB0spanyolca ispanyolca español", "Espa\xC3\xB1ol", nullptr},
+                {"ita", "it ita italian \xC4\xB0talyanca italyanca italiano", "Italiano", nullptr},
+                {"por", "pt por portuguese portekizce português", "Portugu\xC3\xAAs", nullptr},
+                {"rus", "ru rus russian rus\xC3\xA7" "a", "\xD0\xA0\xD1\x83\xD1\x81\xD1\x81\xD0\xBA\xD0\xB8\xD0\xB9", nullptr},
+                {"ara", "ar ara arabic arap\xC3\xA7" "a", nullptr, "lang.ara"},
+                {"nld", "nl nld dut dutch hollandaca felemenkce nederlands", "Nederlands", nullptr},
+                {"pol", "pl pol polish lehce polski", "Polski", nullptr},
+                {"swe", "sv swe swedish", "Svenska", nullptr},
+                {"nor", "no nor nob nb nno nn norwegian", "Norsk", nullptr},
+                {"dan", "da dan danish", "Dansk", nullptr},
+                {"fin", "fi fin finnish", "Suomi", nullptr},
+                {"ell", "el ell gre greek yunanca", "\xCE\x95\xCE\xBB\xCE\xBB\xCE\xB7\xCE\xBD\xCE\xB9\xCE\xBA\xCE\xAC", nullptr},
+                {"jpn", "ja jpn japanese japonca 日本語", nullptr, "lang.jpn"},
+                {"kor", "ko kor korean korece 한국어", nullptr, "lang.kor"},
+                {"zho", "zh zho chi cmn yue chinese cince 中文", nullptr, "lang.zho"},
+                {"hin", "hi hin hindi hintce", nullptr, "lang.hin"},
+                {"hun", "hu hun hungarian", "Magyar", nullptr},
+                {"ces", "cs ces cze czech", "\xC4\x8C" "e\xC5\xA1tina", nullptr},
+                {"slk", "sk slk slo slovak", "Sloven\xC4\x8Dina", nullptr},
+                {"ron", "ro ron rum mol romanian", "Rom\xC3\xA2n\xC4\x83", nullptr},
+                {"bul", "bg bul bulgarian", "\xD0\x91\xD1\x8A\xD0\xBB\xD0\xB3\xD0\xB0\xD1\x80\xD1\x81\xD0\xBA\xD0\xB8", nullptr},
+                {"ukr", "uk ukr ukrainian", "\xD0\xA3\xD0\xBA\xD1\x80\xD0\xB0\xD1\x97\xD0\xBD\xD1\x81\xD1\x8C\xD0\xBA\xD0\xB0", nullptr},
+                {"hrv", "hr hrv croatian", "Hrvatski", nullptr},
+                {"srp", "sr srp scc serbian", "Srpski", nullptr},
+                {"bos", "bs bos bosnian", "Bosanski", nullptr},
+                {"slv", "sl slv slovenian", "Sloven\xC5\xA1\xC4\x8Dina", nullptr},
+                {"sqi", "sq sqi alb albanian", "Shqip", nullptr},
+                {"mkd", "mk mkd mac macedonian", "\xD0\x9C\xD0\xB0\xD0\xBA\xD0\xB5\xD0\xB4\xD0\xBE\xD0\xBD\xD1\x81\xD0\xBA\xD0\xB8", nullptr},
+                {"heb", "he heb iw hebrew ibranice", nullptr, "lang.heb"},
+                {"fas", "fa fas per persian farsi farsca", nullptr, "lang.fas"},
+                {"aze", "az aze azerbaijani", "Az\xC9\x99rbaycanca", nullptr},
+                {"kur", "ku kur kmr ckb kurdish", "Kurd\xC3\xAE", nullptr},
+                {"kat", "ka kat geo georgian", nullptr, "lang.kat"},
+                {"hye", "hy hye arm armenian", nullptr, "lang.hye"},
+                {"ind", "id ind indonesian", "Bahasa Indonesia", nullptr},
+                {"msa", "ms msa may malay", "Bahasa Melayu", nullptr},
+                {"tha", "th tha thai", nullptr, "lang.tha"},
+                {"vie", "vi vie vietnamese", "Ti\xE1\xBA\xBFng Vi\xE1\xBB\x87t", nullptr},
+                {"cat", "ca cat catalan", "Catal\xC3\xA0", nullptr},
+                {"lit", "lt lit lithuanian", "Lietuvi\xC5\xB3", nullptr},
+                {"lav", "lv lav latvian", "Latvie\xC5\xA1u", nullptr},
+                {"est", "et est estonian", "Eesti", nullptr},
+                {"isl", "is isl ice icelandic", "\xC3\x8Dslenska", nullptr},
+                {"urd", "ur urd urdu", nullptr, "lang.urd"},
+                {"ben", "bn ben bengali", nullptr, "lang.ben"},
+                {"tam", "ta tam tamil", nullptr, "lang.tam"},
         };
 
         std::string lower(const std::string &s) {
@@ -132,7 +136,7 @@ namespace tracks {
         }
         const Language *l = find(c);
         if (l) {
-            return l->name;
+            return l->name ? l->name : i18n::tr(l->key);
         }
         std::string up;
         for (char ch: c) {
@@ -144,8 +148,10 @@ namespace tracks {
     }
 
     const std::vector<std::string> &commonLanguages() {
-        static const std::vector<std::string> list = {"tur", "eng", "deu", "fra", "spa", "ita", "rus", "ara", "nld",
-                                                      "por", "pol"};
+        static const std::vector<std::string> list = {"tur", "eng", "deu", "fra", "spa", "ita", "por", "rus", "ara",
+                                                      "nld", "pol", "jpn", "kor", "zho", "ell", "swe", "dan", "nor",
+                                                      "fin", "hun", "ces", "ron", "bul", "ukr", "hrv", "srp", "bos",
+                                                      "sqi", "aze", "kur", "fas", "heb", "hin"};
         return list;
     }
 
@@ -195,15 +201,15 @@ namespace tracks {
             case 0:
                 return "";
             case 1:
-                return "Mono";
+                return i18n::tr("track.mono");
             case 2:
-                return "Stereo";
+                return i18n::tr("track.stereo");
             case 6:
                 return "5.1";
             case 8:
                 return "7.1";
             default:
-                return std::to_string(channels) + " ch";
+                return i18n::tr("track.channels", {std::to_string(channels)});
         }
     }
 
@@ -213,12 +219,12 @@ namespace tracks {
             name = trim(t.title);
         }
         if (name.empty()) {
-            name = "Track " + std::to_string(ordinal);
+            name = i18n::tr("track.number", {std::to_string(ordinal)});
         }
         if (isCommentary(t)) {
-            name += " (Commentary)";
+            name = i18n::tr("track.commentary", {name});
         } else if (t.forced) {
-            name += " (Forced)";
+            name = i18n::tr("track.forced", {name});
         }
         return name;
     }
@@ -235,11 +241,11 @@ namespace tracks {
         } else {
             std::string c = lower(t.codec);
             if (c == "hdmv_pgs_subtitle" || c == "dvd_subtitle" || c == "dvb_subtitle") {
-                add("image");
+                add(i18n::tr("track.image"));
             }
         }
         if (t.external) {
-            add("external");
+            add(i18n::tr("track.external"));
         }
         return d;
     }

@@ -47,9 +47,31 @@ namespace {
         static constexpr ContentType TYPE = ContentType::Movie;
         static const int SEARCH_FILTER = 1;
 
-        static const char *heading() { return "Movies"; }
+        static const char *heading() { return "movies"; }   // screen name (log) i18n-exempt
 
-        static const char *noun() { return "movies"; }
+        // localization keys
+        static const char *headingKey() { return "home.movies"; }
+
+        static const char *allKey() { return "browse.movies_all"; }
+
+        static const char *countKey() { return "home.movie_count"; }
+
+        static const char *loadingKey() { return "browse.movies_loading"; }
+
+        static const char *failedKey() { return "browse.movies_failed"; }
+
+        static const char *sortKey() { return "browse.movies_sort"; }
+
+        static const char *updatedKey() { return "browse.movies_updated"; }
+
+        static const char *optionsKey() { return "browse.movies_options"; }
+
+        static const char *infoKey() { return "browse.movies_info"; }
+
+        static bool downloaded(App &a, const Item &m) {
+            dl::Item d;
+            return a.downloads().findCompleted(a.session().profile.id, dl::Kind::Movie, m.streamId, d);
+        }
 
         static const Catalog &catalog(App &a) { return a.vod().movies(); }
 
@@ -76,7 +98,7 @@ namespace {
             add(fmt::rating(m.rating));
             const HistoryEntry *p = a.library().progressOf(TYPE, m.streamId);
             if (p && p->watched) {
-                add("\xE2\x9C\x93 Watched");
+                add("\xE2\x9C\x93 " + tr("progress.watched"));
             } else if (p && progress::inProgress(p->position, p->duration, p->watched)) {
                 add(fmt::remaining(p->position, p->duration));
             }
@@ -109,9 +131,30 @@ namespace {
         static constexpr ContentType TYPE = ContentType::Series;
         static const int SEARCH_FILTER = 2;
 
-        static const char *heading() { return "Series"; }
+        static const char *heading() { return "series"; }   // screen name (log) i18n-exempt
 
-        static const char *noun() { return "series"; }
+        static const char *headingKey() { return "home.series"; }
+
+        static const char *allKey() { return "browse.series_all"; }
+
+        static const char *countKey() { return "home.series_count"; }
+
+        static const char *loadingKey() { return "browse.series_loading"; }
+
+        static const char *failedKey() { return "browse.series_failed"; }
+
+        static const char *sortKey() { return "browse.series_sort"; }
+
+        static const char *updatedKey() { return "browse.series_updated"; }
+
+        static const char *optionsKey() { return "browse.series_options"; }
+
+        static const char *infoKey() { return "browse.series_info"; }
+
+        // any episode of the series downloaded
+        static bool downloaded(App &a, const Item &s) {
+            return a.downloads().hasCompletedEpisodes(a.session().profile.id, s.seriesId);
+        }
 
         static const Catalog &catalog(App &a) { return a.vod().series(); }
 
@@ -165,7 +208,7 @@ namespace {
     public:
         explicit BrowseScreen(App &a) : Screen(a), categoriesAdapter(this), gridAdapter(this) {
             ui::background(this);
-            screens::header(this, Traits::heading());
+            screens::header(this, tr(Traits::headingKey()));
             statusLabel = ui::label(this, "", theme::LABEL, 0, theme::SAFE_Y + 16, ui::Weight::Regular,
                                     theme::textDim());
             statusLabel->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
@@ -310,7 +353,7 @@ namespace {
                         if (const Item *it = selectedItem()) {
                             bool on = app.library().toggleFavorite(Traits::TYPE, Traits::id(*it));
                             app.saveLibrary();
-                            app.toast(on ? "Added to favorites" : "Removed from favorites",
+                            app.toast(tr(on ? "favorites.added" : "favorites.removed"),
                                       on ? ToastKind::Success : ToastKind::Info);
                             if (currentRow == FAVORITES_ROW) {
                                 selectCategory(FAVORITES_ROW, true);
@@ -423,6 +466,7 @@ namespace {
                     bool watched = false;
                     c.poster->setProgress(Traits::progressOf(screen->app, it, watched));
                     c.poster->setWatched(watched);
+                    c.poster->setDownloaded(Traits::downloaded(screen->app, it));
                     c.poster->setFocused(focused);
                     c.title->setText(Traits::title(it));
                     c.title->setColor(focused ? Color::White : theme::textDim());
@@ -445,16 +489,16 @@ namespace {
             switch (row) {
                 case ALL_ROW:
                     count = (int) cat.size();
-                    return std::string("All ") + Traits::noun();
+                    return tr(Traits::allKey());
                 case RECENT_ROW:
                     count = -1;
-                    return "Recently added";
+                    return tr("browse.recently_added");
                 case CONTINUE_ROW:
                     count = continueCount;
-                    return "Continue watching";
+                    return tr("browse.continue");
                 case FAVORITES_ROW:
                     count = (int) cat.favorites(app.library().favorites(Traits::TYPE)).size();
-                    return "\xE2\x98\x85  Favorites";
+                    return "\xE2\x98\x85  " + tr("home.favorites");
                 default: {
                     const Category &c = cat.categories()[(size_t) (row - FIRST_CATEGORY_ROW)];
                     count = (int) cat.inCategory(c.id).size();
@@ -593,25 +637,24 @@ namespace {
             bool loading = st.status == CatalogStatus::Loading || st.status == CatalogStatus::NotLoaded;
             std::string text;
             if (loading && cat.empty()) {
-                text = std::string("Loading ") + Traits::noun() + "\xE2\x80\xA6"
-                       + (st.status == CatalogStatus::Loading ? "\nThe first time this can take a moment." : "");
+                text = tr(Traits::loadingKey())
+                       + (st.status == CatalogStatus::Loading ? "\n" + tr("browse.first_time") : "");
             } else if (st.status == CatalogStatus::Failed) {
-                text = std::string("The ") + Traits::noun() + " list could not be loaded: " + st.message
-                       + "\nPress X on the categories to try again.";
+                text = tr(Traits::failedKey(), {st.message}) + "\n" + tr("browse.press_x_retry");
             } else if (visible.empty()) {
-                text = currentRow == FAVORITES_ROW ? "No favorites yet. Press the square button on a poster."
-                       : currentRow == CONTINUE_ROW ? "Nothing to continue yet." : "Nothing in this category.";
+                text = tr(currentRow == FAVORITES_ROW ? "browse.no_favorites"
+                          : currentRow == CONTINUE_ROW ? "browse.nothing_continue" : "browse.empty_category");
             }
             stateText->setText(text);
             spinner->setVisibility(loading && cat.empty() ? Visibility::Visible : Visibility::Hidden);
 
             std::string status;
             if (!cat.empty()) {
-                status = std::to_string(cat.size()) + " " + Traits::noun();
+                status = i18n::count(Traits::countKey(), (long long) cat.size());
                 if (st.refreshing) {
-                    status += "   \xC2\xB7   refreshing" "\xE2\x80\xA6";
+                    status += "   \xC2\xB7   " + tr("browse.refreshing");
                 } else if (st.fromCache) {
-                    status += "   \xC2\xB7   saved list";
+                    status += "   \xC2\xB7   " + tr("browse.saved_list");
                 }
             }
             if (!st.message.empty() && !cat.empty()) {
@@ -638,7 +681,7 @@ namespace {
             int dummy = 0;
             int row = currentRow < 0 ? ALL_ROW : currentRow;
             categoryTitle->setText(row < categoriesAdapter.count() ? rowName(row, dummy) : "");
-            std::string meta = withThousands(visible.size()) + " " + Traits::noun();
+            std::string meta = i18n::count(Traits::countKey(), (long long) visible.size());
             bool ownOrder = row == RECENT_ROW || row == CONTINUE_ROW;
             if (!ownOrder) {
                 meta += "   \xC2\xB7   " + std::string(sortModeName(sortMode, Traits::TYPE));
@@ -667,12 +710,11 @@ namespace {
 
         // ------------------------------------------------------------------ options
         void openOptions() {
-            std::vector<std::string> options = {std::string("Sort: ") + sortModeName(sortMode, Traits::TYPE),
-                                                "Refresh catalog", "Catalog info"};
-            std::vector<std::string> details = {"Order inside the selected category",
-                                                "Download the provider list again (the current list stays meanwhile)",
-                                                "Provider, parsed, cached, visible and indexed counts"};
-            app.push(screens::makeMenu(app, std::string(Traits::heading()) + " options", options, -1,
+            std::vector<std::string> options = {tr("browse.sort_value", {sortModeName(sortMode, Traits::TYPE)}),
+                                                tr("browse.refresh"), tr("browse.catalog_info")};
+            std::vector<std::string> details = {tr("browse.sort_detail"), tr("browse.refresh_detail"),
+                                                tr("browse.catalog_info_detail")};
+            app.push(screens::makeMenu(app, tr(Traits::optionsKey()), options, -1,
                                        guardedChoice([this](int c) {
                                            if (c == 0) {
                                                openSortMenu();
@@ -710,7 +752,7 @@ namespace {
                 modes.push_back(m);
                 names.push_back(sortModeName(m, Traits::TYPE));
             }
-            app.push(screens::makeMenu(app, "Sort " + std::string(Traits::noun()), names, checked,
+            app.push(screens::makeMenu(app, tr(Traits::sortKey()), names, checked,
                                        guardedChoice([this, modes](int c) {
                                            if (c < 0 || c >= (int) modes.size() || modes[(size_t) c] == sortMode) {
                                                return;
@@ -732,7 +774,7 @@ namespace {
             refreshRequested = true;
             refreshSeen = Traits::status(app).refreshes;
             Traits::refresh(app);
-            app.toast("Refreshing" "\xE2\x80\xA6");
+            app.toast(tr("browse.refreshing"));
             refreshState();
         }
 
@@ -744,10 +786,10 @@ namespace {
             }
             refreshRequested = false;
             if (st.lastRefreshOk) {
-                app.toast("Catalog updated: " + withThousands(Traits::catalog(app).size()) + " " + Traits::noun(),
+                app.toast(tr(Traits::updatedKey(), {i18n::count(Traits::countKey(), (long long) Traits::catalog(app).size())}),
                           ToastKind::Success);
             } else {
-                app.toast("Refresh failed: " + st.lastRefreshError + ". The current list is kept.", ToastKind::Error);
+                app.toast(tr("browse.refresh_failed", {st.lastRefreshError}), ToastKind::Error);
             }
         }
 
@@ -759,22 +801,21 @@ namespace {
             std::string sep = "   \xC2\xB7   ";
             std::string text;
             if (cat.empty()) {
-                text = "The list is not loaded yet.";
+                text = tr("browse.info_not_loaded");
             } else {
-                text = "Provider " + n(d.parse.raw) + sep + "Parsed " + n(d.parse.parsed) + sep + "Cached " + n(d.cached)
-                       + "\nVisible " + n(d.visible) + sep + "Indexed " + n(d.indexed) + sep + "Uncategorized "
-                       + n(d.uncategorized) + sep + "Dropped " + n(d.dropped())
-                       + "\nDropped by reason: no id " + n(d.parse.rejectedMissingId) + ", repeated id "
-                       + n(d.parse.rejectedDuplicateId) + ", not an entry " + n(d.parse.rejectedNotObject)
-                       + "\nKept without: name " + n(d.parse.missingName) + ", category " + n(d.parse.missingCategory)
-                       + ", poster " + n(d.parse.missingPoster)
-                       + "\n" + n(d.categories) + " categories" + sep
-                       + (st.fromCache ? "saved list from " : "downloaded ") + clockx::localDate(cat.savedAt)
-                       + "\nParse " + std::to_string((int) d.parseMs) + " ms" + sep + "search index "
-                       + std::to_string((int) d.indexMs) + " ms, " + std::to_string((int) (d.indexBytes / 1024)) + " KB";
+                (void) sep;
+                text = tr("browse.info_counts", {n(d.parse.raw), n(d.parse.parsed), n(d.cached)})
+                       + "\n" + tr("browse.info_visible", {n(d.visible), n(d.indexed), n(d.uncategorized), n(d.dropped())})
+                       + "\n" + tr("browse.info_dropped", {n(d.parse.rejectedMissingId), n(d.parse.rejectedDuplicateId),
+                                                           n(d.parse.rejectedNotObject)})
+                       + "\n" + tr("browse.info_kept", {n(d.parse.missingName), n(d.parse.missingCategory),
+                                                        n(d.parse.missingPoster)})
+                       + "\n" + tr(st.fromCache ? "browse.info_saved" : "browse.info_downloaded",
+                                   {n(d.categories), clockx::localDate(cat.savedAt)})
+                       + "\n" + tr("browse.info_timing", {std::to_string((int) d.parseMs), std::to_string((int) d.indexMs),
+                                                          std::to_string((int) (d.indexBytes / 1024))});
             }
-            app.push(screens::makeDialog(app, std::string(Traits::heading()) + ": catalog info", text, {"Close"},
-                                         nullptr));
+            app.push(screens::makeDialog(app, tr(Traits::infoKey()), text, {tr("common.close")}, nullptr));
         }
 
         void setFocus(int f) {
@@ -782,14 +823,14 @@ namespace {
             categoryList->setFocused(focus == 0);
             grid->setFocused(focus == 1);
             if (focus == 0) {
-                hints->setHints({{ui::Glyph::Cross, "Open"}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, "Category"},
-                                 {ui::Glyph::Triangle, "Search"}, {ui::Glyph::Options, "Sort & refresh"},
-                                 {ui::Glyph::Circle, "Back"}});
+                hints->setHints({{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
+                                 {ui::Glyph::Triangle, tr("home.search")}, {ui::Glyph::Options, tr("browse.sort_refresh")},
+                                 {ui::Glyph::Circle, tr("common.back")}});
             } else {
-                hints->setHints({{ui::Glyph::Cross, "Details"}, {ui::Glyph::Square, "Favorite"},
-                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, "Page"}, {ui::Glyph::L1, ""},
-                                 {ui::Glyph::R1, "Category"}, {ui::Glyph::Triangle, "Search"},
-                                 {ui::Glyph::Options, "Sort"}, {ui::Glyph::Circle, "Categories"}});
+                hints->setHints({{ui::Glyph::Cross, tr("browse.details")}, {ui::Glyph::Square, tr("common.favorite")},
+                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::L1, ""},
+                                 {ui::Glyph::R1, tr("live.category")}, {ui::Glyph::Triangle, tr("home.search")},
+                                 {ui::Glyph::Options, tr("browse.sort")}, {ui::Glyph::Circle, tr("live.categories")}});
             }
             refreshInfo();
         }

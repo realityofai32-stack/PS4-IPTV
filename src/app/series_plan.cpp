@@ -1,4 +1,5 @@
 #include "series_plan.h"
+#include "../i18n/i18n.h"
 #include "../core/format.h"
 
 namespace seriesplan {
@@ -115,11 +116,11 @@ namespace seriesplan {
         std::string code = fmt::episodeCode(ep.season, ep.number);
         switch (a.kind) {
             case Kind::Resume:
-                return "Resume " + code + " \xC2\xB7 " + fmt::clock(a.position);
+                return i18n::tr("series.resume_episode", {code, fmt::clock(a.position)});
             case Kind::Next:
-                return "Next " + code;
+                return i18n::tr("series.next_episode", {code});
             default:
-                return "Play " + code;
+                return i18n::tr("series.play_episode", {code});
         }
     }
 }

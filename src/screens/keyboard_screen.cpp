@@ -49,13 +49,23 @@ namespace {
                                         ui::Label::centerOffset(special ? theme::LABEL : theme::HEADING, KEY_H),
                                         ui::Weight::SemiBold);
                     v.label->setAlign(ui::Align::Center, w);
+                    if (special) {
+                        // translated key names ("BÜYÜK HARF") may be longer than the English ones
+                        v.label->setText(model.label(k));
+                        if (v.label->width() > w - 16) {
+                            v.label->setCharSize(theme::CAPTION - 2);
+                            v.label->setPosition(0, ui::Label::centerOffset(theme::CAPTION - 2, KEY_H));
+                        }
+                        v.label->setMaxWidth(w - 12);
+                    }
                     line.push_back(v);
                 }
                 keys.push_back(line);
             }
-            screens::hintBar(this, {{ui::Glyph::Cross, "Type"}, {ui::Glyph::Square, "Backspace"},
-                                    {ui::Glyph::Triangle, "Space"}, {ui::Glyph::L2, "Shift"},
-                                    {ui::Glyph::R2, "Done"}, {ui::Glyph::Circle, "Cancel"}});
+            screens::hintBar(this, {{ui::Glyph::Cross, tr("keyboard.hint_type")},
+                                    {ui::Glyph::Square, tr("keyboard.hint_backspace")},
+                                    {ui::Glyph::Triangle, tr("keyboard.hint_space")}, {ui::Glyph::L2, tr("keyboard.hint_shift")},
+                                    {ui::Glyph::R2, tr("keyboard.hint_done")}, {ui::Glyph::Circle, tr("common.cancel")}});
             refresh();
         }
 
@@ -188,7 +198,7 @@ namespace {
                 btns.push_back(b);
                 x += bw + 24;
             }
-            screens::hintBar(this, {{ui::Glyph::Cross, "Select"}, {ui::Glyph::Circle, "Back"}});
+            screens::hintBar(this, {{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("common.back")}});
             refresh();
         }
 
@@ -251,7 +261,7 @@ namespace {
             panel->add(list);
             auto *hints = new ui::HintBar();
             hints->setPosition(48, theme::SCREEN_H - theme::SAFE_Y - 40);
-            hints->setHints({{ui::Glyph::Cross, "Select"}, {ui::Glyph::Circle, "Back"}});
+            hints->setHints({{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("common.back")}});
             panel->add(hints);
             list->setSelected(checked >= 0 ? checked : 0);
         }

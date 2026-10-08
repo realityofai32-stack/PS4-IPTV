@@ -8,6 +8,7 @@
 
 #include "clock.h"
 #include "log.h"
+#include "../i18n/i18n.h"
 
 namespace clockx {
 
@@ -66,11 +67,12 @@ namespace clockx {
     }
 
     std::string localDate(int64_t unixTime) {
-        static const char *months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+        static const char *months[] = {"date.month.1", "date.month.2", "date.month.3", "date.month.4",
+                                       "date.month.5", "date.month.6", "date.month.7", "date.month.8",
+                                       "date.month.9", "date.month.10", "date.month.11", "date.month.12"};
         std::tm tm = toTm(unixTime + (int64_t) g_offsetMinutes * 60);
-        char buf[32];
-        snprintf(buf, sizeof(buf), "%d %s %d", tm.tm_mday, months[tm.tm_mon % 12], tm.tm_year + 1900);
-        return buf;
+        // "21 Sep 2027" / "21 Eyl 2027"
+        return i18n::tr("date.format", {std::to_string(tm.tm_mday), i18n::tr(months[tm.tm_mon % 12]),
+                                        std::to_string(tm.tm_year + 1900)});
     }
 }

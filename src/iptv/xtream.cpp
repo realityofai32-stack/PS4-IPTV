@@ -7,6 +7,7 @@
 #include "xtream.h"
 #include "../core/json.h"
 #include "../core/url.h"
+#include "../i18n/i18n.h"
 
 namespace iptv {
     const char *contentTypeName(ContentType type) {
@@ -164,7 +165,7 @@ namespace xtream {
                 continue;  // malformed entry: skip, never crash
             }
             if (c.name.empty()) {
-                c.name = "Category " + c.id;
+                c.name = i18n::tr("fallback.category", {c.id});
             }
             out.push_back(std::move(c));
         }
@@ -215,7 +216,7 @@ namespace xtream {
             c.name = url::trim(o.get("name"));
             if (c.name.empty()) {
                 audit.stats.missingName++;
-                c.name = "Channel " + c.streamId;
+                c.name = i18n::tr("fallback.channel", {c.streamId});
             }
             c.categoryId = url::trim(o.get("category_id"));
             audit.stats.missingCategory += c.categoryId.empty();
@@ -316,7 +317,7 @@ namespace xtream {
 
         void finishSeries(Series &s) {
             if (s.name.empty()) {
-                s.name = "Series " + s.seriesId;
+                s.name = i18n::tr("fallback.series", {s.seriesId});
             }
             int fromName = 0;
             splitTitleYear(s.name, s.title, fromName);
@@ -480,7 +481,7 @@ namespace xtream {
             m.name = url::trim(o.get("name"));
             if (m.name.empty()) {
                 audit.stats.missingName++;
-                m.name = "Movie " + m.streamId;
+                m.name = i18n::tr("fallback.movie", {m.streamId});
             }
             splitTitleYear(m.name, m.title, m.year);
             audit.stats.titleYearAliases += m.year > 0;
@@ -651,23 +652,23 @@ namespace xtream {
     std::string authStatusText(AuthStatus status) {
         switch (status) {
             case AuthStatus::Ok:
-                return "Connected";
+                return i18n::tr("auth.ok");
             case AuthStatus::InvalidCredentials:
-                return "Invalid Xtream username or password";
+                return i18n::tr("auth.invalid");
             case AuthStatus::Expired:
-                return "Subscription expired";
+                return i18n::tr("auth.expired");
             case AuthStatus::Banned:
-                return "Account banned by the provider";
+                return i18n::tr("auth.banned");
             case AuthStatus::Disabled:
-                return "Account disabled by the provider";
+                return i18n::tr("auth.disabled");
             case AuthStatus::Refused:
-                return "The server refused access (HTTP 403)";
+                return i18n::tr("auth.refused");
             case AuthStatus::ServerError:
-                return "The IPTV server returned an error";
+                return i18n::tr("auth.server_error");
             case AuthStatus::Malformed:
-                return "The server did not answer like an Xtream server";
+                return i18n::tr("auth.malformed");
             default:
-                return "Unable to connect to the server";
+                return i18n::tr("auth.network");
         }
     }
 }

@@ -12,10 +12,10 @@ if (NOT PS4)
     message(FATAL_ERROR "PS4 only: configure with -DCMAKE_TOOLCHAIN_FILE=cmake/ps4-windows.cmake")
 endif ()
 
-set(APP_VERSION "0.1.0")
+set(APP_VERSION "0.2.0")
 set(APP_TITLE_ID "IPTV00002")      # unique: not PPLA00001 (pPlay), IPTV00001 (old experiment), IPTT00001 (test)
 set(APP_PKG_TITLE "PS4 IPTV")
-set(APP_PKG_VERSION "00.10")       # PS4 APP_VER format XX.YY for 0.1.0
+set(APP_PKG_VERSION "00.20")       # PS4 APP_VER format XX.YY for 0.2.0
 
 set(PLATFORM_PS4 ON CACHE BOOL "Sony PS4 target platform" FORCE)
 set(PPLAY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/pplay-reference" CACHE PATH "pPlay checkout")
@@ -59,9 +59,15 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_compile_options(${PROJECT_NAME} PRIVATE -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)
 # same language level as libcross2d (CMAKE_CXX_STANDARD 17) and the host tests (/std:c++17)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS ON)
-# text rendering test screen at launch (hardware Checkpoint 1 diagnostics; confirmed OK, still in Settings)
-option(PS4IPTV_TEXT_TEST_AT_START "Show the text rendering test screen at launch" OFF)
+# text rendering test screen at launch: a Debug-only diagnostic (hardware Checkpoint 1). Release builds never
+# open it by themselves; it stays available in Settings > Diagnostics. scripts/verify-ps4iptv.ps1 checks that
+# a release build was configured without it.
+option(PS4IPTV_TEXT_TEST_AT_START "Debug builds only: show the text rendering test screen at launch" OFF)
 if (PS4IPTV_TEXT_TEST_AT_START)
+    if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        message(FATAL_ERROR "PS4IPTV_TEXT_TEST_AT_START is a Debug-only diagnostic and cannot be used in a "
+                "${CMAKE_BUILD_TYPE} build")
+    endif ()
     target_compile_definitions(${PROJECT_NAME} PRIVATE PS4IPTV_TEXT_TEST_AT_START=1)
 endif ()
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")

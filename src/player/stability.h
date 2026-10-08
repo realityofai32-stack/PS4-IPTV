@@ -138,6 +138,9 @@ namespace stability {
         // short reason of the last incident, for the info panel / log
         const std::string &reason() const { return why; }
 
+        // the same, in the UI language ("" when none)
+        std::string reasonText() const;
+
     private:
 
         Action fail(FailKind kind, bool beforeFirstFrame, const char *reason, double now);
@@ -155,6 +158,8 @@ namespace stability {
         int refused = 0;
         Status st = Status::Opening;
         std::string why;
+        const char *whyKey = nullptr;   // localization key of why
+        int gaveUpAfter = 0;
     };
 }
 

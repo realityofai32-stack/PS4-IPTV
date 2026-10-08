@@ -2,6 +2,7 @@
 #include <cstring>
 
 #include "playback.h"
+#include "../i18n/i18n.h"
 #include "../platform/log.h"
 #include "../platform/redact.h"
 
@@ -58,17 +59,17 @@ const char *Playback::stateText(PlaybackState s) {
         case PlaybackState::Idle:
             return "";
         case PlaybackState::Opening:
-            return "Opening\xE2\x80\xA6";
+            return i18n::tr("player.opening").c_str();
         case PlaybackState::Buffering:
-            return "Buffering\xE2\x80\xA6";
+            return i18n::tr("player.buffering").c_str();
         case PlaybackState::Playing:
-            return "Playing";
+            return i18n::tr("player.playing").c_str();
         case PlaybackState::Paused:
-            return "Paused";
+            return i18n::tr("player.paused").c_str();
         case PlaybackState::Ended:
-            return "Ended";
+            return i18n::tr("player.ended").c_str();
         default:
-            return "Playback error";
+            return i18n::tr("player.error").c_str();
     }
 }
 
@@ -102,10 +103,9 @@ void Playback::shutdown() {
 
 std::string Playback::initError() const {
     if (mpv == nullptr) {
-        return "Player not initialized";
+        return i18n::tr("player.not_initialized");
     }
-    return diag::format("Player initialization failed (%s: %s)", mpv->getInitErrorStep().c_str(),
-                        mpv_error_string(mpv->getInitError()));
+    return i18n::tr("player.init_failed", {mpv->getInitErrorStep(), mpv_error_string(mpv->getInitError())});
 }
 
 void Playback::open(const std::string &url, const std::string &format) {
@@ -114,7 +114,7 @@ void Playback::open(const std::string &url, const std::string &format) {
 
 void Playback::open(const std::string &url, const std::string &format, const OpenOptions &options) {
     if (!available()) {
-        fail(PlaybackError::Other, "Player initialization failed", initError());
+        fail(PlaybackError::Other, i18n::tr("player.init_failed_short"), initError());
         return;
     }
     si = StreamInfo();
@@ -139,7 +139,7 @@ void Playback::open(const std::string &url, const std::string &format, const Ope
 
     if (url.compare(0, 8, "https://") == 0) {
         // pPlay's FFmpeg build has no https/tls protocol (verified: file ftp http rtmp rtp tcp udp)
-        fail(PlaybackError::HttpsUnsupported, "This build currently supports HTTP streams only.", "https URL");
+        fail(PlaybackError::HttpsUnsupported, i18n::tr("player.https_unsupported"), "https URL");
         return;
     }
 
@@ -158,7 +158,7 @@ void Playback::open(const std::string &url, const std::string &format, const Ope
     }
     int res = mpv->load(url, Mpv::LoadType::Replace, loadOptions);
     if (res != 0) {
-        fail(PlaybackError::Other, "Playback error", diag::format("loadfile: %d (%s)", res, mpv_error_string(res)));
+        fail(PlaybackError::Other, i18n::tr("player.error"), diag::format("loadfile: %d (%s)", res, mpv_error_string(res)));
     }
 }
 
@@ -456,7 +456,7 @@ void Playback::onLog(const mpv_event_log_message *msg) {
             selectSubtitle(0);
             return;
         }
-        fail(PlaybackError::Renderer, "This video format is not supported on PS4 yet.",
+        fail(PlaybackError::Renderer, i18n::tr("player.format_unsupported"),
              "precompiled mpv shader missing: " + lastShader);
         return;
     }
@@ -465,13 +465,13 @@ void Playback::onLog(const mpv_event_log_message *msg) {
             firstNetworkError = text;
         }
         if (contains(text, "HTTP error 403")) {
-            fail(PlaybackError::Http403, "Provider temporarily refused the stream (HTTP 403).", text);
+            fail(PlaybackError::Http403, i18n::tr("player.http_403"), text);
         } else if (contains(text, "HTTP error 404")) {
-            fail(PlaybackError::HttpClient, "Stream unavailable (HTTP 404).", text);
+            fail(PlaybackError::HttpClient, i18n::tr("player.http_404"), text);
         } else if (contains(text, "HTTP error 401")) {
-            fail(PlaybackError::HttpClient, "Stream access denied (HTTP 401).", text);
+            fail(PlaybackError::HttpClient, i18n::tr("player.http_401"), text);
         } else {
-            fail(PlaybackError::HttpOther, "Stream unavailable (" + text.substr(text.find("HTTP error")) + ").", text);
+            fail(PlaybackError::HttpOther, i18n::tr("player.http_other", {text.substr(text.find("HTTP error"))}), text);
         }
         return;
     }
@@ -479,15 +479,15 @@ void Playback::onLog(const mpv_event_log_message *msg) {
         return;
     }
     if (prefix == "ffmpeg" && (contains(text, "Failed to resolve hostname") || contains(text, "Connection to"))) {
-        fail(PlaybackError::Network, "Unable to connect to the stream server.", text);
+        fail(PlaybackError::Network, i18n::tr("player.network"), text);
     } else if (contains(text, "Protocol not found")) {
-        fail(PlaybackError::HttpsUnsupported, "This build currently supports HTTP streams only.", text);
+        fail(PlaybackError::HttpsUnsupported, i18n::tr("player.https_unsupported"), text);
     } else if (contains(text, "Could not open/initialize audio device")) {
-        fail(PlaybackError::Audio, "Audio initialization failed.", text);
+        fail(PlaybackError::Audio, i18n::tr("player.audio_failed"), text);
     } else if (startsWith(prefix, "vd") && contains(text, "Could not open codec")) {
-        fail(PlaybackError::UnsupportedCodec, "Unsupported video codec.", text);
+        fail(PlaybackError::UnsupportedCodec, i18n::tr("player.codec_unsupported"), text);
     } else if (contains(text, "Failed to recognize file format")) {
-        fail(PlaybackError::Demux, "Stream format not recognized.", text);
+        fail(PlaybackError::Demux, i18n::tr("player.format_unknown"), text);
     }
 }
 
@@ -542,20 +542,20 @@ void Playback::onEndFile(const mpv_event_end_file *ef) {
     if (ef->reason == MPV_END_FILE_REASON_ERROR) {
         switch (ef->error) {
             case MPV_ERROR_AO_INIT_FAILED:
-                fail(PlaybackError::Audio, "Audio initialization failed.", mpv_error_string(ef->error));
+                fail(PlaybackError::Audio, i18n::tr("player.audio_failed"), mpv_error_string(ef->error));
                 break;
             case MPV_ERROR_VO_INIT_FAILED:
-                fail(PlaybackError::Renderer, "Video output failed.", mpv_error_string(ef->error));
+                fail(PlaybackError::Renderer, i18n::tr("player.video_failed"), mpv_error_string(ef->error));
                 break;
             case MPV_ERROR_UNKNOWN_FORMAT:
-                fail(PlaybackError::Demux, "Stream format not recognized.", mpv_error_string(ef->error));
+                fail(PlaybackError::Demux, i18n::tr("player.format_unknown"), mpv_error_string(ef->error));
                 break;
             case MPV_ERROR_LOADING_FAILED:
-                fail(PlaybackError::Network, "Stream unavailable.", firstNetworkError.empty()
+                fail(PlaybackError::Network, i18n::tr("player.unavailable"), firstNetworkError.empty()
                                                                   ? mpv_error_string(ef->error) : firstNetworkError);
                 break;
             default:
-                fail(PlaybackError::Other, "Playback error.", mpv_error_string(ef->error));
+                fail(PlaybackError::Other, i18n::tr("player.error"), mpv_error_string(ef->error));
                 break;
         }
         return;

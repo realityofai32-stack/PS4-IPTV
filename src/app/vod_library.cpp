@@ -2,6 +2,7 @@
 
 #include "vod_library.h"
 #include "../platform/clock.h"
+#include "../i18n/i18n.h"
 #include "../platform/log.h"
 
 using namespace iptv;
@@ -18,6 +19,11 @@ void VodLibrary::reset() {
     seriesInfos.clear();
     inFlight.clear();
     errors.clear();
+    gen++;
+}
+
+void VodLibrary::setOffline(bool offline) {
+    offlineMode = offline;
     gen++;
 }
 
@@ -61,9 +67,13 @@ void VodLibrary::open(const Profile &profile, bool movies) {
             s.fromCache = true;
             s.savedAt = o.savedAt;
             gen++;
-            if (clockx::unixNow() - o.savedAt > REFRESH_AFTER) {
+            if (clockx::unixNow() - o.savedAt > REFRESH_AFTER && !offlineMode) {
                 refresh(p, movies);   // show the saved list now, newer one in the background
             }
+        } else if (offlineMode) {
+            s.status = CatalogStatus::Failed;
+            s.message = i18n::tr("catalog.offline_none");
+            gen++;
         } else {
             refresh(p, movies);       // no saved copy: the provider is the only source
         }
@@ -78,6 +88,16 @@ void VodLibrary::open(const Profile &profile, bool movies) {
 void VodLibrary::refresh(const Profile &profile, bool movies) {
     SectionStatus &st = movies ? movieState : seriesState;
     if (st.refreshing) {
+        return;
+    }
+    if (offlineMode) {
+        bool hasList = movies ? !movieCatalog->empty() : !seriesCatalog->empty();
+        st.refreshes++;
+        st.lastRefreshOk = false;
+        st.lastRefreshError = i18n::tr("connect.offline_mode");
+        st.status = hasList ? CatalogStatus::Ready : CatalogStatus::Failed;
+        st.message = hasList ? "" : i18n::tr("catalog.offline_none");
+        gen++;
         return;
     }
     bool hasData = movies ? !movieCatalog->empty() : !seriesCatalog->empty();
@@ -106,7 +126,7 @@ void VodLibrary::refresh(const Profile &profile, bool movies) {
             s.message.clear();
         } else if (hasList) {
             s.status = CatalogStatus::Ready;
-            s.message = "Could not refresh (" + message + "). Showing the saved list.";
+            s.message = i18n::tr("catalog.refresh_failed_saved", {message});
         } else {
             s.status = CatalogStatus::Failed;
             s.message = message;
@@ -140,6 +160,14 @@ void VodLibrary::requestMovieInfo(const Profile &profile, const std::string &str
     if (streamId.empty() || movieInfos.contains(streamId) || inFlight.count(key)) {
         return;
     }
+    if (offlineMode) {
+        const std::string &why = i18n::tr("connect.offline_mode");   // only what was cached before is shown
+        if (errors[key] != why) {
+            errors[key] = why;
+            gen++;
+        }
+        return;
+    }
     inFlight.insert(key);
     errors.erase(key);
     int myEpoch = *epoch;
@@ -170,6 +198,14 @@ std::shared_ptr<const MovieInfo> VodLibrary::movieInfo(const std::string &stream
 void VodLibrary::requestSeriesInfo(const Profile &profile, const std::string &seriesId, bool force) {
     std::string key = "s" + seriesId;
     if (seriesId.empty() || inFlight.count(key) || (!force && seriesInfos.contains(seriesId))) {
+        return;
+    }
+    if (offlineMode) {
+        const std::string &why = i18n::tr("connect.offline_mode");   // only what was cached before is shown
+        if (errors[key] != why) {
+            errors[key] = why;
+            gen++;
+        }
         return;
     }
     inFlight.insert(key);

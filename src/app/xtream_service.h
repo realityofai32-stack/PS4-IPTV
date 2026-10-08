@@ -52,7 +52,9 @@ public:
 
     // get_live_categories + get_live_streams, parsed on the worker. On network failure the cached copy
     // (dataDir/cache/<profile>/) is used and fromCache is set. Successful responses refresh the cache.
-    CancelToken loadLive(const iptv::Profile &profile, const std::string &dataDir, LiveCallback callback);
+    // cacheOnly (offline mode): the saved copy only, no network request.
+    CancelToken loadLive(const iptv::Profile &profile, const std::string &dataDir, LiveCallback callback,
+                         bool cacheOnly = false);
 
     // ------------------------------------------------------------------ Movies / Series (lazy)
     enum class Source {

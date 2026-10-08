@@ -7,6 +7,7 @@
 #include <string>
 
 #include "../iptv/sorting.h"
+#include "../player/display.h"
 #include "../player/stability.h"
 #include "../player/tracks.h"
 
@@ -32,6 +33,14 @@ struct Settings {
     int subtitleSize = 1;                         // 0 small, 1 medium, 2 large
     int subtitlePosition = 0;                     // 0 bottom, 1 raised
     bool subtitleShadow = false;
+    // video display (Settings defaults; the Options panel changes only the current playback)
+    display::Mode displayMode = display::Mode::Auto;
+    int zoomPercent = 100;
+    // offline downloads
+    bool retryDownloads = true;          // network loss: retry automatically with backoff
+    bool resumeDownloadsOnStart = true;  // interrupted downloads continue when the app starts
+    // application UI language: "en" (default for every installation) or "tr". Never derived from the account,
+    // provider or region. Files written before format version 2 had no language choice: they get English.
     std::string language = "en";
     // Movies / Series grid order, per profile: "<profileId>/movies" -> sort key ("az", "added_desc"...)
     std::map<std::string, std::string> sortOrders;

@@ -49,6 +49,12 @@ public:
     // a new sign-in: forget the previous profile's catalogs and details
     void reset();
 
+    // offline mode (the provider could not be reached at sign-in): only the saved lists are shown, no provider
+    // request is made (refreshes and detail requests report the offline state)
+    void setOffline(bool offline);
+
+    bool offline() const { return offlineMode; }
+
     void openMovies(const iptv::Profile &profile);
 
     void openSeries(const iptv::Profile &profile);
@@ -104,6 +110,7 @@ private:
     std::unordered_map<std::string, std::string> errors;  // same keys
     std::shared_ptr<int> epoch = std::make_shared<int>(0);  // bumps on reset(): late callbacks are dropped
     unsigned gen = 0;
+    bool offlineMode = false;
 };
 
 #endif // PS4IPTV_APP_VOD_LIBRARY_H

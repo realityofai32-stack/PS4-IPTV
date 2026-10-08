@@ -11,13 +11,13 @@ namespace {
 
     const float TOP = 236;
     const float CONTENT_H = 740;
-    const char *TAB_NAMES[] = {"Channels", "Movies", "Series"};
+    const char *TAB_KEYS[] = {"favorites.tab_channels", "home.movies", "home.series"};
 
     class FavoritesScreen : public Screen {
     public:
         explicit FavoritesScreen(App &a) : Screen(a), listAdapter(this), gridAdapter(this) {
             ui::background(this);
-            screens::header(this, "Favorites");
+            screens::header(this, tr("home.favorites"));
             tabLayer = new RectangleShape(FloatRect(theme::SAFE_X, 140, 1200, 60));
             tabLayer->setFillColor(Color::Transparent);
             add(tabLayer);
@@ -31,8 +31,8 @@ namespace {
             empty->setAlign(ui::Align::Center, theme::SCREEN_W);
             empty->setMaxWidth(1200);
             empty->setMaxLines(2);
-            screens::hintBar(this, {{ui::Glyph::Cross, "Open"}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, "Type"},
-                                    {ui::Glyph::Square, "Remove"}, {ui::Glyph::Circle, "Back"}});
+            screens::hintBar(this, {{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("favorites.type")},
+                                    {ui::Glyph::Square, tr("common.remove")}, {ui::Glyph::Circle, tr("common.back")}});
             app.vod().openMovies(app.session().profile);
             app.vod().openSeries(app.session().profile);
             rebuild();
@@ -267,7 +267,7 @@ namespace {
             float x = 0;
             for (int t = 0; t < 3; t++) {
                 bool sel = t == tab;
-                std::string text = std::string(TAB_NAMES[t]) + "  " + std::to_string(counts[t]);
+                std::string text = tr(TAB_KEYS[t]) + "  " + std::to_string(counts[t]);
                 auto *chip = ui::box(tabLayer, FloatRect(x, 0, 260, 56), sel ? theme::accent() : theme::surface(), 28);
                 auto *l = ui::label(chip, text, theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, 56),
                                     sel ? ui::Weight::SemiBold : ui::Weight::Regular, sel ? Color::White : theme::textDim());
@@ -282,10 +282,10 @@ namespace {
             bool loading = tab != 0 && counts[tab] > 0 && vodItems.empty()
                            && (st.status == CatalogStatus::Loading || st.status == CatalogStatus::NotLoaded);
             if (loading) {
-                empty->setText("Loading" "\xE2\x80\xA6");
+                empty->setText(tr("common.loading"));
             } else if (count() == 0) {
-                empty->setText(std::string("No favorite ") + (tab == 0 ? "channels" : tab == 1 ? "movies" : "series")
-                               + " yet. Press the square button on one to add it here.");
+                empty->setText(tr(tab == 0 ? "favorites.empty_channels" : tab == 1 ? "favorites.empty_movies"
+                                                                                : "favorites.empty_series"));
             } else {
                 empty->setText("");
             }
@@ -344,7 +344,7 @@ namespace {
                 }
             }
             app.saveLibrary();
-            app.toast("Removed from favorites");
+            app.toast(tr("favorites.removed"));
             rebuild();
         }
 

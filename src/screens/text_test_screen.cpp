@@ -1,4 +1,6 @@
 // Deterministic text rendering test (hardware checkpoint for the glyph upload fix, see ui/glyph_cache.h).
+// i18n-exempt-file: the specimen text of this diagnostic page is fixed on purpose (identical glyphs in every
+// UI language); its title and hints come from the localization tables.
 //
 // Every line is fixed text in many sizes and both weights, inside the real widgets (buttons, form rows,
 // truncated and wrapped panels). Two lines reveal one new character every 0.25 s at sizes no other text
@@ -51,9 +53,10 @@ namespace {
     public:
         TextTestScreen(App &a, bool atStartup) : Screen(a), startup(atStartup) {
             ui::background(this);
-            screens::header(this, "Text rendering test",
-                            std::string("Build ") + BUILD_GIT_HASH + "  \xE2\x80\xA2  " + BUILD_DATE
-                            + "  \xE2\x80\xA2  PASS only if every letter on this screen is complete and sharp");
+            // The specimen text below is fixed on purpose (the same glyphs in every UI language); only the
+            // page's own title and hints are localized.
+            screens::header(this, tr("diagnostics.text_test"),
+                            tr("diagnostics.text_test_sub", {BUILD_GIT_HASH, BUILD_DATE}));
 
             // left column: fixed strings, sizes 18-64, both weights
             const float x = theme::SAFE_X;
@@ -134,8 +137,8 @@ namespace {
             stats = ui::label(this, "", theme::CAPTION, rx, 868, ui::Weight::Regular, theme::textMuted());
             stats->setMaxWidth(rw);
 
-            screens::hintBar(this, {{ui::Glyph::Cross, startup ? "Continue to the app" : "Close"},
-                                    {ui::Glyph::Triangle, "Restart the live lines"}});
+            screens::hintBar(this, {{ui::Glyph::Cross, tr(startup ? "diagnostics.continue" : "common.close")},
+                                    {ui::Glyph::Triangle, tr("diagnostics.restart_lines")}});
         }
 
         const char *name() const override { return "text-test"; }

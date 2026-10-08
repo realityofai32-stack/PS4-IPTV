@@ -51,6 +51,11 @@ namespace http {
 
     void globalShutdown();
 
+    // set by globalInit (the download transport uses the same identity and CA bundle)
+    const std::string &userAgent();
+
+    const std::string &caBundle();
+
     Response get(const Request &request);
 
     // Short user-facing text for a failed response.
