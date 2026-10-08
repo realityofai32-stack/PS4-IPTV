@@ -1,0 +1,123 @@
+PS4 IPTV - HARDWARE CHECKPOINT 3: ENGLISH / TÜRKÇE + ALL TRACKS + DISPLAY MODES + OFFLINE DOWNLOADS
+=====================================================================================================
+Build ad37839 (v0.2.0, title IPTV00002). PKG IV0001-IPTV00002_00-IPTV000020002000.pkg sha256 8ff07c7526a703f0fdcfbfe123a9f0e14417482efad11ad1b3e985455b1f9be8
+
+What changed since Checkpoint 2.5:
+  - The whole interface is English by default; Settings > Language switches to Türkçe (and back) at once.
+    Provider titles, channel names, categories and plots are never translated.
+  - The text rendering test no longer opens by itself. It is in Settings > Diagnostics > Text rendering test.
+  - Playback Options (OPTIONS while a movie / episode plays): every audio and subtitle track of the file,
+    + "Video display mode" (Auto / Original, Fit, Fill / Crop, Stretch, 16:9, 4:3) and "Zoom" (100-125 %),
+    + "Use display settings as default". Settings has Default video display mode and Default zoom.
+  - Offline downloads of movies and episodes: Movie detail "↓ Download", episode rows (Square = download,
+    OPTIONS = more), Home > Downloads, Settings > Storage & downloads. Downloads pause while a video plays.
+  - When the provider cannot be reached at start: "Continue offline" (saved lists + downloads).
+  - Home has 7 tiles (Downloads added). Version 0.2.0.
+
+This PKG contains NO credentials. Install it OVER the existing "PS4 IPTV" (same title): profile, favorites,
+history and positions are kept. Your settings are kept, except the language: it starts in English (the
+language setting did not exist before). Downloads are stored in /data/PS4IPTV/downloads/.
+
+Pick for the download tests: a SHORT movie (small file, e.g. a cartoon or a short film, a few hundred MB) =
+"DM1", and one series episode = "DE1". Note their names. Keep the PS4 on the same network as in 2.5.
+
+HARDWARE UNKNOWNS (what these steps decide):
+  U1 free space / large files: the app now calls two system functions pPlay never used (fstatfs for free
+     space, ftruncate to cut a partial file back). If the app does not start at all (step 1), this is the
+     prime suspect - tell me immediately. If it starts but step 34 shows "Unknown" free space, fstatfs is
+     unavailable (downloads still work; the space check then relies on write errors).
+  U2 display modes: Fill / Stretch / 16:9 / 4:3 / Zoom only change mpv's picture rectangle (same shader as every
+     video so far). A black screen or "This video format is not supported on PS4 yet" right after changing the
+     mode would mean a shader difference - note which mode.
+  U3 a local file through mpv (offline playback) - the same player, but the first time a file on /data is played.
+  U4 speed: a download on the PS4 network stack (libcurl, the same library as the API and logos).
+
+LOCALIZATION
+ 1. Install, launch. Expected: NO text rendering test screen; Home (or Connect, then Home) in ENGLISH:
+    tiles Live TV / Movies / Series / Downloads / Favorites / Search / Settings.                     PHOTO 1
+ 2. (Same launch) confirm no diagnostic/test page appeared at any point.
+ 3. Onboarding in English: Settings > Profiles > + Add profile shows "Add Xtream profile", "Profile name",
+    "Server URL", "Test Connection", "Save & Connect". Press Circle to leave without saving.
+ 4. Settings > Language (first row) > Right: "Türkçe". The screens rebuild at once: Settings is now "Ayarlar",
+    Circle back to Home: "Canlı TV / Filmler / Diziler / İndirmeler / Favoriler / Arama / Ayarlar".   PHOTO 2
+    Check letters: ç ğ ı İ ö ş ü appear correctly (e.g. "Çıkış", "İndirmeler", "Şifre", "Büyük").
+ 5. Close the app (PS button > close) and start it again: still Türkçe.
+ 6. Settings > Dil > English: everything back in English. (Leave it in the language you prefer afterwards.)
+
+MEDIA TRACKS (a movie with several audio / subtitle tracks, e.g. M3 "Bülbülü Öldürmek - 1962" from 2.5)
+ 7. Play it, OPTIONS > Audio: EVERY audio track of the file is listed (Türkçe, English ... or Track 2) with codec
+    and channels. Select another one: switches within ~1 s, no restart.                            PHOTO 3
+ 8. OPTIONS > Subtitles: "Off" + EVERY subtitle track (Türkçe, English, Deutsch ...). Select one: shown.
+
+VIDEO DISPLAY (same movie, ideally one with black bars or a 4:3 / cinemascope picture)
+    For each mode: OPTIONS > Video display mode (Left/Right or X changes it), close the panel, look.
+ 9. Auto / Original: as before (picture shape correct, whole picture).                              PHOTO 4
+10. Fit: whole picture, bars where shapes differ (usually identical to Auto).
+11. Fill / Crop: the screen is filled, nothing is stretched, edges are cut.                       PHOTO 5
+    Stretch: fills the screen, shapes distorted.
+12. 16:9: displayed as 16:9.
+13. 4:3: displayed as 4:3 (narrower picture with side bars on a 16:9 film).                       PHOTO 6
+14. Zoom: back to Auto, OPTIONS > Zoom: 105 / 110 / 115 / 120 / 125 % enlarge the picture step by step.
+    In Stretch the Zoom row says "Not available in Stretch".
+15. While doing 9-14: playback NEVER restarts (time keeps running from where it was, no "Opening..."), the audio
+    track and subtitle you chose stay selected. Then open Live TV: the picture is normal (Auto) again.
+    Settings > Default video display mode: Auto / Original; Default zoom: 100 % (unless you used
+    "Use display settings as default").
+
+DOWNLOADS (DM1 = short movie)
+16. Movies > DM1 > "↓ Download". Toast "Download queued". The button becomes "↓ Download 3%" ... rising.
+17. Home > Downloads (Downloading tab): DM1 with poster, "Downloading 42%", "1.2 GB / 2.8 GB · 3.8 MB/s ·
+    ~6 min left". The numbers update a few times per second; speed / ETA do not jump wildly.        PHOTO 7
+    RECORD: the speed shown.
+18. Square on DM1: "Paused" (the size stops growing).
+19. Square again: continues from the same size (not from 0%).
+20. While it downloads, close the app (PS button > close application) with DM1 at e.g. 30-60 %.
+21. Start the app again (Connect as usual), Home > Downloads: DM1 is there, "Downloading" again from about the
+    same percentage (it may go back by up to ~32 MB, never to 0). [With Settings > "Continue downloads when the
+    app starts" OFF it would wait "Paused" instead.]
+22. Let it complete: it moves to the "Downloaded" tab with its size and today's date. The Movies grid shows a small
+    ↓ badge in the corner of DM1's poster; Movie detail shows "▶ Play offline" + "Delete download".   PHOTO 8
+23. Disconnect the network (unplug the cable / turn Wi-Fi off in the PS4 settings, or switch the router off).
+24. Close and start the app: Connect fails ("Server name not found" / "Unable to connect") and the focused button
+    is "Continue offline". Press X: Home (orange dot, "Offline: showing the saved lists..."). Home > Downloads >
+    Downloaded > DM1 > X: it PLAYS, with no network.                                               PHOTO 9
+25. (offline) OPTIONS > Audio: all tracks, switching works.
+26. (offline) OPTIONS > Subtitles: all tracks, they show.
+27. (offline) Note the time, press Circle. Downloads > DM1 > X again (or Triangle > "Resume offline 12:34"):
+    it resumes EXACTLY there. Home > Continue Watching shows DM1 with the same position.
+    Reconnect the network now (and restart the app / Connect so you are online again).
+28. Downloads > Downloaded > DM1 > Triangle > Delete download > Delete. Toast "Download deleted. Your progress is
+    kept." It disappears from Downloads.
+29. Movies > DM1: no ↓ badge, button "↓ Download" again, but "Resume 12:34" (the position) is still there, and
+    Continue Watching / favorites are unchanged.
+
+EPISODE DOWNLOAD (DE1)
+30. Series > the series of DE1 > episode row > Square: "Download queued"; the row shows "↓ 12%" ... then
+    "↓ Downloaded". (OPTIONS on a row: Download episode / Download season N / Open Downloads.)        PHOTO 10
+31. Play DE1 from Home > Downloads (or from the series row - "Play offline" uses the file): it plays; the top
+    line says "Downloaded copy".
+32. Stop after a minute: Home > Continue Watching has the series card at that episode / time.
+33. The series detail shows DE1 as "↓ Downloaded" and its progress; the Series grid shows the ↓ badge on the
+    series poster.
+
+STORAGE
+34. Settings > Storage & downloads: "Downloaded content" (size of DE1), "Partial downloads", "Available
+    storage" (free space on the PS4 - RECORD the value; "Unknown" = see U1).                        PHOTO 11
+35. The Downloads screen header shows "x GB downloaded · y GB free" consistently.
+36. (only if practical: the free space is below the size of a large movie + 512 MB) download a large movie:
+    it stops with "Not enough free space: X needed, Y available." and nothing fills the disk.
+
+REGRESSION
+37. Live TV: categories, logos, play 2-3 channels, zap with L1/R1. A download in progress pauses while the player
+    is open and continues by itself after you leave it (its size in Downloads grows again).
+38. A streaming movie (not downloaded) plays and resumes as in 2.5.
+39. A streaming series episode plays, next episode (R1) works.
+40. Search: "sehir", "handmaid tale", "trt 1" - results as in 2.5 (downloaded movies say "↓ Downloaded").
+41. Continue Watching from Home resumes exactly.
+42. Favorites: add / remove a channel, movie, series.
+43. Audio / subtitle switching on a streamed movie.
+44. Playback stability: 5+ minutes of a live channel and of a movie without new stalls compared to 2.5.
+
+REPORT BACK: for each step OK / not OK (+ photo numbers), the values RECORDED in 17 and 34, anything that looks
+wrong in Türkçe (wording or letters), and the file /data/PS4IPTV/logs/log.txt if anything failed
+(it never contains your password: it is redacted).
