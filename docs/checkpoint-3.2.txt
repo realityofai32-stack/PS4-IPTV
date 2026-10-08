@@ -1,0 +1,158 @@
+PS4 IPTV - HARDWARE CHECKPOINT 3.2: M3U / M3U8 SOURCES + NEAR-BLACK UI + FAST DS4 SCROLLING + FONTS
+=====================================================================================================
+Build @BUILD@ (v0.2.0, title IPTV00002). PKG IV0001-IPTV00002_00-IPTV000020002000.pkg sha256 @SHA@
+
+What changed since Checkpoint 3.1 (build 941f8ec):
+  - Sources: "Add Source" offers Xtream Codes or M3U / M3U8 Playlist. Playlist sources are LIVE TV ONLY:
+    groups (group-title / #EXTGRP), logos (tvg-logo), search, favorites, Recently Watched, Refresh Playlist,
+    Playlist Info. No Movies / Series / Continue Watching / downloads for playlists (never guessed).
+    "Profiles" are called "Sources" now. Your Xtream profile is migrated automatically (profiles.json v2; the
+    original file is kept as /data/PS4IPTV/profiles.v1.json so Checkpoint 3.1 could still be reinstalled).
+  - Near-black / charcoal theme everywhere (one central palette, contrast checked on the PC).
+  - DS4: holding a direction accelerates: 0.3 s delay, then a step every 90 ms, 60 ms (after 1 s), 40 ms
+    (after 2 s), 30 ms (after 3.5 s). Left stick pushed all the way: 1.35x faster. Lists and poster grids
+    now GLIDE to their new position (Settings > Smooth scrolling turns that off).
+  - Text: fallback fonts for Arabic, Hebrew, Armenian, Georgian, Japanese, Korean and Chinese characters;
+    Arabic / Hebrew lines are shown right-to-left with joined Arabic letters (basic shaping).
+  - PKG is 40.3 MB (+4.3 MB: the two fallback fonts).
+
+This PKG contains NO credentials and NO playlists. Install it OVER the existing "PS4 IPTV": your Xtream
+profile (now "source"), favorites, history, positions, downloads and settings are kept.
+
+Prepare before starting:
+  P1 = your provider's M3U playlist address, if it offers one. For Xtream panels it usually looks like
+       http://<server>:<port>/get.php?username=<user>&password=<pass>&type=m3u_plus&output=ts
+       (type it on the on-screen keyboard; it is shown afterwards only as "server:port/get.php").
+       Any other M3U / M3U8 playlist you are entitled to use works too.
+  P2 = (optional, for step 38) a large synthetic playlist: on the PC run
+         python -I scripts\make-synthetic-playlist.py 25000 synthetic-25000.m3u
+       and copy synthetic-25000.m3u by FTP to /data/PS4IPTV/playlists/ on the PS4 (create the folder).
+       Its channels point to example.com: they browse / search / favorite, but do not play.
+  P3 = (optional) one playlist entry whose stream URL starts with https:// (for step 18).
+
+HARDWARE UNKNOWNS (what these steps decide):
+  U1 scissor clip (steps 34-46): while a list glides, the app clips the moving rows with GL scissor
+     (glScissor was already imported by the 3.1 build, but never used). Wrong: lists vanish, flicker, rows
+     drawn over the header / hint bar, or the video / other screens become partly invisible after scrolling.
+     If so: Settings > Smooth scrolling = Off must make everything normal again - report both.
+  U2 fallback fonts (steps 47-51): two more font files in the same glyph atlas system. Wrong: boxes where
+     the text test shows Arabic / Japanese / Korean, garbled letters, or Latin text breaking after
+     non-Latin text was shown.
+  U3 playlist download size: a large playlist (tens of thousands of entries) is downloaded and parsed on a
+     worker thread (PC: 25,000 entries parse + index in ~0.12 s; the PS4 is slower). Wrong: UI frozen.
+  U4 HTTPS streams: the playback FFmpeg build has no https protocol (audited). Expected: a clear message,
+     never a hang (step 18).
+
+-----------------------------------------------------------------------------------------------------
+M3U SOURCE
+-----------------------------------------------------------------------------------------------------
+ 1. Start the app. Your Xtream source opens as before (Live TV list, Home).
+    Then Home > OPTIONS (Settings) > Sources.
+    Expected: Sources lists your Xtream source as "Xtream Codes  *  <server>  *  <status>", ACTIVE.
+ 2. On Sources choose "+ Add Source" (or OPTIONS > Add Source). Expected: a menu "Xtream Codes" /
+    "M3U / M3U8 Playlist" with a second line each.
+ 3. Choose M3U / M3U8 Playlist. Enter a Source name and Playlist URL = P1. Leave User-Agent = Default.
+    Choose "Test Playlist". Expected: "Playlist OK", channel / group counts, logos / without logos.
+    Then "Save & Open".
+ 4. Expected: the download does not freeze the UI (spinner keeps moving); Home opens. Note the time it took.
+ 5. Live TV: Favorites, All Channels, then the playlist's groups in playlist order.
+ 6. All Channels count = the number Test Playlist / Playlist Info showed.
+ 7. If the playlist has entries without a group: "Uncategorized" is the last category and holds them.
+ 8. Channel logos appear in rows and in the right-hand panel.
+ 9. Channels without / with broken logos show the coloured initials tile (no crash, no empty box).
+10. Search (Triangle): type part of a playlist channel name. Expected: Live TV results from this playlist;
+    filters are only "All" and "Live TV".
+11. Square on a playlist channel: favorite. It appears under Favorites (Live TV and the Favorites screen).
+12. Play a playlist channel for ~10 s, back out to Home. Expected: it is in Recently Watched (not in
+    Continue Watching - that row does not exist for playlist sources).
+13. Live TV > OPTIONS > Refresh Playlist. Expected: "Refreshing the playlist..." under the title, then a toast
+    "Playlist refreshed * N channels". The focused channel / category stays where it was.
+14. Failed refresh: pull the network cable /
+    turn off Wi-Fi, then Live TV > OPTIONS > Refresh Playlist. Expected: toast "Refresh failed, the current
+    playlist is kept: ..." and the list stays complete. Reconnect the network afterwards.
+15. Close the app completely and start it again. Expected: the playlist source opens from its saved copy
+    quickly ("Saved playlist" step), without waiting for a download. Note the time.
+16. Play several HTTP channels of the playlist (zap with Up/Down in the player). Expected: video + audio like
+    Xtream channels; the info panel (Triangle) shows the stream type (MPEG-TS / HLS / ...).
+17. Play one entry whose URL ends in .m3u8 (HLS), if the playlist has one. Expected: plays.
+18. HTTPS: play an https:// entry (P3) if you have one. Expected: at once a message "This stream uses an
+    HTTPS address. This version can only play HTTP streams." - no hang. Live TV > OPTIONS > Playlist Info
+    shows how many HTTPS streams the playlist has. Report the result.
+    (Optional: 38 below with P2. Optional: Sources > OPTIONS on a playlist > Refresh Playlist while another
+    source is open, Delete.)
+
+-----------------------------------------------------------------------------------------------------
+DARK UI (look from your usual couch distance)
+-----------------------------------------------------------------------------------------------------
+19. Home: near-black background, compact dark tiles; the focused tile is lighter with a blue border (no big
+    blue block). Continue Watching posters with progress bars; Recently Watched lighter cards.
+20. Live TV (Xtream source): categories / rows / right panel dark; focused row clearly visible.
+21. Movies: posters are the focus; the focused poster has a blue border and rises slightly.
+22. Series grid: same.
+23. Movie detail.
+24. Series detail: season chips, episode rows, progress bars, watched marks.
+25. Search: keyboard, filter chips, result rows.
+26. Favorites (all three tabs for Xtream).
+27. Downloads.
+28. Settings: dark rows, values right-aligned, switches; "Smooth scrolling" is a new switch (On).
+29. Sources (former Profiles) and the playlist editor.
+30. Playback Options (OPTIONS in a movie): dark translucent panel; the player HUD bars are dark translucent.
+31. Contrast: every text readable from the couch (grey secondary text too).
+32. Focus: on every screen you can always tell what is focused.
+33. Report any screen that still looks like the old blue-grey style or any dark-on-dark text.
+
+-----------------------------------------------------------------------------------------------------
+DS4
+-----------------------------------------------------------------------------------------------------
+34. Live TV (Xtream, All Channels): hold Down for 10 s. Expected: slow start, then faster and faster; the
+    list glides; the focused row stays on screen; logos keep loading when you stop.
+35. Hold Up for 10 s back to the top. Same.
+36. Movies grid: hold Down, then hold Right. Expected: fast, no focus outside the grid, never on an empty
+    cell of an incomplete last row.
+37. Series grid: same.
+38. Playlist with 10,000+ channels (P2 or your own): hold Down 10 s in All Channels; search a name.
+39. Left stick pushed fully down for 10 s: like the d-pad but faster.
+40. Left stick pushed half way: normal speed (same as the d-pad).
+41. Release (d-pad and stick): movement stops at once, no extra steps afterwards.
+42. While holding Down, switch to Up: it reverses at once.
+43. L2 / R2: page up / down still work everywhere.
+44. L1 / R1: previous / next category still work.
+45. Scrolling flows smoothly (no harsh row jumps) - and nothing flickers or vanishes (U1). Then set
+    Settings > Smooth scrolling = Off: lists move row by row as in 3.1. Set it back On.
+46. No freeze, no focus jumping far away after a hitch, no focus on a missing item.
+
+-----------------------------------------------------------------------------------------------------
+UNICODE
+-----------------------------------------------------------------------------------------------------
+47. Turkish text in the UI (Settings > Language = Türkçe briefly) and in channel names: correct.
+48. Greek / Cyrillic channel or movie names, if your lists have them: correct.
+49. Settings > Diagnostics > Text rendering test. Expected: the new line at the bottom left
+    "Ελληνικά  Русский  עברית  العربية  日本語  한국어  中文" is fully drawn; Hebrew / Arabic read right-to-left,
+    Arabic letters joined. The right column line that appears letter by letter ("ひらがな カタカナ 漢字 한국어 ...")
+    is complete when finished. The bottom-right statistics show "fallback fonts 2". Take a photo.
+50. Every existing line of the text test is still perfect (no missing / garbled letters after the new lines).
+51. Report exactly which scripts look right: Greek, Cyrillic, Hebrew, Arabic (joined?), Japanese, Korean,
+    Chinese. Missing ones must show a box, never a crash.
+
+-----------------------------------------------------------------------------------------------------
+REGRESSION (Xtream source)
+-----------------------------------------------------------------------------------------------------
+52. Xtream Live TV plays, zapping works.
+53. A movie plays.
+54. A series episode plays.
+55. Audio track switching.
+56. Subtitles on / off / switch.
+57. Playback Options > Video: Aspect / Crop / Zoom / Reset still work live.
+58. Exact resume of a movie.
+59. Continue Watching shows it with progress.
+60. Square on a Continue Watching card removes it (Resume still at the same position).
+61. Search (Movies / Series / Live TV filters).
+62. Sorting in Movies (OPTIONS > Sort).
+63. Favorites of a channel, a movie, a series.
+64. Download a movie (any size; it can be cancelled after it starts).
+65. Play a downloaded movie offline (or Downloads > play).
+66. Restart the app: everything above is still there (sources, favorites, positions, downloads).
+
+What to send back: PASS/FAIL per step with notes; the times of steps 4 and 15 with the channel count; the
+result of step 18; photos of steps 19, 20, 21, 49; and /data/PS4IPTV/logs/log.txt (it contains no
+passwords or playlist addresses).
