@@ -17,13 +17,14 @@ file(TO_CMAKE_PATH "${SCAN_DIR}" SCAN_DIR)
 file(TO_CMAKE_PATH "${SCAN_FILES}" SCAN_FILES)
 file(TO_CMAKE_PATH "${SECRET_SOURCES}" SECRET_SOURCES)
 
-set(forbidden_names "test_streams.txt;test_stream.txt;profiles.json;settings.json;favorites.json;history.json;progress.json")
+set(forbidden_names "test_streams.txt;test_stream.txt;profiles.json;profiles.v1.json;settings.json;favorites.json;history.json;progress.json;m3u_playlist.json;m3u_playlist.meta")
 
 file(GLOB_RECURSE packaged LIST_DIRECTORIES false "${SCAN_DIR}/*")
 foreach (f IN LISTS packaged)
     get_filename_component(name "${f}" NAME)
     string(TOLOWER "${name}" lname)
-    if (lname IN_LIST forbidden_names OR lname MATCHES "\\.local\\.")
+    # M3U / M3U8 playlists (private test lists, saved copies) carry stream URLs with credentials or tokens
+    if (lname IN_LIST forbidden_names OR lname MATCHES "\\.local\\." OR lname MATCHES "\\.m3u8?$")
         message(FATAL_ERROR "CREDENTIAL GUARD: ${f} must never be packaged in the production PKG")
     endif ()
 endforeach ()

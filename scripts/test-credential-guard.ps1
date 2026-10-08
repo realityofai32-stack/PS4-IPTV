@@ -37,6 +37,13 @@ try {
     Set-Content "$tmp\name\test_streams.txt" 'TS=<placeholder>' -NoNewline
     Expect 'file named test_streams.txt is rejected' $false (Invoke-Guard "$tmp\name" '')
 
+    New-Item -ItemType Directory -Force "$tmp\playlist", "$tmp\playlistcache" | Out-Null
+    Set-Content "$tmp\playlist\channels.M3U8" "#EXTM3U`n#EXTINF:-1,A`nhttp://stream.example.com/a.ts" -NoNewline
+    Expect 'an M3U / M3U8 playlist is rejected' $false (Invoke-Guard "$tmp\playlist" '')
+
+    Set-Content "$tmp\playlistcache\m3u_playlist.json" '#EXTM3U' -NoNewline
+    Expect 'a saved playlist copy is rejected' $false (Invoke-Guard "$tmp\playlistcache" '')
+
     [IO.File]::WriteAllBytes("$tmp\content\blob.bin", [byte[]](0, 1, 2) + [Text.Encoding]::UTF8.GetBytes("x$password") + [byte[]](0))
     Expect 'binary containing the password is rejected' $false (Invoke-Guard "$tmp\clean" "$tmp\content\blob.bin")
 

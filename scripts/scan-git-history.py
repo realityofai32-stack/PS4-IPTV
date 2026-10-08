@@ -6,8 +6,10 @@ Secrets are read from the git-ignored local files:
   config/forbidden_strings.txt one literal per line (any other private value: profile names, hosts, ...)
 Every object reachable from any ref or the reflog (plus dangling objects) is searched: file contents in every
 commit, commit messages, tag messages. Additionally, authenticated-looking Xtream URLs
-(/live|movie|series/<user>/<pass>/<id>) are reported unless they use the documented placeholder or example
-values. Output names the object, its path and the commits that contain it; the secret itself is never shown.
+(/live|movie|series/<user>/<pass>/<id>), M3U stream lines from Xtream panels (host/<user>/<pass>/<id>) and URLs
+with credential / token query parameters are reported unless they use the documented placeholder or example
+hosts and values, and every committed .m3u / .m3u8 file outside tests/fixtures/m3u/ is reported (private
+playlists must never be committed; the fixtures use example hosts only). Output names the object, its path and the commits that contain it; the secret itself is never shown.
 
 Exit code: 0 clean, 1 findings, 2 no secret source available (nothing to compare against).
 """
@@ -18,7 +20,11 @@ import sys
 
 PLACEHOLDER_HOSTS = (b'example.com', b'example.net', b'example.org', b'host:', b'127.0.0.1', b'localhost')
 PLACEHOLDER_VALUES = {b'username', b'password', b'user', b'pass', b'u', b'p', b'user%20name', b'p%40ss%2fword',
-                      b'myuser42', b's3cretpass', b'alice', b'pw', b'ab', b'cd', b'zzunknownuser', b'zzunknownpw'}
+                      b'myuser42', b's3cretpass', b'alice', b'pw', b'ab', b'cd', b'zzunknownuser', b'zzunknownpw',
+                      b'exampleuser', b'examplepass', b'exampletoken', b'm3uuser42', b'm3upass42', b'm3uuser77',
+                      b'm3upass77', b'secret'}
+FIXTURE_DIR = 'tests/fixtures/m3u/'
+
 
 
 def git(*args, data=None):
@@ -66,6 +72,10 @@ def main():
             paths.setdefault(parts[2], '<unreachable>')
     data = git('cat-file', '--batch', data=('\n'.join(paths) + '\n').encode())
     url_re = re.compile(rb'(https?://[^\s/"\']+)?/(live|movie|series)/([A-Za-z0-9_.%@-]+)/([A-Za-z0-9_.%@-]+)/\d+')
+    # M3U lines of Xtream panels: http://host:port/<user>/<pass>/<id>[.ext] (no /live/ marker)
+    m3u_re = re.compile(rb'(https?://[^\s/"\'<>]+)/([A-Za-z0-9_.%@-]+)/([A-Za-z0-9_.%@-]+)/\d+(?:\.[a-z0-9]{1,5})?(?=[\s"\'<>]|$)')
+    # credentials / tokens in query strings
+    query_re = re.compile(rb'(https?://[^\s/"\'?<>]+)[^\s"\'<>]*[?&](username|password|token|auth|signature|key)=([^&\s"\'<>]{3,})')
     findings = []
     pos = 0
     objects = 0
@@ -91,6 +101,21 @@ def main():
             if not host and (user in PLACEHOLDER_VALUES or password in PLACEHOLDER_VALUES):
                 continue
             findings.append((sha, kind, paths.get(sha, '?'), 'authenticated-looking %s URL' % m.group(2).decode()))
+        for m in m3u_re.finditer(body):
+            host, user, password = m.group(1), m.group(2).lower(), m.group(3).lower()
+            if any(h in host for h in PLACEHOLDER_HOSTS) or user in (b'live', b'movie', b'series'):
+                continue
+            if user in PLACEHOLDER_VALUES and password in PLACEHOLDER_VALUES:
+                continue
+            findings.append((sha, kind, paths.get(sha, '?'), 'authenticated-looking M3U stream URL'))
+        for m in query_re.finditer(body):
+            host, value = m.group(1), m.group(3).lower()
+            if any(h in host for h in PLACEHOLDER_HOSTS) or value in PLACEHOLDER_VALUES or value.startswith(b'<'):
+                continue
+            findings.append((sha, kind, paths.get(sha, '?'), 'URL with a %s parameter' % m.group(2).decode()))
+        path = paths.get(sha, '')
+        if kind == 'blob' and re.search(r'\.m3u8?$', path, re.I) and not path.startswith(FIXTURE_DIR):
+            findings.append((sha, kind, path, 'playlist file outside ' + FIXTURE_DIR))
     print('objects scanned: %d, secret kinds: %d' % (objects, len(secrets)))
     if not secrets:
         print('WARNING: no config/test_streams.txt or config/forbidden_strings.txt: only the URL pattern was checked')

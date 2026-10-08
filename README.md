@@ -1,8 +1,9 @@
 # PS4 IPTV
 
 A native IPTV client for the PlayStation 4 (homebrew), built for the TV and the DualShock 4. It connects to
-**your own Xtream Codes compatible service** and plays live channels, movies and series on the console, with
-offline downloads for services that allow storing content.
+**your own Xtream Codes compatible service** or **your own M3U / M3U8 playlist** and plays live channels - and,
+from Xtream services, movies and series - on the console, with offline downloads for services that allow
+storing content.
 
 > **PS4 IPTV does not provide any content.** It ships with no channels, movies, series, accounts or
 > playlists, and it is not affiliated with any IPTV provider. You need a subscription to a service you are
@@ -10,7 +11,9 @@ offline downloads for services that allow storing content.
 
 ## Features
 
-- **Xtream Codes profiles**: several providers / accounts, connection test, account status and expiry
+- **Two kinds of sources**, as many as you like:
+  - **Xtream Codes**: Live TV, Movies and Series; connection test, account status and expiry
+  - **M3U / M3U8 playlists**: Live TV channels from a playlist URL (see below)
 - **Live TV**: categories, channel logos, favorites, fast zapping, MPEG-TS or HLS with automatic fallback
 - **Movies and Series**: poster grids by category, details (plot, cast, rating, duration), seasons and episodes
 - **Offline downloads** of movies and episodes to the console's internal storage, played back without a connection
@@ -23,8 +26,13 @@ offline downloads for services that allow storing content.
 - **VLC-like video geometry**: Aspect Ratio (Auto / Source, 16:9, 16:10, 4:3, 5:4, 1:1, 1.85, 2.21, 2.35, 2.39,
   2.40), Crop / Fill (None, Fill Screen or the same ratios), Zoom (100–150 %) and position, changed live
 - **Playback stability presets** (Fast, Balanced, Maximum stability) with stall detection and bounded reconnects
-- **DualShock 4 interface** made for the TV: hold-to-scroll, controller hints everywhere, on-screen keyboard
+- **DualShock 4 interface** made for the TV: hold-to-scroll that accelerates the longer you hold (up to ~33 steps
+  per second; the left stick pushed all the way is faster still), smoothly gliding lists and poster grids,
+  controller hints everywhere, on-screen keyboard
+- **Near-black TV design** with clear focus and readable contrast from the couch
 - **English and Türkçe** user interface (English by default; Settings › Language)
+- **International channel and title names**: Latin (incl. Turkish), Greek, Cyrillic, Arabic, Hebrew, Armenian,
+  Georgian, Japanese, Korean and Chinese characters are drawn (see *Known limitations*)
 
 Playback uses the proven [pPlay](https://github.com/Cpasjuste/pplay) stack: libmpv 0.34.1 with the PacBrew PS4
 patches, FFmpeg 5.0 (software decoding), SDL2 and libcross2d.
@@ -32,7 +40,8 @@ patches, FFmpeg 5.0 (software decoding), SDL2 and libcross2d.
 ## Requirements
 
 - A **jailbroken PS4** (or a compatible homebrew environment) that can install fake-signed PKGs
-- Your own, legitimate **Xtream Codes compatible** service: server address, username and password
+- Your own, legitimate **Xtream Codes compatible** service (server address, username and password) and/or the
+  address of an **M3U / M3U8 playlist** you are entitled to use
 - Network access for streaming; downloaded content plays offline
 
 ## Installing
@@ -40,10 +49,12 @@ patches, FFmpeg 5.0 (software decoding), SDL2 and libcross2d.
 1. Download the `IV0001-IPTV00002_00-IPTV00002*.pkg` file from the [Releases](../../releases) page, or build it
    yourself (below).
 2. Install it with your homebrew environment's package installer (for example from a USB stick).
-3. Start **PS4 IPTV**, choose **Add Xtream Profile** and enter the details from your provider.
+3. Start **PS4 IPTV**, choose **Add Source**, then **Xtream Codes** or **M3U / M3U8 Playlist**, and enter the
+   details from your provider.
 
-The app keeps its data in `/data/PS4IPTV/` on the console (profiles, settings, history, caches, downloads).
-Profiles, including their passwords, are stored only on the console.
+The app keeps its data in `/data/PS4IPTV/` on the console (sources, settings, history, caches, downloads).
+Sources, including their passwords and playlist addresses, are stored only on the console. Sources created by
+earlier versions are kept as they are (Xtream Codes).
 
 ## Using the app
 
@@ -53,12 +64,46 @@ Profiles, including their passwords, are stored only on the console.
 | ○ | Back |
 | □ | Favorite; on an episode: download it; on a Continue Watching card: remove it from the row |
 | △ | Search (Live TV, Movies, Series); in the player: technical info |
-| OPTIONS | Settings (Home); sort & refresh (Movies, Series); playback options (player) |
+| OPTIONS | Settings (Home); sort & refresh (Movies, Series); Refresh Playlist / Playlist Info (Live TV of a playlist source); source actions (Sources); playback options (player) |
 | L1 / R1 | Previous / next category, season, tab or episode |
 | L2 / R2 | Page up / down; in the player: seek 1 minute |
 | D-pad ← → | Seek 10 seconds in the player |
 
-Hold a direction to scroll quickly; the speed increases the longer it is held.
+Hold a direction to scroll quickly: after 0.3 s the list moves every 90 ms, then 60 ms, 40 ms and, after 3.5 s,
+every 30 ms. Releasing stops at once; a short press always moves exactly one item. L2 / R2 still jump a page.
+*Settings › Smooth scrolling* turns the gliding animation off (lists then move row by row).
+
+## M3U / M3U8 playlists
+
+A playlist source is a **list of Live TV channels**. Add one with **Add Source › M3U / M3U8 Playlist**: a name
+and the playlist address are all it needs, for example
+
+```
+Name:          My Playlist
+Playlist URL:  https://example.com/list.m3u
+```
+
+- **Addresses**: `http://` and `https://` playlist URLs (downloaded with libcurl: redirects, gzip, timeouts), or a
+  file you copied to `/data/PS4IPTV/playlists/` (e.g. `/data/PS4IPTV/playlists/sports.m3u`). An optional
+  **User-Agent** is sent with the playlist request and the streams, for services that require one.
+- **Format**: Extended M3U - `#EXTM3U`, `#EXTINF` with `tvg-id`, `tvg-name`, `tvg-logo`, `group-title` and
+  `tvg-chno`, `#EXTGRP` (category when `group-title` is missing) and `#EXTVLCOPT:http-user-agent`. UTF-8 with or
+  without BOM, any line endings. A broken entry is skipped on its own; the rest of the playlist still loads.
+- **Categories**: Favorites, All Channels, then the playlist's groups in playlist order; channels without a group
+  are under *Uncategorized*. Channel logos come from `tvg-logo` (initials when there is none).
+- **Search, Favorites and Recently Watched** work for playlist channels. Each source keeps its own favorites and
+  history: *TRT 1* in two playlists are two different channels. Channel identities survive app restarts and
+  playlist refreshes, including refreshes where the stream tokens change.
+- **Saved copy and refresh**: the playlist is checked before the source is saved and kept on the console. Opening
+  the source shows the saved list at once and refreshes it in the background when it is older than 12 hours;
+  *Options › Refresh Playlist* refreshes now. Only a valid new playlist replaces the list - a failed download
+  never empties it. *Options › Playlist Info* shows channel, group and logo counts, skipped entries and the last
+  refresh (never the address or any password).
+- **Playback**: each channel's own URL (MPEG-TS, HLS `.m3u8` and other HTTP streams) on the same player as Xtream
+  channels. **HTTPS stream URLs cannot be played** by this version (see *Known limitations*); such channels show
+  a clear message, and Playlist Info counts them.
+- **Live only**: playlist entries are never guessed to be movies or series. Use an Xtream Codes source for Movies,
+  Series, Continue Watching and downloads.
 
 ### Playback options
 
@@ -163,8 +208,10 @@ by itself.
 
 For hardware testing you may keep an authenticated test URL in `config/test_streams.txt` (see
 `config/test_streams.example.txt`) and any other private value, one per line, in `config/forbidden_strings.txt`.
-Both are git-ignored. The build fails if any of those values would end up in the PKG, and
-`scripts/scan-git-history.py` checks every commit for them without printing them.
+Both are git-ignored, and so are `*.m3u` / `*.m3u8` playlists (only the sanitized parser fixtures in
+`tests/fixtures/m3u/`, which use example hosts, are tracked). The build fails if any of those values, or any
+playlist file, would end up in the PKG, and `scripts/scan-git-history.py` checks every commit for them, for
+authenticated-looking stream URLs and for playlists outside the fixtures - without printing any of them.
 
 ## Project layout
 
@@ -172,25 +219,32 @@ Both are git-ignored. The build fails if any of those values would end up in the
 src/app/          application shell, services (Xtream, catalogs, progress, offline glue)
 src/downloads/    download engine: manifest, resumable transfers (libcurl), queue, storage checks
 src/i18n/         localization tables (English, Türkçe)
-src/iptv/         Xtream API parsing, catalogs, search index, sorting
+src/iptv/         Xtream API and Extended M3U parsing, catalogs, search index, sorting
 src/player/       playback adapter over pPlay's mpv wrapper, tracks, stability, video geometry
 src/screens/      TV screens
-src/ui/           UTF-8 text rendering, widgets, on-screen keyboard
-tests/host/       host unit tests and the download integration test
+src/ui/           theme, UTF-8 text rendering with fallback fonts, widgets, on-screen keyboard
+tests/host/       host unit tests, download and playlist integration tests
+tests/fixtures/   sanitized M3U parser fixtures
 scripts/          toolchain setup, build, tests, verification, staging
 ```
 
 ## Known limitations
 
-- Streams are played over **HTTP**; the PS4 FFmpeg build has no TLS for playback. (The API, images and downloads
-  use libcurl and work over HTTPS.)
+- Streams are played over **HTTP** (also RTMP / UDP / RTP); the PS4 FFmpeg build has no TLS for playback, so
+  **HTTPS stream URLs - including HTTPS entries in M3U playlists - cannot be played**. The Xtream API, playlist
+  downloads, images and downloads use libcurl and work over HTTPS.
 - Video is decoded in software; very high bitrates or 4K may not play smoothly.
-- The interface font covers Latin, Greek and Cyrillic scripts. Language names of other scripts are shown in the
-  interface language, and subtitles in those scripts cannot be drawn.
+- **Scripts**: the interface font (Inter) covers Latin, Greek and Cyrillic; DejaVu Sans adds Arabic, Hebrew,
+  Armenian and Georgian, and Droid Sans Fallback adds Japanese (kana), Korean (Hangul) and Chinese / Japanese
+  ideographs. Thai, Devanagari and other Indic scripts, emoji and rare CJK characters are not covered and show a
+  box. **Arabic and Hebrew** are reordered right-to-left and Arabic letters are joined (FriBidi), but this is
+  basic shaping, not a full OpenType shaping engine, and the interface itself stays left-to-right.
+- **Subtitles** are drawn by libass with the interface font only: subtitles in scripts other than Latin, Greek and
+  Cyrillic cannot be drawn. Language names of such tracks are shown in the interface language.
 
 ## License
 
 PS4 IPTV is free software under the **GNU General Public License v3.0 or later** - see [LICENSE](LICENSE).
 It builds on pPlay and libcross2d (GPL-3.0, Cpasjuste), mpv, FFmpeg, SDL2, libass, FreeType, FriBidi, libcurl,
-Mbed TLS, stb_image, the OpenOrbis PS4 Toolchain and PacBrew's PS4 ports, and the Inter typeface. See
+Mbed TLS, stb_image, the OpenOrbis PS4 Toolchain and PacBrew's PS4 ports, and the Inter, DejaVu Sans and Droid Sans Fallback typefaces. See
 [NOTICE](NOTICE) for every component, its authors and license.

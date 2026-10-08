@@ -21,6 +21,17 @@ test_streams.txt
 *.local.json
 .env
 
+# M3U / M3U8 playlists carry stream URLs with credentials or tokens. NEVER commit a real one; only the
+# sanitized parser fixtures (example hosts) are tracked.
+*.m3u
+*.m3u8
+!/tests/fixtures/m3u/*.m3u
+!/tests/fixtures/m3u/*.m3u8
+/playlists/
+m3u_playlist.json
+m3u_playlist.meta
+profiles.v1.json
+
 # Data the app writes on the console (never part of the source): profiles with logins, settings, library,
 # downloads and their manifest, caches
 profiles.json
