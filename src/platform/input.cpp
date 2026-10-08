@@ -37,32 +37,44 @@ void InputManager::update(void *joystick, double now) {
     pending.clear();
     auto *js = (SDL_Joystick *) joystick;
     bool state[(int) PadButton::Count] = {};
+    double speed[(int) PadButton::Count];
+    for (double &s: speed) {
+        s = 1.0;
+    }
     if (js != nullptr) {
         for (int i = 0; i < (int) PadButton::Count; i++) {
             state[i] = SDL_JoystickGetButton(js, SDL_INDEX[i]) != 0;
         }
-        // the stick acts as a d-pad: it shares the d-pad buttons' repeat timers
+        // the stick acts as a d-pad: it shares the d-pad buttons' repeat timers. Pushed all the way it scrolls
+        // faster (only when the d-pad itself is not held in that direction).
+        PadButton stickButton = PadButton::Count;
         switch (stick.update(SDL_JoystickGetAxis(js, 0), SDL_JoystickGetAxis(js, 1))) {
             case input::StickDir::Up:
-                state[(int) PadButton::Up] = true;
+                stickButton = PadButton::Up;
                 break;
             case input::StickDir::Down:
-                state[(int) PadButton::Down] = true;
+                stickButton = PadButton::Down;
                 break;
             case input::StickDir::Left:
-                state[(int) PadButton::Left] = true;
+                stickButton = PadButton::Left;
                 break;
             case input::StickDir::Right:
-                state[(int) PadButton::Right] = true;
+                stickButton = PadButton::Right;
                 break;
             default:
                 break;
+        }
+        if (stickButton != PadButton::Count) {
+            if (!state[(int) stickButton]) {
+                speed[(int) stickButton] = stick.speed();
+            }
+            state[(int) stickButton] = true;
         }
     }
 
     for (int i = 0; i < (int) PadButton::Count; i++) {
         auto b = (PadButton) i;
-        input::KeyEvent e = keys[i].update(state[i], now, isRepeatable(b));
+        input::KeyEvent e = keys[i].update(state[i], now, isRepeatable(b), speed[i]);
         if (e == input::KeyEvent::Press) {
             pending.push_back({b, false, 0});
         } else if (e == input::KeyEvent::Repeat) {

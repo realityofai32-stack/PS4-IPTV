@@ -81,6 +81,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
         LOG_W("storage", "%s", warning.c_str());
     }
     imageLoader.setEnabled(settingsStore.get().loadImages);
+    ui::setSmoothScrolling(settingsStore.get().smoothScrolling);
 
     // offline downloads: libcurl transport (like the API), files under <data>/downloads/
     downloadTransport.reset(new dl::CurlTransport(http::userAgent(), http::caBundle()));
@@ -470,7 +471,7 @@ void App::run() {
         }
         double t = now();
         bool timed = redrawAt > 0 && t >= redrawAt;
-        bool animating = top() && top()->animating();
+        bool animating = (top() && top()->animating()) || ui::scrolling(t);
         if (dirty || timed || animating || forceContinuousRedraw || t - lastDraw > KEEPALIVE_REDRAW) {
             dirty = false;
             if (timed) {

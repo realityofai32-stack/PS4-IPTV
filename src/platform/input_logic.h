@@ -6,15 +6,21 @@
 
 namespace input {
 
-    // Hold-to-scroll timings (seconds). First press moves at once; repeats start after initialDelay and
-    // speed up the longer the button is held.
+    // Hold-to-scroll timings (seconds). The first press moves at once; repeats start after initialDelay and
+    // speed up the longer the button is held, stage by stage:
+    //   0.30 - 1.0 s: every 90 ms, 1.0 - 2.0 s: 60 ms, 2.0 - 3.5 s: 40 ms, then 30 ms (~33 steps/s).
+    // At most one step per frame is ever produced (KeyRepeater), so the 30 ms stage simply runs at the frame
+    // rate on a slower frame and never queues steps.
     struct RepeatTiming {
-        double initialDelay = 0.36;
-        double interval = 0.100;        // until fastAfter
-        double fastAfter = 1.5;
-        double fastInterval = 0.065;    // until turboAfter
-        double turboAfter = 3.5;
-        double turboInterval = 0.050;
+        struct Stage {
+            double until;      // held for less than this many seconds
+            double interval;
+        };
+
+        static const int STAGES = 4;
+
+        double initialDelay = 0.30;
+        Stage stages[STAGES] = {{1.0, 0.090}, {2.0, 0.060}, {3.5, 0.040}, {1e9, 0.030}};
     };
 
     // repeat interval for a button held for `heldFor` seconds
@@ -27,18 +33,23 @@ namespace input {
     };
 
     // One button. update() is called every frame with the current state and emits at most one event, so a
-    // long frame never produces a burst of repeats (no runaway scrolling after a hitch).
+    // long frame never produces a burst of repeats (no runaway scrolling after a hitch). Releasing stops at
+    // once: nothing is queued.
     class KeyRepeater {
 
     public:
 
         explicit KeyRepeater(const RepeatTiming &timing = RepeatTiming()) : timing(timing) {}
 
-        KeyEvent update(bool isDown, double now, bool repeatable);
+        // speed > 1 shortens the repeat intervals (full stick deflection); the initial delay is unchanged
+        KeyEvent update(bool isDown, double now, bool repeatable, double speed = 1.0);
 
         bool isDown() const { return down; }
 
         int repeatCount() const { return repeats; }
+
+        // seconds the button has been held (0 when up)
+        double heldFor(double now) const { return down ? now - pressedAt : 0; }
 
     private:
 
@@ -60,20 +71,31 @@ namespace input {
     // Left stick to one d-pad direction. A direction engages beyond ENGAGE on the dominant axis and is kept
     // until the stick falls below RELEASE on that axis (hysteresis: no flicker around the threshold).
     // Moving the stick into another direction switches immediately; returning near the centre releases it.
+    // Pushed nearly all the way (FAST_ENGAGE, kept until below FAST_RELEASE) the stick scrolls faster.
     class StickFilter {
 
     public:
 
-        static const int ENGAGE = 16000;    // of 32767 (~49%)
-        static const int RELEASE = 10000;   // ~31%
+        static const int ENGAGE = 16000;         // of 32767 (~49%)
+        static const int RELEASE = 10000;        // ~31%
+        static const int FAST_ENGAGE = 27000;    // ~82%
+        static const int FAST_RELEASE = 24000;   // ~73%
+        static constexpr double FAST_SPEED = 1.35;   // repeat speed factor while fast
 
         StickDir update(int x, int y);
 
         StickDir current() const { return dir; }
 
+        // pushed nearly all the way in the current direction
+        bool fast() const { return isFast; }
+
+        // repeat speed factor for the direction the stick drives (1 or FAST_SPEED)
+        double speed() const { return isFast ? FAST_SPEED : 1.0; }
+
     private:
 
         StickDir dir = StickDir::None;
+        bool isFast = false;
     };
 }
 

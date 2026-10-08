@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 
 #include "scroll_math.h"
 
@@ -70,5 +71,25 @@ namespace scroll {
         }
         int target = selected + pages * std::max(1, pageSize);
         return std::max(0, std::min(target, count - 1));
+    }
+
+    void Smooth::step(float target, double dt, float rate, float maxLag) {
+        if (dt < 0) {
+            dt = 0;
+        }
+        if (dt > 0.1) {
+            dt = 0.1;   // after a hitch: a normal step, the lag bound below keeps the focus visible
+        }
+        float diff = target - pos;
+        if (diff > maxLag) {
+            pos = target - maxLag;
+        } else if (diff < -maxLag) {
+            pos = target + maxLag;
+        }
+        diff = target - pos;
+        pos += diff * (float) (1.0 - std::exp(-(double) rate * dt));
+        if (std::fabs(target - pos) < 0.008f) {
+            pos = target;   // under a pixel away: settled, whole-pixel rows again
+        }
     }
 }

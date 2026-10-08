@@ -890,6 +890,8 @@ namespace i18n {
             {"m3u.error_location", "Unsupported playlist address."},
             {"m3u.local_unreadable", "The playlist file could not be read."},
             {"m3u.no_saved_copy", "No saved copy of the playlist."},
+            {"settings.smooth_scrolling", "Smooth scrolling"},
+            {"settings.smooth_scrolling.desc", "Lists and poster grids glide to their new position while you move. Turn it off to move row by row without the glide."},
     };
 
     extern const size_t STRINGS_EN_COUNT = sizeof(STRINGS_EN) / sizeof(STRINGS_EN[0]);

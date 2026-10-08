@@ -895,6 +895,8 @@ namespace i18n {
             {"m3u.error_location", "Desteklenmeyen çalma listesi adresi."},
             {"m3u.local_unreadable", "Çalma listesi dosyası okunamadı."},
             {"m3u.no_saved_copy", "Çalma listesinin kayıtlı kopyası yok."},
+            {"settings.smooth_scrolling", "Yumuşak kaydırma"},
+            {"settings.smooth_scrolling.desc", "Listeler ve afiş ızgaraları siz gezinirken yeni konumlarına akarak geçer. Kayma efekti olmadan satır satır geçmek için kapatın."},
     };
 
     extern const size_t STRINGS_TR_COUNT = sizeof(STRINGS_TR) / sizeof(STRINGS_TR[0]);

@@ -92,6 +92,7 @@ std::string SettingsStore::serialize() const {
     root.set("autoPlayNextEpisode", json::Value::makeBool(settings.autoPlayNextEpisode));
     root.set("showTechnicalInfo", json::Value::makeBool(settings.showTechnicalInfo));
     root.set("loadImages", json::Value::makeBool(settings.loadImages));
+    root.set("smoothScrolling", json::Value::makeBool(settings.smoothScrolling));
     root.set("videoAspect", json::Value::makeString(display::aspectKey(settings.videoAspect)));
     root.set("videoCrop", json::Value::makeString(display::cropKey(settings.videoCrop)));
     root.set("zoom", json::Value::makeInt(display::clampZoom(settings.zoomPercent)));
@@ -132,6 +133,7 @@ bool SettingsStore::deserialize(const std::string &text, std::string *error) {
     s.autoPlayNextEpisode = root["autoPlayNextEpisode"].asBool(s.autoPlayNextEpisode);
     s.showTechnicalInfo = root["showTechnicalInfo"].asBool(s.showTechnicalInfo);
     s.loadImages = root["loadImages"].asBool(s.loadImages);
+    s.smoothScrolling = root["smoothScrolling"].asBool(s.smoothScrolling);
     if (root["videoAspect"].isString() || root["videoCrop"].isString()) {
         s.videoAspect = display::aspectFromKey(root["videoAspect"].asString("source"));
         s.videoCrop = display::cropFromKey(root["videoCrop"].asString("none"));

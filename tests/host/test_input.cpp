@@ -1,4 +1,9 @@
-// DS4 navigation: key repeat timing/acceleration, analog stick filter, list paging and scrollbar math.
+// DS4 navigation: key repeat timing / acceleration curve, analog stick filter and full-deflection speed, hold
+// navigation on catalog-sized lists, viewport easing, list paging and scrollbar math.
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
 
 #include "check.h"
 #include "../../src/platform/input_logic.h"
@@ -8,10 +13,11 @@ using namespace input;
 
 namespace {
     // drives one repeater at a fixed frame period and records event times
-    std::vector<double> holdFor(KeyRepeater &k, double seconds, double frame, bool repeatable = true) {
+    std::vector<double> holdFor(KeyRepeater &k, double seconds, double frame, bool repeatable = true,
+                                double speed = 1.0) {
         std::vector<double> events;
         for (double t = 0; t <= seconds + 1e-9; t += frame) {
-            KeyEvent e = k.update(true, t, repeatable);
+            KeyEvent e = k.update(true, t, repeatable, speed);
             if (e != KeyEvent::None) {
                 events.push_back(t);
             }
@@ -22,71 +28,271 @@ namespace {
     bool near(double a, double b, double tol) {
         return a > b - tol && a < b + tol;
     }
-}
 
-TEST(repeat_first_press_is_immediate_then_initial_delay) {
-    RepeatTiming t;
-    KeyRepeater k(t);
-    CHECK(k.update(true, 10.0, true) == KeyEvent::Press);
-    CHECK(k.update(true, 10.0 + t.initialDelay - 0.01, true) == KeyEvent::None);
-    CHECK(k.update(true, 10.0 + t.initialDelay, true) == KeyEvent::Repeat);
-    CHECK_EQ(k.repeatCount(), 1);
-    // the next repeat follows after `interval`
-    CHECK(k.update(true, 10.0 + t.initialDelay + t.interval - 0.01, true) == KeyEvent::None);
-    CHECK(k.update(true, 10.0 + t.initialDelay + t.interval + 0.001, true) == KeyEvent::Repeat);
-    // timings stay inside the requested ranges
-    CHECK(t.initialDelay >= 0.30 && t.initialDelay <= 0.40);
-    CHECK(t.interval >= 0.090 && t.interval <= 0.120);
-    CHECK(t.turboInterval >= 0.050 && t.turboInterval <= 0.070);
-}
+    int eventsBetween(const std::vector<double> &ev, double from, double to) {
+        int n = 0;
+        for (double e: ev) {
+            n += e >= from && e < to;
+        }
+        return n;
+    }
 
-TEST(repeat_cadence_and_acceleration_at_60fps) {
-    RepeatTiming t;
-    KeyRepeater k(t);
-    std::vector<double> ev = holdFor(k, 6.0, 1.0 / 60);
-    CHECK(ev.size() > 60);
-    CHECK(near(ev[0], 0, 1e-9));
-    CHECK(near(ev[1], t.initialDelay, 1.0 / 60 + 1e-6));
-    // gaps: ~interval at first, ~fastInterval after fastAfter, ~turboInterval after turboAfter
-    auto gapAround = [&](double when) {
+    // largest gap between consecutive events inside [from, to)
+    double gapAround(const std::vector<double> &ev, double when) {
         for (size_t i = 1; i < ev.size(); i++) {
             if (ev[i] >= when) {
                 return ev[i] - ev[i - 1];
             }
         }
         return -1.0;
-    };
-    CHECK(near(gapAround(0.8), t.interval, 1.0 / 60 + 1e-6));
-    CHECK(near(gapAround(2.5), t.fastInterval, 1.0 / 60 + 1e-6));
-    CHECK(near(gapAround(5.0), t.turboInterval, 1.0 / 60 + 1e-6));
-    // average rate in the turbo phase matches the interval (no drift from frame rounding)
-    int turbo = 0;
-    for (double e: ev) {
-        turbo += e >= 4.0 && e < 6.0;
     }
-    CHECK(turbo >= (int) (2.0 / t.turboInterval) - 1 && turbo <= (int) (2.0 / t.turboInterval) + 1);
-    CHECK(near(repeatInterval(t, 0.5), t.interval, 1e-9));
-    CHECK(near(repeatInterval(t, 2.0), t.fastInterval, 1e-9));
-    CHECK(near(repeatInterval(t, 9.0), t.turboInterval, 1e-9));
 }
 
-TEST(repeat_no_burst_after_long_frame_and_release_resets) {
+TEST(repeat_curve_matches_the_specification) {
     RepeatTiming t;
-    KeyRepeater k(t);
+    CHECK(near(t.initialDelay, 0.30, 1e-9));
+    CHECK(near(repeatInterval(t, 0.31), 0.090, 1e-9));
+    CHECK(near(repeatInterval(t, 0.99), 0.090, 1e-9));
+    CHECK(near(repeatInterval(t, 1.0), 0.060, 1e-9));
+    CHECK(near(repeatInterval(t, 1.99), 0.060, 1e-9));
+    CHECK(near(repeatInterval(t, 2.0), 0.040, 1e-9));
+    CHECK(near(repeatInterval(t, 3.49), 0.040, 1e-9));
+    CHECK(near(repeatInterval(t, 3.5), 0.030, 1e-9));
+    CHECK(near(repeatInterval(t, 600), 0.030, 1e-9));
+    // the fastest stage is never faster than ~one step per 60 Hz frame pair: stable, never a skip
+    CHECK(t.stages[RepeatTiming::STAGES - 1].interval >= 0.028);
+}
+
+TEST(repeat_tap_is_one_step) {
+    KeyRepeater k;
+    CHECK(k.update(true, 10.0, true) == KeyEvent::Press);
+    int extra = 0;
+    for (double t = 10.0 + 1.0 / 60; t < 10.25; t += 1.0 / 60) {   // a 250 ms tap
+        extra += k.update(true, t, true) != KeyEvent::None;
+    }
+    CHECK_EQ(extra, 0);
+    CHECK(k.update(false, 10.26, true) == KeyEvent::None);
+}
+
+TEST(repeat_hold_timings_300ms_1s_2s_4s_10s) {
+    const double frame = 1.0 / 60;
+    KeyRepeater k;
+    std::vector<double> ev = holdFor(k, 10.0, frame);
+    CHECK(near(ev[0], 0, 1e-9));
+    // 300 ms: the first repeat
+    CHECK(near(ev[1], 0.30, frame + 1e-6));
+    CHECK_EQ(eventsBetween(ev, 0.0, 0.29), 1);
+    // stage gaps (one frame of rounding)
+    CHECK(near(gapAround(ev, 0.8), 0.090, frame + 1e-6));
+    CHECK(near(gapAround(ev, 1.5), 0.060, frame + 1e-6));
+    CHECK(near(gapAround(ev, 3.0), 0.040, frame + 1e-6));
+    CHECK(near(gapAround(ev, 6.0), 0.030, frame + 1e-6));
+    // counts per stage: ~0.7 / 0.09, 1 / 0.06, 1.5 / 0.04, 6.5 / 0.03 (+-1 for frame rounding)
+    int s1 = eventsBetween(ev, 0.30, 1.0), s2 = eventsBetween(ev, 1.0, 2.0), s3 = eventsBetween(ev, 2.0, 3.5),
+            s4 = eventsBetween(ev, 3.5, 10.0 + 1e-9);
+    CHECK(s1 >= 7 && s1 <= 9);
+    CHECK(s2 >= 15 && s2 <= 18);
+    CHECK(s3 >= 36 && s3 <= 39);
+    CHECK(s4 >= 210 && s4 <= 218);
+    std::printf("     hold 10 s at 60 fps: %zu steps (0.3-1 s %d, 1-2 s %d, 2-3.5 s %d, 3.5-10 s %d)\n", ev.size(), s1,
+                s2, s3, s4);
+    // at most one step per frame, always
+    for (size_t i = 1; i < ev.size(); i++) {
+        CHECK(ev[i] - ev[i - 1] > frame - 1e-6);
+    }
+    // 4 s hold: past the last stage
+    KeyRepeater k4;
+    std::vector<double> ev4 = holdFor(k4, 4.0, frame);
+    CHECK(near(gapAround(ev4, 3.8), 0.030, frame + 1e-6));
+    // 30 fps: the 30 / 40 ms stages run at the frame rate, no backlog builds up
+    KeyRepeater slow;
+    std::vector<double> ev30 = holdFor(slow, 10.0, 1.0 / 30);
+    for (size_t i = 1; i < ev30.size(); i++) {
+        CHECK(ev30[i] - ev30[i - 1] > 1.0 / 30 - 1e-6);
+    }
+    CHECK(eventsBetween(ev30, 5.0, 10.0) <= 151);
+}
+
+TEST(repeat_release_stops_at_once_and_reverse_is_immediate) {
+    const double frame = 1.0 / 60;
+    KeyRepeater down, up;
+    double t = 0;
+    for (; t < 5.0; t += frame) {
+        down.update(true, t, true);
+        up.update(false, t, true);
+    }
+    // release Down: nothing more, ever (no queued repeats)
+    int after = 0;
+    for (double u = t; u < t + 2.0; u += frame) {
+        after += down.update(false, u, true) != KeyEvent::None;
+    }
+    CHECK_EQ(after, 0);
+    // reverse: Up pressed in the same frame Down is released moves at once
+    KeyRepeater d2, u2;
+    for (t = 0; t < 3.0; t += frame) {
+        d2.update(true, t, true);
+    }
+    CHECK(d2.update(false, t, true) == KeyEvent::None);
+    CHECK(u2.update(true, t, true) == KeyEvent::Press);
+    // ...and starts its own curve from the beginning (precise again after a fast hold)
+    CHECK(u2.update(true, t + 0.29, true) == KeyEvent::None);
+    CHECK(u2.update(true, t + 0.30, true) == KeyEvent::Repeat);
+}
+
+TEST(repeat_no_burst_after_slow_frames) {
+    KeyRepeater k;
     CHECK(k.update(true, 0, true) == KeyEvent::Press);
-    CHECK(k.update(true, 1.0, true) == KeyEvent::Repeat);
+    CHECK(k.update(true, 4.0, true) == KeyEvent::Repeat);
     // a 2-second hitch: exactly one event, then the normal cadence resumes from now
-    CHECK(k.update(true, 3.0, true) == KeyEvent::Repeat);
-    CHECK(k.update(true, 3.001, true) == KeyEvent::None);
-    CHECK(k.update(true, 3.0 + t.fastInterval + 0.001, true) == KeyEvent::Repeat);
-    // release: no events, and the next press is a fresh press with the full initial delay
-    CHECK(k.update(false, 3.2, true) == KeyEvent::None);
-    CHECK(!k.isDown());
-    CHECK(k.update(true, 3.3, true) == KeyEvent::Press);
-    CHECK(k.update(true, 3.3 + t.initialDelay - 0.02, true) == KeyEvent::None);
+    CHECK(k.update(true, 6.0, true) == KeyEvent::Repeat);
+    CHECK(k.update(true, 6.001, true) == KeyEvent::None);
+    CHECK(k.update(true, 6.0 + 0.030 + 0.001, true) == KeyEvent::Repeat);
+    // frames of 250 ms for 5 s: one step per frame at most
+    KeyRepeater s;
+    int n = 0;
+    for (double t = 0; t <= 5.0; t += 0.25) {
+        n += s.update(true, t, true) != KeyEvent::None;
+    }
+    CHECK(n <= 21);
     // non-repeatable buttons (Cross, Circle...) only ever press once
-    KeyRepeater c(t);
+    KeyRepeater c;
     CHECK_EQ(holdFor(c, 5.0, 1.0 / 60, false).size(), (size_t) 1);
+}
+
+TEST(repeat_analog_full_deflection_is_faster_and_predictable) {
+    StickFilter f;
+    CHECK(f.update(0, 20000) == StickDir::Down);   // ~61 %: normal
+    CHECK(!f.fast() && near(f.speed(), 1.0, 1e-9));
+    f.update(0, 25000);                              // 76 %: below FAST_ENGAGE
+    CHECK(!f.fast());
+    f.update(0, 28000);                              // 85 %: fast
+    CHECK(f.fast() && f.speed() > 1.2);
+    f.update(0, 25000);                              // hysteresis: still fast above FAST_RELEASE
+    CHECK(f.fast());
+    f.update(0, 22000);                              // below FAST_RELEASE: normal again
+    CHECK(!f.fast());
+    f.update(0, 32767);                              // full
+    CHECK(f.fast());
+    // reversal through the centre and straight to full the other way
+    CHECK(f.update(0, -32767) == StickDir::Up);
+    CHECK(f.fast());
+    // release
+    CHECK(f.update(0, 3000) == StickDir::None);
+    CHECK(!f.fast());
+    // a full-deflection hold makes more steps than the d-pad, but still one per frame at most
+    KeyRepeater pad, stick;
+    std::vector<double> a = holdFor(pad, 10.0, 1.0 / 60, true, 1.0);
+    std::vector<double> b = holdFor(stick, 10.0, 1.0 / 60, true, StickFilter::FAST_SPEED);
+    CHECK(b.size() > a.size());
+    for (size_t i = 1; i < b.size(); i++) {
+        CHECK(b[i] - b[i - 1] > 1.0 / 60 - 1e-6);
+    }
+    // the initial delay is the same: a quick flick stays one step
+    CHECK(near(b[1], 0.30, 1.0 / 60 + 1e-6));
+    std::printf("     10 s hold at 60 fps: d-pad %zu steps, stick at full deflection %zu steps\n", a.size(), b.size());
+}
+
+// 10-second holds on lists / grids of the real catalog sizes: logical focus never leaves the list, moves at
+// most one step per frame, the viewport keeps the focus on screen and stops when the button is released.
+TEST(hold_navigation_on_large_lists) {
+    struct Case {
+        const char *name;
+        int count;
+        int columns;   // 1 = list
+        int visible;   // rows on screen
+    };
+    const Case cases[] = {{"Live channels", 573, 1, 9}, {"Movies grid", 19797, 7, 3}, {"Series grid", 2337, 7, 3},
+                          {"M3U channels", 25000, 1, 9}};
+    for (const Case &c: cases) {
+        for (int pass = 0; pass < 3; pass++) {   // 0 Down, 1 Up (from the end), 2 analog full deflection Down
+            const double frame = 1.0 / 60;
+            KeyRepeater k;
+            int sel = pass == 1 ? c.count - 1 : 0;
+            int first = 0;
+            int totalRows = (c.count - 1) / c.columns + 1;
+            scroll::Smooth smooth;
+            smooth.snap((float) scroll::firstVisible(sel / c.columns, 0, c.visible, totalRows, 1));
+            first = (int) smooth.pos;
+            int moves = 0, maxPerFrame = 0;
+            bool inBounds = true, focusOnScreen = true;
+            double speed = pass == 2 ? StickFilter::FAST_SPEED : 1.0;
+            double t = 0;
+            for (; t <= 10.0; t += frame) {
+                int movesThisFrame = 0;
+                if (k.update(true, t, true, speed) != KeyEvent::None) {
+                    int target = c.columns == 1 ? std::min(std::max(sel + (pass == 1 ? -1 : 1), 0), c.count - 1)
+                                                : scroll::gridMove(sel, 0, pass == 1 ? -1 : 1, c.columns, c.count);
+                    if (target >= 0 && target != sel) {
+                        sel = target;
+                        moves++;
+                        movesThisFrame++;
+                    }
+                }
+                maxPerFrame = std::max(maxPerFrame, movesThisFrame);
+                inBounds = inBounds && sel >= 0 && sel < c.count;
+                first = scroll::firstVisible(sel / c.columns, first, c.visible, totalRows, 1);
+                smooth.step((float) first, frame);
+                int row = sel / c.columns;
+                // the drawn window [pos, pos + visible) always contains the focused row (partially at worst)
+                focusOnScreen = focusOnScreen && row + 1 > smooth.pos && row < smooth.pos + (float) c.visible;
+            }
+            // release: no further logical movement, the viewport settles within 0.3 s
+            int afterRelease = 0;
+            for (double u = t; u < t + 0.30; u += frame) {
+                afterRelease += k.update(false, u, true) != KeyEvent::None;
+                smooth.step((float) first, frame);
+            }
+            CHECK(inBounds);
+            CHECK(maxPerFrame <= 1);
+            CHECK(focusOnScreen);
+            CHECK_EQ(afterRelease, 0);
+            CHECK(smooth.settled((float) first));
+            CHECK(moves > 250);   // ~270 steps in 10 s (d-pad) - far faster than the old curve's ~170
+            if (pass != 1) {
+                std::printf("     %s (%d): 10 s %s hold -> %d steps, focus %d\n", c.name, c.count,
+                            pass == 2 ? "full-stick" : "Down", moves, sel);
+            }
+        }
+    }
+}
+
+TEST(smooth_viewport_easing) {
+    using scroll::Smooth;
+    Smooth s;
+    s.snap(10);
+    CHECK(s.settled(10));
+    // frame-rate independent: 60 fps and 120 fps reach the same place after the same time
+    Smooth a, b;
+    a.snap(0);
+    b.snap(0);
+    for (int i = 0; i < 6; i++) {
+        a.step(1, 1.0 / 60);
+    }
+    for (int i = 0; i < 12; i++) {
+        b.step(1, 1.0 / 120);
+    }
+    CHECK(std::fabs(a.pos - b.pos) < 0.002f);
+    CHECK(a.pos > 0.8f && a.pos < 1.0f);   // most of the way after 100 ms
+    // never overshoots, settles exactly
+    Smooth c;
+    c.snap(0);
+    for (int i = 0; i < 60; i++) {
+        c.step(1, 1.0 / 60);
+        CHECK(c.pos <= 1.0f);
+    }
+    CHECK(c.settled(1));
+    // never lags more than one row (page jumps, fast repeats)
+    Smooth d;
+    d.snap(0);
+    d.step(40, 1.0 / 60);
+    CHECK(d.pos >= 39.0f && d.pos < 40.0f);
+    d.step(0, 1.0 / 60);   // reversal: from the other side, still within a row
+    CHECK(d.pos <= 1.0f && d.pos >= 0.0f);
+    // a slow frame (2 s) does not jump past the target or leave the lag bound
+    Smooth e;
+    e.snap(5);
+    e.step(6, 2.0);
+    CHECK(e.pos > 5.0f && e.pos <= 6.0f);
 }
 
 TEST(stick_deadzone_hysteresis_and_direction_changes) {

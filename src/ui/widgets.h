@@ -10,10 +10,19 @@
 #include <vector>
 
 #include "cross2d/c2d.h"
+#include "scroll_math.h"
 #include "text.h"
 #include "theme.h"
 
 namespace ui {
+
+    // Smooth scrolling of every ListView / GridView (Settings > Smooth scrolling). Off: lists move row by row.
+    void setSmoothScrolling(bool on);
+
+    bool smoothScrolling();
+
+    // a list or grid is still gliding: the app keeps drawing frames until it settles
+    bool scrolling(double now);
 
     // rounded box added to parent
     c2d::RectangleShape *box(c2d::C2DObject *parent, const c2d::FloatRect &rect, const c2d::Color &color,
@@ -185,8 +194,9 @@ namespace ui {
         bool lifted = false;
     };
 
-    // Virtualized grid: only the cells on screen exist (columns x rows) and are re-bound when scrolling by
-    // whole rows. Spacing is derived from the rect; a ScrollBar sits in the right gutter.
+    // Virtualized grid: only the cells on screen (+ one row) exist and are re-bound when scrolling by whole
+    // rows. Spacing is derived from the rect; a ScrollBar sits in the right gutter. Focus moves at once; the
+    // drawn rows glide after it (scroll::Smooth), clipped to the grid while they do.
     class GridView : public c2d::RectangleShape {
     public:
         struct Adapter {
@@ -224,8 +234,16 @@ namespace ui {
 
         int cellCount() const { return cols * rows; }
 
+    protected:
+        void onUpdate() override;
+
+        void onDraw(c2d::Transform &transform, bool draw) override;
+
     private:
-        void layout();
+        // animate: glide from the drawn position (moves); otherwise jump there (reloads, new lists)
+        void layout(bool animate);
+
+        void place();
 
         Adapter *adapter;
         std::vector<c2d::C2DObject *> cells;
@@ -235,9 +253,18 @@ namespace ui {
         int sel = 0;
         int firstRow = 0;
         bool focus = true;
+        float cellWidth = 0;
+        float cellHeight = 0;
+        float gapX = 0;
+        float pitchY = 0;
+        float extent = 0;
+        scroll::Smooth smooth;
+        int boundBase = -1;
+        double lastUpdate = -1;
     };
 
-    // Virtualized vertical list: only the visible rows exist; rows are re-bound when scrolling.
+    // Virtualized vertical list: only the visible rows (+ one) exist; rows are re-bound when scrolling. Focus
+    // moves at once; the drawn rows glide after it (scroll::Smooth), clipped to the list while they do.
     class ListView : public c2d::RectangleShape {
     public:
         struct Adapter {
@@ -268,26 +295,40 @@ namespace ui {
 
         bool isFocused() const { return focus; }
 
-        int visibleCount() const { return (int) rows.size(); }
+        int visibleCount() const { return visibleRows; }
 
         // index of the first row on screen
         int firstVisible() const { return first; }
 
         // rows moved by a page jump (L2/R2): one screen minus one row of context
-        int pageSize() const { return std::max(1, (int) rows.size() - 1); }
+        int pageSize() const { return std::max(1, visibleRows - 1); }
 
         // width available to rows (the scrollbar gutter is reserved on the right)
         static float rowWidth(float listWidth) { return listWidth - ScrollBar::WIDTH - ScrollBar::GAP; }
 
+    protected:
+        void onUpdate() override;
+
+        void onDraw(c2d::Transform &transform, bool draw) override;
+
     private:
-        void layout();
+        void layout(bool animate);
+
+        void place();
 
         Adapter *adapter;
         std::vector<c2d::C2DObject *> rows;
         ScrollBar *bar = nullptr;
+        int visibleRows = 1;
         int sel = 0;
         int first = 0;
         bool focus = true;
+        float rowH = 0;
+        float pitch = 0;
+        float extent = 0;
+        scroll::Smooth smooth;
+        int boundBase = -1;
+        double lastUpdate = -1;
     };
 }
 

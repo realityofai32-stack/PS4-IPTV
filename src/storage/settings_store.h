@@ -26,6 +26,8 @@ struct Settings {
     bool autoPlayNextEpisode = false;
     bool showTechnicalInfo = false;
     bool loadImages = true;
+    // lists and grids glide to their new position (off: they jump row by row, as before Checkpoint 3.2)
+    bool smoothScrolling = true;
     // movies / episodes
     std::string audioLanguage;                    // ISO 639-2 code, "" = Auto (the file's default track)
     tracks::SubtitleMode subtitleMode = tracks::SubtitleMode::Auto;

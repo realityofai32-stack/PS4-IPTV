@@ -572,6 +572,18 @@ namespace {
             images.describe = [] { return tr("settings.images.desc"); };
             items.push_back(images);
 
+            SettingItem smooth;
+            smooth.kind = Kind::Toggle;
+            smooth.caption = tr("settings.smooth_scrolling");
+            smooth.toggle = [&s] { return s.smoothScrolling; };
+            smooth.setToggle = [this, &s](bool on) {
+                s.smoothScrolling = on;
+                ui::setSmoothScrolling(on);
+                save();
+            };
+            smooth.describe = [] { return tr("settings.smooth_scrolling.desc"); };
+            items.push_back(smooth);
+
             SettingItem resume;
             resume.kind = Kind::Toggle;
             resume.caption = tr("settings.resume");

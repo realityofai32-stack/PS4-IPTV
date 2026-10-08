@@ -4,6 +4,7 @@
 #include "scroll_math.h"
 #include "widgets.h"
 #include "../core/utf8.h"
+#include "../platform/clock.h"
 
 using namespace c2d;
 
@@ -503,18 +504,105 @@ namespace ui {
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Smooth scrolling and its clip region
+    //
+    // libcross2d has no clipping. Its GL2 renderer issues each object's draw call immediately (no batching), so
+    // a GL scissor rectangle set before a list's children are drawn and removed after them clips exactly those
+    // children. The scissor is used only while a list is gliding (a row is partially outside the list); a list
+    // at rest draws exactly as before, unclipped.
+
+    namespace {
+        bool g_smooth = true;
+        double g_scrollingUntil = 0;
+
+        double clockNow() {
+            return clockx::monotonic();
+        }
+
+#if defined(__PS4__)
+        struct Scissor {
+            GLint x, y, w, h;
+        };
+        std::vector<Scissor> g_scissors;
+
+        // screen rectangle in UI coordinates (= framebuffer pixels: the renderer's projection is the drawable size)
+        void pushClip(const FloatRect &r) {
+            GLint vp[4] = {0, 0, (GLint) theme::SCREEN_W, (GLint) theme::SCREEN_H};
+            glGetIntegerv(GL_VIEWPORT, vp);
+            Scissor s{(GLint) std::floor(r.left), (GLint) vp[3] - (GLint) std::ceil(r.top + r.height),
+                      (GLint) std::ceil(r.width), (GLint) std::ceil(r.height)};
+            if (!g_scissors.empty()) {
+                // nested lists: the intersection
+                const Scissor &o = g_scissors.back();
+                GLint x2 = std::min(s.x + s.w, o.x + o.w);
+                GLint y2 = std::min(s.y + s.h, o.y + o.h);
+                s.x = std::max(s.x, o.x);
+                s.y = std::max(s.y, o.y);
+                s.w = std::max(0, x2 - s.x);
+                s.h = std::max(0, y2 - s.y);
+            }
+            g_scissors.push_back(s);
+            glEnable(GL_SCISSOR_TEST);
+            glScissor(s.x, s.y, s.w, s.h);
+        }
+
+        void popClip() {
+            if (g_scissors.empty()) {
+                return;
+            }
+            g_scissors.pop_back();
+            if (g_scissors.empty()) {
+                glDisable(GL_SCISSOR_TEST);   // the renderer and mpv never see a scissor left behind
+            } else {
+                const Scissor &s = g_scissors.back();
+                glScissor(s.x, s.y, s.w, s.h);
+            }
+        }
+#else
+        void pushClip(const FloatRect &) {}
+
+        void popClip() {}
+#endif
+
+        // the list / grid area on screen, from the draw transform
+        FloatRect screenRect(const Transform &combined, float w, float h, float marginX) {
+            Vector2f a = combined.transformPoint(-marginX, 0);
+            Vector2f b = combined.transformPoint(w + marginX, h);
+            return {std::min(a.x, b.x), std::min(a.y, b.y), std::fabs(b.x - a.x), std::fabs(b.y - a.y)};
+        }
+
+        // focus borders and the poster lift reach a little outside the cells: kept visible at the sides
+        const float CLIP_MARGIN_X = 12;
+    }
+
+    void setSmoothScrolling(bool on) {
+        g_smooth = on;
+    }
+
+    bool smoothScrolling() {
+        return g_smooth;
+    }
+
+    bool scrolling(double now) {
+        return now < g_scrollingUntil;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
 
     GridView::GridView(const FloatRect &rect, float cellW, float cellH, int columns, int visibleRows, Adapter *a)
             : RectangleShape(rect), adapter(a), cols(std::max(1, columns)), rows(std::max(1, visibleRows)) {
         setFillColor(theme::none());
         float usableW = rect.width - ScrollBar::WIDTH - ScrollBar::GAP;
-        float gapX = cols > 1 ? std::max(0.0f, (usableW - (float) cols * cellW) / (float) (cols - 1)) : 0;
+        gapX = cols > 1 ? std::max(0.0f, (usableW - (float) cols * cellW) / (float) (cols - 1)) : 0;
         float gapY = rows > 1 ? std::max(0.0f, (rect.height - (float) rows * cellH) / (float) (rows - 1)) : 0;
-        for (int r = 0; r < rows; r++) {
+        cellWidth = cellW;
+        cellHeight = cellH;
+        pitchY = cellH + gapY;
+        extent = (float) rows * cellH + (float) (rows - 1) * gapY;
+        // one extra row: while gliding, a row enters as another leaves
+        for (int r = 0; r <= rows; r++) {
             for (int c = 0; c < cols; c++) {
                 C2DObject *cell = adapter->createCell(cellW, cellH);
-                ((Transformable *) cell)->setPosition(std::round((float) c * (cellW + gapX)),
-                                                      std::round((float) r * (cellH + gapY)));
                 add(cell);
                 cells.push_back(cell);
             }
@@ -527,12 +615,13 @@ namespace ui {
     void GridView::reload() {
         int count = adapter->count();
         sel = count == 0 ? 0 : std::min(std::max(sel, 0), count - 1);
-        layout();
+        layout(false);
     }
 
     void GridView::setSelected(int index) {
-        sel = index;
-        reload();
+        int count = adapter->count();
+        sel = count == 0 ? 0 : std::min(std::max(index, 0), count - 1);
+        layout(false);   // a jump: no glide from unrelated content
     }
 
     bool GridView::navigate(int dx, int dy) {
@@ -541,7 +630,7 @@ namespace ui {
             return false;
         }
         sel = target;
-        layout();
+        layout(true);
         return true;
     }
 
@@ -551,7 +640,7 @@ namespace ui {
             return false;
         }
         sel = target;
-        layout();
+        layout(true);
         return true;
     }
 
@@ -559,26 +648,73 @@ namespace ui {
         if (f != focus) {
             focus = f;
             bar->setActive(focus);
-            layout();
+            layout(false);
         }
     }
 
-    void GridView::layout() {
+    void GridView::layout(bool animate) {
         int count = adapter->count();
         int totalRows = count == 0 ? 0 : (count - 1) / cols + 1;
         // keep one row of context above/below while scrolling (selection in the middle row of three)
         firstRow = scroll::firstVisible(sel / cols, firstRow, rows, totalRows, rows >= 3 ? 1 : 0);
-        for (int i = 0; i < (int) cells.size(); i++) {
-            int index = firstRow * cols + i;
-            C2DObject *cell = cells[(size_t) i];
-            if (index < count) {
-                cell->setVisibility(Visibility::Visible);
-                adapter->bindCell(cell, index, focus && index == sel);
-            } else {
-                cell->setVisibility(Visibility::Hidden);
+        float maxPos = (float) std::max(0, totalRows - rows);
+        if (!animate || !g_smooth) {
+            smooth.snap((float) firstRow);
+        } else {
+            smooth.pos = std::min(std::max(smooth.pos, 0.0f), maxPos);
+        }
+        boundBase = -1;   // data or selection changed: bind every cell again
+        place();
+        bar->setRange(totalRows, rows, firstRow);
+    }
+
+    // positions and binds the cells for the drawn position smooth.pos
+    void GridView::place() {
+        int count = adapter->count();
+        int base = (int) std::floor(smooth.pos);
+        float frac = smooth.pos - (float) base;
+        bool rebind = base != boundBase;
+        boundBase = base;
+        for (int r = 0; r <= rows; r++) {
+            float y = ((float) r - frac) * pitchY;
+            bool rowShown = y < extent && y + cellHeight > 0 && (r < rows || frac > 0);
+            for (int c = 0; c < cols; c++) {
+                int i = r * cols + c;
+                int index = (base + r) * cols + c;
+                C2DObject *cell = cells[(size_t) i];
+                ((Transformable *) cell)->setPosition(std::round((float) c * (cellWidth + gapX)), std::round(y));
+                if (rowShown && index < count) {
+                    cell->setVisibility(Visibility::Visible);
+                    if (rebind) {
+                        adapter->bindCell(cell, index, focus && index == sel);
+                    }
+                } else {
+                    cell->setVisibility(Visibility::Hidden);
+                }
             }
         }
-        bar->setRange(totalRows, rows, firstRow);
+    }
+
+    void GridView::onUpdate() {
+        double now = clockNow();
+        if (!smooth.settled((float) firstRow)) {
+            smooth.step((float) firstRow, lastUpdate < 0 ? 1.0 / 60 : now - lastUpdate);
+            place();
+            g_scrollingUntil = now + 0.05;   // keep drawing frames until settled
+        }
+        lastUpdate = now;
+        RectangleShape::onUpdate();
+    }
+
+    void GridView::onDraw(Transform &transform, bool draw) {
+        bool gliding = draw && isVisible() && !smooth.settled((float) firstRow);
+        if (gliding) {
+            pushClip(screenRect(transform * getTransform(), getSize().x, extent, CLIP_MARGIN_X));
+        }
+        RectangleShape::onDraw(transform, draw);
+        if (gliding) {
+            popClip();
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -586,16 +722,18 @@ namespace ui {
     ListView::ListView(const FloatRect &rect, float rowHeight, float spacing, Adapter *a)
             : RectangleShape(rect), adapter(a) {
         setFillColor(theme::none());
-        int n = std::max(1, (int) ((rect.height + spacing) / (rowHeight + spacing)));
-        for (int i = 0; i < n; i++) {
+        visibleRows = std::max(1, (int) ((rect.height + spacing) / (rowHeight + spacing)));
+        rowH = rowHeight;
+        pitch = rowHeight + spacing;
+        extent = (float) visibleRows * rowHeight + (float) (visibleRows - 1) * spacing;
+        // one extra row: while gliding, a row enters as another leaves
+        for (int i = 0; i <= visibleRows; i++) {
             C2DObject *row = adapter->createRow(rowWidth(rect.width), rowHeight);
-            auto *t = (Transformable *) row;
-            t->setPosition(0, (float) i * (rowHeight + spacing));
             add(row);
             rows.push_back(row);
         }
         // the bar spans exactly the rows, not the leftover space below the last one
-        bar = new ScrollBar(rect.width - ScrollBar::WIDTH, 0, (float) n * rowHeight + (float) (n - 1) * spacing);
+        bar = new ScrollBar(rect.width - ScrollBar::WIDTH, 0, extent);
         add(bar);
         reload();
     }
@@ -603,12 +741,13 @@ namespace ui {
     void ListView::reload() {
         int count = adapter->count();
         sel = count == 0 ? 0 : std::min(std::max(sel, 0), count - 1);
-        layout();
+        layout(false);
     }
 
     void ListView::setSelected(int index) {
-        sel = index;
-        reload();
+        int count = adapter->count();
+        sel = count == 0 ? 0 : std::min(std::max(index, 0), count - 1);
+        layout(false);
     }
 
     bool ListView::moveSelection(int delta) {
@@ -621,7 +760,7 @@ namespace ui {
             return false;
         }
         sel = target;
-        layout();
+        layout(true);
         return true;
     }
 
@@ -629,27 +768,67 @@ namespace ui {
         if (f != focus) {
             focus = f;
             bar->setActive(focus);
-            layout();
+            layout(false);
         }
     }
 
-    void ListView::layout() {
+    void ListView::layout(bool animate) {
         int count = adapter->count();
-        int visible = (int) rows.size();
         // keep one row of context above/below the selection while scrolling
-        first = scroll::firstVisible(sel, first, visible, count, visible >= 5 ? 1 : 0);
+        first = scroll::firstVisible(sel, first, visibleRows, count, visibleRows >= 5 ? 1 : 0);
+        float maxPos = (float) std::max(0, count - visibleRows);
+        if (!animate || !g_smooth) {
+            smooth.snap((float) first);
+        } else {
+            smooth.pos = std::min(std::max(smooth.pos, 0.0f), maxPos);
+        }
+        boundBase = -1;
+        place();
+        bar->setRange(count, visibleRows, first);
+    }
 
-        for (int i = 0; i < visible; i++) {
-            int index = first + i;
+    void ListView::place() {
+        int count = adapter->count();
+        int base = (int) std::floor(smooth.pos);
+        float frac = smooth.pos - (float) base;
+        bool rebind = base != boundBase;
+        boundBase = base;
+        for (int i = 0; i <= visibleRows; i++) {
+            int index = base + i;
             auto *row = rows[(size_t) i];
-            if (index < count) {
+            float y = ((float) i - frac) * pitch;
+            ((Transformable *) row)->setPosition(0, std::round(y));
+            bool shown = y < extent && y + rowH > 0 && (i < visibleRows || frac > 0);
+            if (shown && index < count) {
                 row->setVisibility(Visibility::Visible);
-                adapter->bindRow(row, index, index == sel, focus && index == sel);
+                if (rebind) {
+                    adapter->bindRow(row, index, index == sel, focus && index == sel);
+                }
             } else {
                 row->setVisibility(Visibility::Hidden);
             }
         }
+    }
 
-        bar->setRange(count, visible, first);
+    void ListView::onUpdate() {
+        double now = clockNow();
+        if (!smooth.settled((float) first)) {
+            smooth.step((float) first, lastUpdate < 0 ? 1.0 / 60 : now - lastUpdate);
+            place();
+            g_scrollingUntil = now + 0.05;
+        }
+        lastUpdate = now;
+        RectangleShape::onUpdate();
+    }
+
+    void ListView::onDraw(Transform &transform, bool draw) {
+        bool gliding = draw && isVisible() && !smooth.settled((float) first);
+        if (gliding) {
+            pushClip(screenRect(transform * getTransform(), getSize().x, extent, CLIP_MARGIN_X));
+        }
+        RectangleShape::onDraw(transform, draw);
+        if (gliding) {
+            popClip();
+        }
     }
 }

@@ -27,6 +27,24 @@ namespace scroll {
 
     // page jump of `pages` screens of `rows` rows, keeping the column where possible
     int gridPage(int selected, int pages, int rows, int columns, int count);
+
+    // Viewport easing for lists and grids. The logical first row (where focus says the view must be) changes
+    // at once; the drawn position `pos` (fractional rows) follows it frame-rate independently (exponential
+    // approach: the remaining distance shrinks by exp(-rate * dt) per frame), never overshoots and never lags
+    // more than maxLag rows (so the focused row stays on screen at full repeat speed). Input never waits.
+    struct Smooth {
+        static constexpr float RATE = 20;       // per second: ~90 % of a step is covered in 0.12 s
+        static constexpr float MAX_LAG = 1;     // rows
+
+        float pos = 0;
+
+        // advances pos toward target; dt is clamped (a slow frame never jumps past the target)
+        void step(float target, double dt, float rate = RATE, float maxLag = MAX_LAG);
+
+        void snap(float target) { pos = target; }
+
+        bool settled(float target) const { return pos == target; }
+    };
 }
 
 #endif // PS4IPTV_UI_SCROLL_MATH_H
