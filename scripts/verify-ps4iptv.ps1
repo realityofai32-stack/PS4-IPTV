@@ -11,6 +11,10 @@
     6  PKG contents: exact allow-list of packaged files (no config, no credentials)
     7  extracted PKG re-scanned for private secrets
     8  linked system modules match the hardware-proven pPlay set (+ nothing unexpected)
+    9  the text rendering test cannot open by itself (no Debug / launch-test definitions in the release build)
+    10 English + Turkish localization complete, no hardcoded screen text (host test results)
+    11 download integration test: libcurl transport + manager against a local HTTP test server
+    12 complete Git history scanned for private credentials (values never printed)
 #>
 param([ValidateSet('Release', 'Debug')] [string] $BuildType = 'Release')
 
@@ -72,7 +76,7 @@ try {
     Report '4 credential guard self-test' ($LASTEXITCODE -eq 0) ([string]($guard | Select-Object -Last 1))
 
     # 5
-    $pkg = Get-ChildItem $Build -Filter 'IV0001-IPTV00002_*.pkg' | Select-Object -First 1
+    $pkg = Get-ChildItem $Build -Filter 'IV0001-IPTV00002_*.pkg' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     $v = & $PkgTool pkg_validate $pkg.FullName 2>&1
     $okCount = @($v | Select-String '^\[OK\]').Count
     $bad = @($v | Select-String '^\[(?!OK)')
@@ -110,6 +114,34 @@ try {
     $proven = (& "$Llvm\llvm-objdump.exe" -p (Join-Path $RepoRoot 'build\pplay-ps4\pplay') | Select-String 'NEEDED' | ForEach-Object { ($_ -split '\s+')[-1] } | Sort-Object)
     $extra = @($need | Where-Object { $_ -notin $proven })
     Report '8 system modules within the pPlay-proven set' ($extra.Count -eq 0) ("NEEDED: " + ($need -join ' ') + $(if ($extra) { " | NOT IN pPlay: " + ($extra -join ' ') } else { '' }))
+
+    # 9
+    $ninja = Get-Content (Join-Path $Build 'build.ninja') -Raw
+    $cache = Get-Content (Join-Path $Build 'CMakeCache.txt') -Raw
+    $noTextTest = $ninja -notmatch 'PS4IPTV_TEXT_TEST_AT_START' -and $cache -match 'PS4IPTV_TEXT_TEST_AT_START:BOOL=OFF'
+    $noDebug = $BuildType -ne 'Release' -or $ninja -notmatch 'PS4IPTV_DEBUG'
+    # app.cpp: the only launch-time path to the test screen is compiled for Debug builds with the option
+    $app = Get-Content (Join-Path $RepoRoot 'src\app\app.cpp') -Raw
+    $gated = $app -match '#if defined\(PS4IPTV_DEBUG\) && defined\(PS4IPTV_TEXT_TEST_AT_START\)\s+push\(screens::makeTextTest\(\*this, true\)\);'
+    $calls = ([regex]::Matches($app, 'makeTextTest\(\*this, true\)')).Count
+    Report '9 no automatic text rendering test' ($noTextTest -and $noDebug -and $gated -and $calls -eq 1) `
+        "launch option absent=$noTextTest, debug defs absent=$noDebug, gated=$gated, launch calls=$calls"
+
+    # 10
+    $i18n = @($hostOut | Select-String '^(ok|FAIL)\s+i18n_')
+    $i18nOk = $i18n.Count -ge 5 -and -not ($i18n | Where-Object { $_.Line -match '^FAIL' })
+    Report '10 localization (English + Turkish)' $i18nOk (($i18n | ForEach-Object { $_.Line.Trim() }) -join ' | ')
+
+    # 11
+    $it = & (Join-Path $PSScriptRoot 'run-download-integration-test.ps1') 2>&1
+    $itSummary = @($it | Select-String 'checks, ') | Select-Object -Last 1
+    Report '11 download integration test' ($LASTEXITCODE -eq 0 -and $itSummary -match ' 0 failures') ([string]$itSummary)
+
+    # 12
+    $scanHistory = & python -I (Join-Path $PSScriptRoot 'scan-git-history.py') $RepoRoot 2>&1
+    $historyCode = $LASTEXITCODE
+    Report '12 Git history secret scan' ($historyCode -eq 0) (($scanHistory | Select-Object -Last 1) + " (exit $historyCode)")
+    $scanHistory | Select-String 'FINDING' | ForEach-Object { Write-Host "      $($_.Line)" }
 } finally {
     if ($x -and (Test-Path -LiteralPath $x)) { Remove-Item -LiteralPath $x -Recurse -Force }
     Pop-Location

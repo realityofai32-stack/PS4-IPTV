@@ -16,7 +16,7 @@ if (-not $SkipVerify) {
     & (Join-Path $PSScriptRoot 'verify-ps4iptv.ps1') | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'release verification failed: not staging this build' }
 }
-$pkg = Get-ChildItem (Join-Path $RepoRoot 'build\ps4iptv-release') -Filter 'IV0001-IPTV00002_*.pkg' | Select-Object -First 1
+$pkg = Get-ChildItem (Join-Path $RepoRoot 'build\ps4iptv-release') -Filter 'IV0001-IPTV00002_*.pkg' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $pkg) { throw 'production PKG not found: run scripts\build-ps4iptv.ps1' }
 
 New-Item -ItemType Directory -Force $Stage | Out-Null

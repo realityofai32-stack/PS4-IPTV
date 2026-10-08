@@ -8,8 +8,11 @@ option) any later version. See LICENSE.
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
 implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-PS4 IPTV does not provide, host or link to any content. It is a player for services the user is entitled to
-access.
+PS4 IPTV does not provide, host or link to any content: no channels, movies, series, accounts or playlists.
+It is a client for Xtream Codes compatible services the user is entitled to access. The offline download
+feature stores the service's original files on the console and is intended only for services and content
+where the user has permission to store content locally; it does not remove DRM, decrypt content or
+circumvent any access control.
 
 ----------------------------------------------------------------------------------------------------------
 THIRD-PARTY COMPONENTS
@@ -41,6 +44,7 @@ Opus 1.3                    Xiph.Org Foundation and contributors          BSD-3-
 libsamplerate 0.1.9         Erik de Castro Lopo                          BSD-2-Clause
 libconfig 1.7.3             Mark Lindner                                 LGPL-2.1-or-later
 libcurl 7.80.0              Daniel Stenberg and contributors              curl license (MIT/X derivative)
+  (Xtream API, images and offline downloads)
 Mbed TLS 2.16.6             Arm Limited                                  Apache-2.0
 musl libc (PacBrew fork)    musl contributors                            MIT
 LLVM libc++ / libc++abi /
@@ -59,3 +63,7 @@ repository.
 
 Build tools (not distributed): LLVM/Clang 12.0.1, CMake, Ninja, pkgconf, Go (create-gp4),
 OpenOrbis create-fself / create-gp4, LibOrbisPkg PkgTool.Core (LGPL-3.0).
+
+Test tools (not distributed): Microsoft Visual C++ Build Tools (host unit tests), Python 3 standard library
+(download integration test server, scripts/download-test-server.py), libcurl 7.80.0 built from the official
+source for the host integration test (scripts/setup-host-curl.ps1, curl license).

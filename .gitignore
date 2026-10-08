@@ -1,10 +1,10 @@
 # Reference clones of upstream projects (pPlay, PacBrew recipes) - fetched, not vendored
 /external/
 
-# Project-local toolchain (LLVM, CMake, Ninja, PacBrew sysroot, OpenOrbis tools)
+# Project-local toolchain (LLVM, CMake, Ninja, PacBrew sysroot, OpenOrbis tools, host libcurl)
 /toolchain/
 
-# Build output
+# Build output (PKGs, ELFs, test binaries, test servers' scratch data, logs of builds)
 /build/
 /build-*/
 *.pkg
@@ -18,11 +18,34 @@ eboot.bin
 test_streams.txt
 !/config/test_streams.example.txt
 /config/*.local.*
+*.local.json
+.env
+
+# Data the app writes on the console (never part of the source): profiles with logins, settings, library,
+# downloads and their manifest, caches
 profiles.json
+settings.json
 favorites.json
+history.json
+downloads.json
+/downloads/
+*.part
+*.largefile-probe
+
+# Local logs and download test artifacts
+*.log
+log.txt
+log.prev.txt
+download-test-server.port
+
+# Python / tool caches
+__pycache__/
+*.pyc
 
 # Editor / OS
 .vs/
+.vscode/
+.idea/
 *.user
 Thumbs.db
 .DS_Store
