@@ -52,6 +52,17 @@ protected:
         };
     }
 
+    // the same for menu / dialog choices (onChoice(index))
+    template<typename F>
+    std::function<void(int)> whileAlive(F f) {
+        std::weak_ptr<bool> w = alive;
+        return [w, f](int choice) {
+            if (w.lock()) {
+                f(choice);
+            }
+        };
+    }
+
     void redraw();
 
     App &app;

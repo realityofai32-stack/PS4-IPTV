@@ -7,6 +7,9 @@
 // Recently Watched shows at most RECENT_LIVE_MAX channels while movies/episodes can fill the row.
 // Square on a Continue Watching card removes it from the row only (LibraryStore::dismissFromContinueWatching):
 // the resume position, history, favorite and any download stay; new playback progress brings it back.
+//
+// Playlist (M3U) sources are Live TV only: no Movies / Series tiles and no Continue Watching row (playlist
+// channels never have a resume position); Recently Watched takes its place.
 
 #include "common.h"
 #include "../app/offline.h"
@@ -80,16 +83,23 @@ namespace {
                 n->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
             }
 
+            playlist = s.profile.isPlaylist();
+            if (playlist) {
+                tileIds = {TILE_LIVE, TILE_DOWNLOADS, TILE_FAVORITES, TILE_SEARCH, TILE_SETTINGS};
+            } else {
+                tileIds = {TILE_LIVE, TILE_MOVIES, TILE_SERIES, TILE_DOWNLOADS, TILE_FAVORITES, TILE_SEARCH, TILE_SETTINGS};
+            }
             const char *titles[TILE_COUNT] = {"home.live_tv", "home.movies", "home.series", "home.downloads",
                                               "home.favorites", "home.search", "home.settings"};
             const float gap = 20;
-            const float tileW = (theme::SCREEN_W - 2 * theme::SAFE_X - (TILE_COUNT - 1) * gap) / TILE_COUNT;
-            for (int i = 0; i < TILE_COUNT; i++) {
+            const int n = (int) tileIds.size();
+            const float tileW = (theme::SCREEN_W - 2 * theme::SAFE_X - (float) (n - 1) * gap) / (float) n;
+            for (int i = 0; i < n; i++) {
                 TileView &t = tiles[i];
                 t.bg = ui::box(this, FloatRect(theme::SAFE_X + (float) i * (tileW + gap), TILE_Y, tileW, TILE_H),
                                theme::surface(), 20);
                 t.accentBar = ui::box(t.bg, FloatRect(24, 30, 44, 6), theme::accent(), 3);
-                t.title = ui::label(t.bg, tr(titles[i]), theme::HEADING - 2, 24, 76, ui::Weight::SemiBold);
+                t.title = ui::label(t.bg, tr(titles[tileIds[(size_t) i]]), theme::HEADING - 2, 24, 76, ui::Weight::SemiBold);
                 t.title->setMaxWidth(tileW - 48);
                 // seven tiles are narrow: the subtitle may take two lines
                 t.subtitle = ui::label(t.bg, "", theme::CAPTION, 24, 126, ui::Weight::Regular, theme::textDim());
@@ -99,6 +109,7 @@ namespace {
 
             auto *cwHeading = ui::label(this, tr("home.continue_watching"), theme::HEADING, theme::SAFE_X, CW_Y,
                                         ui::Weight::SemiBold);
+            cwHeading->setVisibility(playlist ? Visibility::Hidden : Visibility::Visible);
             // the focused card in full: "Series  ·  S01E03 · Title  ·  24:16 / 57:00"
             cwDetail = ui::label(this, "", theme::LABEL, theme::SAFE_X + cwHeading->width() + 32, CW_Y + 8,
                                  ui::Weight::Regular, theme::textDim());
@@ -109,13 +120,14 @@ namespace {
             cwEmpty = ui::label(this, tr("home.continue_empty"), theme::BODY,
                                 theme::SAFE_X + 8, CW_Y + 140, ui::Weight::Regular, theme::textMuted());
 
-            ui::label(this, tr("home.recently_watched"), theme::HEADING, theme::SAFE_X, RECENT_Y, ui::Weight::SemiBold);
-            recentLayer = new RectangleShape(FloatRect(theme::SAFE_X, RECENT_Y + 56, theme::SCREEN_W - 2 * theme::SAFE_X,
+            const float recentY = playlist ? CW_Y : RECENT_Y;   // playlist sources: no Continue Watching row
+            ui::label(this, tr("home.recently_watched"), theme::HEADING, theme::SAFE_X, recentY, ui::Weight::SemiBold);
+            recentLayer = new RectangleShape(FloatRect(theme::SAFE_X, recentY + 56, theme::SCREEN_W - 2 * theme::SAFE_X,
                                                        RECENT_H));
             recentLayer->setFillColor(Color::Transparent);
             add(recentLayer);
             recentEmpty = ui::label(this, tr("home.recent_empty"), theme::BODY,
-                                    theme::SAFE_X + 8, RECENT_Y + 90, ui::Weight::Regular, theme::textMuted());
+                                    theme::SAFE_X + 8, recentY + 90, ui::Weight::Regular, theme::textMuted());
 
             hints = screens::hintBar(this, {});
             rebuildRows();
@@ -151,7 +163,8 @@ namespace {
                 redraw();
             }
             if (app.vod().generation() != vodGen || app.images().generation() != imageGen
-                || app.library().generation() != libraryGen) {
+                || app.library().generation() != libraryGen || app.session().liveGeneration != liveGen) {
+                liveGen = app.session().liveGeneration;
                 imageGen = app.images().generation();
                 rebuildRows();
                 refresh();
@@ -246,7 +259,7 @@ namespace {
         };
 
         int zoneSize(int z) const {
-            return z == 0 ? TILE_COUNT : z == 1 ? (int) cw.size() : (int) recent.size();
+            return z == 0 ? (int) tileIds.size() : z == 1 ? (int) cw.size() : (int) recent.size();
         }
 
         static std::string sectionCount(const SectionStatus &st, size_t n, const char *countKey) {
@@ -296,7 +309,8 @@ namespace {
             vodGen = app.vod().generation();
             libraryGen = app.library().generation();
             cw.clear();
-            for (const HistoryEntry *h: app.library().continueWatching(CW_MAX)) {
+            for (const HistoryEntry *h: playlist ? std::vector<const HistoryEntry *>()
+                                                 : app.library().continueWatching(CW_MAX)) {
                 cw.push_back(*h);
             }
             recent.clear();
@@ -353,7 +367,7 @@ namespace {
                 k->setMaxWidth(RECENT_W - tx - 16);
                 recentCards.push_back(c);
             }
-            cwEmpty->setVisibility(cw.empty() ? Visibility::Visible : Visibility::Hidden);
+            cwEmpty->setVisibility(cw.empty() && !playlist ? Visibility::Visible : Visibility::Hidden);
             recentEmpty->setVisibility(recent.empty() ? Visibility::Visible : Visibility::Hidden);
             for (int z = 1; z < 3; z++) {
                 index[z] = std::min(index[z], std::max(0, zoneSize(z) - 1));
@@ -379,7 +393,7 @@ namespace {
 
         void activate() {
             if (zone == 0) {
-                openTile(index[0]);
+                openTile(tileIds[(size_t) index[0]]);
             } else if (zone == 1) {
                 resume(cw[(size_t) index[1]]);
             } else {
@@ -554,10 +568,10 @@ namespace {
                     tr("home.favorites_sub"),
                     tr("home.search_sub"),
                     tr("home.settings_sub")};
-            for (int i = 0; i < TILE_COUNT; i++) {
+            for (int i = 0; i < (int) tileIds.size(); i++) {
                 bool f = zone == 0 && i == index[0];
                 TileView &t = tiles[i];
-                t.subtitle->setText(subs[i]);
+                t.subtitle->setText(subs[tileIds[(size_t) i]]);
                 t.bg->setFillColor(f ? theme::accentDark() : theme::surface());
                 t.bg->setOutlineColor(theme::withAlpha(Color::White, 220));
                 t.bg->setOutlineThickness(f ? theme::FOCUS_BORDER : 0);
@@ -585,6 +599,9 @@ namespace {
         }
 
         TileView tiles[TILE_COUNT];
+        std::vector<int> tileIds;   // Tile of each position (playlist sources: no Movies / Series)
+        bool playlist = false;
+        unsigned liveGen = 0;
         RectangleShape *cwLayer;
         RectangleShape *recentLayer;
         ui::Label *cwEmpty;

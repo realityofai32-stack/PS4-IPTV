@@ -19,8 +19,17 @@ namespace screens {
 
     Screen *makeProfiles(App &app);
 
-    // empty profile id = add a new profile
+    // Add Source: Xtream Codes / M3U / M3U8 Playlist, then the matching editor
+    Screen *makeSourceChooser(App &app);
+
+    // empty profile id = add a new profile; playlist profiles open the playlist editor
     Screen *makeProfileEdit(App &app, const iptv::Profile &profile);
+
+    // M3U / M3U8 playlist source: name, playlist URL, optional User-Agent; tested before it is saved
+    Screen *makePlaylistEdit(App &app, const iptv::Profile &profile);
+
+    // counts of the playlist on screen (never URLs or credentials) + Refresh Playlist
+    Screen *makePlaylistInfo(App &app);
 
     Screen *makeConnect(App &app, const iptv::Profile &profile);
 

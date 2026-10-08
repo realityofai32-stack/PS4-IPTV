@@ -1,9 +1,12 @@
-// Onboarding, profile manager and profile editor.
+// Onboarding, source (profile) manager and the Xtream profile editor. Sources are Xtream Codes accounts or
+// M3U / M3U8 playlists (playlist editor and Playlist Info: playlist_screens.cpp).
 
 #include "common.h"
+#include "../core/format.h"
 #include "../core/url.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
+#include "../storage/catalog_cache.h"
 
 using namespace c2d;
 using namespace iptv;
@@ -29,7 +32,7 @@ namespace {
             hasDownloads = !app.downloads().items().empty();
             float bw = 460;
             float bx = hasDownloads ? cx - bw - 12 : cx - bw / 2;
-            button = new ui::Button(tr("onboarding.add_profile"), FloatRect(bx, 620, bw, 88), true);
+            button = new ui::Button(tr("onboarding.add_source"), FloatRect(bx, 620, bw, 88), true);
             add(button);
             downloadsButton = new ui::Button(tr("home.downloads"), FloatRect(cx + 12, 620, bw, 88));
             downloadsButton->setVisibility(hasDownloads ? Visibility::Visible : Visibility::Hidden);
@@ -48,7 +51,7 @@ namespace {
                 if (focus == 1) {
                     app.push(screens::makeDownloads(app));
                 } else {
-                    app.push(screens::makeProfileEdit(app, Profile()));
+                    app.push(screens::makeSourceChooser(app));
                 }
             } else if (e.button == PadButton::Circle) {
                 app.push(screens::makeDialog(app, tr("app.exit_title"), "", {tr("common.cancel"), tr("common.exit")},
@@ -88,6 +91,10 @@ namespace {
             detailBody->setMaxLines(12);
             hints = screens::hintBar(this, {});
             refresh();
+        }
+
+        ~ProfilesScreen() override {
+            refreshToken.cancel();
         }
 
         const char *name() const override { return "profiles"; }
@@ -132,8 +139,7 @@ namespace {
                     const Profile &p = profiles[(size_t) index];
                     r.title->setText(p.name);
                     r.title->setColor(theme::text());
-                    r.sub->setText(screens::hostOf(p.server) + (p.lastStatus.empty() ? "" : "   \xE2\x80\xA2   "
-                                                                                            + p.lastStatus));
+                    r.sub->setText(subtitleOf(p));
                     bool active = p.id == app.profiles().activeId();
                     r.badge->setText(active ? tr("profiles.active_badge") : "");
                 }
@@ -156,11 +162,9 @@ namespace {
                         return;
                     }
                     if (onAdd) {
-                        app.push(screens::makeProfileEdit(app, Profile()));
+                        app.push(screens::makeSourceChooser(app));
                     } else {
-                        app.profiles().setActive(profiles[(size_t) index].id);
-                        app.profiles().save();
-                        app.replaceAll(screens::makeConnect(app, profiles[(size_t) index]));
+                        open(profiles[(size_t) index]);
                     }
                     return;
                 case PadButton::Square:
@@ -169,7 +173,13 @@ namespace {
                     }
                     return;
                 case PadButton::Options:
-                    app.push(screens::makeProfileEdit(app, Profile()));
+                    if (!e.repeat) {
+                        if (onAdd) {
+                            app.push(screens::makeSourceChooser(app));
+                        } else {
+                            actions(profiles[(size_t) index]);
+                        }
+                    }
                     return;
                 case PadButton::Triangle:
                     if (!onAdd && !e.repeat) {
@@ -202,6 +212,91 @@ namespace {
             ui::Label *badge;
         };
 
+        // "Xtream Codes  •  host  •  Connected" / "M3U / M3U8  •  1,284 channels"
+        std::string subtitleOf(const Profile &p) const {
+            const std::string sep = "   \xE2\x80\xA2   ";
+            std::string s = screens::sourceTypeName(p.type);
+            if (p.isPlaylist()) {
+                if (refreshingId == p.id) {
+                    return s + sep + tr("m3u.refreshing");
+                }
+                return s + sep + (p.playlistChannels >= 0 ? i18n::count("m3u.channels", p.playlistChannels)
+                                                          : tr("profiles.not_loaded"));
+            }
+            return s + sep + screens::hostOf(p.server) + (p.lastStatus.empty() ? "" : sep + p.lastStatus);
+        }
+
+        void open(const Profile &p) {
+            app.profiles().setActive(p.id);
+            app.profiles().save();
+            app.replaceAll(screens::makeConnect(app, p));
+        }
+
+        // Options on a source: Open, Edit, Refresh Playlist (playlists), Delete, Add Source
+        void actions(const Profile &p) {
+            std::string id = p.id;
+            std::vector<std::string> names = {tr("profiles.open"), tr("common.edit")};
+            std::vector<std::function<void()>> acts;
+            acts.push_back([this, id] {
+                if (const Profile *q = app.profiles().find(id)) {
+                    open(*q);
+                }
+            });
+            acts.push_back([this, id] {
+                if (const Profile *q = app.profiles().find(id)) {
+                    app.push(screens::makeProfileEdit(app, *q));
+                }
+            });
+            if (p.isPlaylist()) {
+                names.push_back(tr("m3u.refresh"));
+                acts.push_back([this, id] { refreshPlaylist(id); });
+            }
+            names.push_back(tr("common.delete"));
+            acts.push_back([this, id] {
+                if (const Profile *q = app.profiles().find(id)) {
+                    confirmDelete(*q);
+                }
+            });
+            names.push_back(tr("profiles.add"));
+            acts.push_back([this] { app.push(screens::makeSourceChooser(app)); });
+            app.push(screens::makeMenu(app, p.name, names, -1, whileAlive([acts](int c) {
+                if (c >= 0 && c < (int) acts.size()) {
+                    acts[(size_t) c]();
+                }
+            })));
+        }
+
+        // a playlist source that is not open: download it again into its saved copy
+        void refreshPlaylist(const std::string &id) {
+            const Profile *p = app.profiles().find(id);
+            if (p == nullptr) {
+                return;
+            }
+            if ((app.session().connected || app.session().offline) && app.session().profile.id == id) {
+                app.refreshPlaylist(true);   // the open source: its list on screen is replaced too
+                return;
+            }
+            if (!refreshingId.empty()) {
+                app.toast(tr("m3u.refresh_running"));
+                return;
+            }
+            refreshingId = id;
+            list->reload();
+            refreshToken = app.m3u().load(*p, APP_DATA_DIR, M3uService::Source::Network, true,
+                                          [this, id](M3uService::Outcome &o) {
+                refreshingId.clear();
+                if (o.ok) {
+                    int n = (int) o.catalog->channels().size();
+                    app.notePlaylistLoaded(id, n);
+                    app.toast(i18n::count("m3u.refreshed", n), ToastKind::Success);
+                } else {
+                    app.toast(tr("m3u.refresh_failed", {o.message}), ToastKind::Error);
+                }
+                list->reload();
+                refresh();
+            });
+        }
+
         void confirmDelete(const Profile &p) {
             std::string id = p.id;
             app.push(screens::makeDialog(app, tr("profiles.delete_title"), tr("profiles.delete_text", {p.name}),
@@ -210,7 +305,11 @@ namespace {
                             return;
                         }
                         bool wasActive = (app.session().connected || app.session().offline) && app.session().profile.id == id;
+                        bool playlist = app.profiles().find(id) && app.profiles().find(id)->isPlaylist();
                         app.profiles().remove(id);
+                        if (playlist) {
+                            CatalogCache(APP_DATA_DIR).remove(id, M3uService::CACHE_NAME);   // the saved playlist
+                        }
                         std::string err;
                         if (!app.profiles().save(&err)) {
                             LOG_E("profiles", "save failed: %s", err.c_str());
@@ -218,7 +317,7 @@ namespace {
                         }
                         app.syncDownloadProfiles();   // completed downloads stay playable; queued ones stop
                         if (wasActive) {
-                            app.session() = Session();
+                            app.resetSession();
                         }
                         if (app.profiles().profiles().empty()) {
                             app.replaceAll(screens::makeOnboarding(app));
@@ -241,8 +340,14 @@ namespace {
             }
             const Profile &p = profiles[(size_t) index];
             detailTitle->setText(p.name);
-            std::string body = tr("profile.server") + "\n" + screens::hostOf(p.server) + "\n\n" + tr("profile.username")
-                               + "\n" + p.username + "\n\n" + tr("profile.password") + "\n" + screens::mask(p.password);
+            std::string body = tr("source.type") + "\n" + screens::sourceTypeName(p.type) + "\n\n";
+            if (p.isPlaylist()) {
+                body += tr("playlist.url") + "\n" + screens::sourceLocation(p) + "\n\n" + tr("playlist.user_agent")
+                        + "\n" + (p.userAgent.empty() ? tr("playlist.user_agent_default") : p.userAgent);
+            } else {
+                body += tr("profile.server") + "\n" + screens::hostOf(p.server) + "\n\n" + tr("profile.username")
+                        + "\n" + p.username + "\n\n" + tr("profile.password") + "\n" + screens::mask(p.password);
+            }
             if (!p.lastStatus.empty()) {
                 body += "\n\n" + tr("profiles.last_connection") + "\n" + p.lastStatus;
                 if (p.lastUsedAt > 0) {
@@ -250,9 +355,9 @@ namespace {
                 }
             }
             detailBody->setText(body);
-            hints->setHints({{ui::Glyph::Cross, tr("profiles.connect")}, {ui::Glyph::Square, tr("common.edit")},
-                             {ui::Glyph::Triangle, tr("common.delete")}, {ui::Glyph::Options, tr("common.add")},
-                             {ui::Glyph::Circle, tr("common.back")}});
+            hints->setHints({{ui::Glyph::Cross, tr(p.isPlaylist() ? "profiles.open" : "profiles.connect")},
+                             {ui::Glyph::Square, tr("common.edit")}, {ui::Glyph::Triangle, tr("common.delete")},
+                             {ui::Glyph::Options, tr("profiles.options")}, {ui::Glyph::Circle, tr("common.back")}});
         }
 
         ui::ListView *list;
@@ -261,6 +366,8 @@ namespace {
         ui::Label *detailBody;
         ui::HintBar *hints;
         std::vector<Row> rows;
+        std::string refreshingId;   // playlist source being refreshed from this list
+        CancelToken refreshToken;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -522,6 +629,9 @@ namespace screens {
     }
 
     Screen *makeProfileEdit(App &app, const Profile &profile) {
+        if (profile.isPlaylist()) {
+            return makePlaylistEdit(app, profile);
+        }
         return new ProfileEditScreen(app, profile);
     }
 }

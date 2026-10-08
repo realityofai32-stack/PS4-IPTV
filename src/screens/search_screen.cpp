@@ -5,6 +5,9 @@
 // Right: All / Movies / Series / Live TV filters with their counts (L1 / R1), the result count and the
 // results with their type and poster / logo. Opening Search loads the Movies / Series catalogs lazily
 // (saved copy first) when needed; results appear as each catalog becomes ready.
+//
+// Playlist (M3U) sources only have Live TV: the filters are All / Live TV. Search covers the source that is
+// open (like Favorites and Recently Watched, which are per source). A refreshed playlist re-runs the query.
 
 #include "common.h"
 #include "../core/format.h"
@@ -50,6 +53,12 @@ namespace {
     public:
         SearchScreen(App &a, int initialFilter) : Screen(a), keyboard("", 120, KeyboardModel::Layout::Search),
                                                   filter(initialFilter < 0 || initialFilter > 3 ? 0 : initialFilter) {
+            playlist = app.session().profile.isPlaylist();
+            filters = playlist ? std::vector<int>{0, 3} : std::vector<int>{0, 1, 2, 3};
+            if (std::find(filters.begin(), filters.end(), filter) == filters.end()) {
+                filter = 0;
+            }
+            liveGen = app.session().liveGeneration;
             ui::background(this);
             screens::header(this, tr("home.search"));
 
@@ -84,8 +93,11 @@ namespace {
 
             // filters + results
             for (int i = 0; i < 4; i++) {
-                chips[i] = ui::box(this, FloatRect(RIGHT_X + (float) i * (CHIP_W + 16), FIELD_Y, CHIP_W, CHIP_H),
-                                   theme::surface(), CHIP_H / 2);
+                // filter i sits at its place among the filters this source has
+                auto slot = std::find(filters.begin(), filters.end(), i);
+                float x = RIGHT_X + (float) (slot - filters.begin()) * (CHIP_W + 16);
+                chips[i] = ui::box(this, FloatRect(x, FIELD_Y, CHIP_W, CHIP_H), theme::surface(), CHIP_H / 2);
+                chips[i]->setVisibility(slot == filters.end() ? Visibility::Hidden : Visibility::Visible);
                 chipText[i] = ui::label(chips[i], "", theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, CHIP_H),
                                         ui::Weight::SemiBold);
                 chipText[i]->setAlign(ui::Align::Center, CHIP_W);
@@ -113,6 +125,15 @@ namespace {
         }
 
         void onResume() override {
+            if (app.session().liveGeneration != liveGen) {
+                liveGen = app.session().liveGeneration;
+                all.clear();   // live indices are stale
+                shown.clear();
+                if (!lastQuery.empty()) {
+                    run(true);
+                }
+                refresh();
+            }
             if (app.vod().generation() != vodGen) {
                 // a catalog was refreshed meanwhile: the result indices are stale, search again first
                 vodGen = app.vod().generation();
@@ -129,6 +150,17 @@ namespace {
         }
 
         void tick(double now) override {
+            if (app.session().liveGeneration != liveGen) {
+                // the playlist was refreshed: Live TV results point into the old list, search again
+                liveGen = app.session().liveGeneration;
+                all.clear();
+                shown.clear();
+                if (!lastQuery.empty()) {
+                    run(true);
+                }
+                refresh();
+                redraw();
+            }
             if (dueAt > 0 && now >= dueAt) {
                 dueAt = 0;
                 run(false);
@@ -231,7 +263,9 @@ namespace {
                 case PadButton::L1:
                 case PadButton::R1:
                     if (!e.repeat) {
-                        setFilter((filter + (e.button == PadButton::L1 ? 3 : 1)) % 4);
+                        int n = (int) filters.size();
+                        int at = (int) (std::find(filters.begin(), filters.end(), filter) - filters.begin());
+                        setFilter(filters[(size_t) ((at + (e.button == PadButton::L1 ? n - 1 : 1)) % n)]);
                     }
                     return;
                 case PadButton::Square:
@@ -387,12 +421,7 @@ namespace {
         }
 
         std::string categoryName(const std::string &id) const {
-            for (const auto &c: app.session().live.categories()) {
-                if (c.id == id) {
-                    return c.name;
-                }
-            }
-            return "";
+            return app.session().live.categoryName(id);   // Uncategorized in the current UI language
         }
 
         void run(bool keepSelection) {
@@ -490,16 +519,7 @@ namespace {
         }
 
         static std::string countText(int n) {
-            std::string digits = std::to_string(n);
-            std::string out;
-            const std::string &sep = tr("format.thousands_sep");   // 19,797 / 19.797
-            for (size_t i = 0; i < digits.size(); i++) {
-                if (i > 0 && (digits.size() - i) % 3 == 0) {
-                    out += sep;
-                }
-                out += digits[i];
-            }
-            return out;
+            return fmt::number(n);   // 19,797 / 19.797
         }
 
         // keyPrefix "search.movies" -> .count / .unavailable / .none / .loading
@@ -561,8 +581,8 @@ namespace {
             }
             const SectionStatus &ms = app.vod().movieStatus();
             const SectionStatus &ss = app.vod().seriesStatus();
-            bool loading = ms.status == CatalogStatus::Loading || ss.status == CatalogStatus::Loading
-                           || ms.status == CatalogStatus::NotLoaded || ss.status == CatalogStatus::NotLoaded;
+            bool loading = !playlist && (ms.status == CatalogStatus::Loading || ss.status == CatalogStatus::Loading
+                                         || ms.status == CatalogStatus::NotLoaded || ss.status == CatalogStatus::NotLoaded);
             if (!searched) {
                 empty->setText(tr("search.intro"));
             } else if (shown.empty()) {
@@ -573,10 +593,15 @@ namespace {
                 empty->setText("");
             }
             std::string sep = "   \xC2\xB7   ";
-            catalogsText->setText(tr("search.searching", {sectionState(ms, app.vod().movies().size(), "search.movies") + sep
-                                  + sectionState(ss, app.vod().series().size(), "search.series") + sep
-                                  + (app.session().liveLoaded ? tr("search.channels.count", {countText((int) app.session().live.channels().size())})
-                                                              : tr("search.channels.unavailable"))}));
+            std::string channels = app.session().liveLoaded
+                                   ? tr("search.channels.count", {countText((int) app.session().live.channels().size())})
+                                   : tr("search.channels.unavailable");
+            if (playlist) {
+                catalogsText->setText(tr("search.searching", {channels}));
+            } else {
+                catalogsText->setText(tr("search.searching", {sectionState(ms, app.vod().movies().size(), "search.movies") + sep
+                                      + sectionState(ss, app.vod().series().size(), "search.series") + sep + channels}));
+            }
             list->reload();
             if (zone == 0) {
                 hints->setHints({{ui::Glyph::Cross, tr("keyboard.hint_type")}, {ui::Glyph::Square, tr("common.delete")},
@@ -591,6 +616,9 @@ namespace {
 
         KeyboardModel keyboard;
         int filter;
+        bool playlist = false;
+        std::vector<int> filters;   // the filters this source has (0 All, 1 Movies, 2 Series, 3 Live TV)
+        unsigned liveGen = 0;
         int zone = 0;            // 0 keyboard, 1 results
         double dueAt = 0;        // debounced search time (0 = none waiting)
         std::string lastQuery;   // what the results are for

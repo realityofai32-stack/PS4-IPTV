@@ -45,6 +45,9 @@ void VodLibrary::refreshSeries(const Profile &profile) {
 
 template<typename Catalog>
 void VodLibrary::open(const Profile &profile, bool movies) {
+    if (profile.isPlaylist()) {
+        return;   // playlist sources have no Movies / Series (never guessed from channel names)
+    }
     SectionStatus &st = movies ? movieState : seriesState;
     if (st.status != CatalogStatus::NotLoaded && st.status != CatalogStatus::Failed) {
         return;   // loaded or loading: nothing to do
@@ -86,6 +89,9 @@ void VodLibrary::open(const Profile &profile, bool movies) {
 }
 
 void VodLibrary::refresh(const Profile &profile, bool movies) {
+    if (profile.isPlaylist()) {
+        return;
+    }
     SectionStatus &st = movies ? movieState : seriesState;
     if (st.refreshing) {
         return;
@@ -157,7 +163,7 @@ void VodLibrary::refresh(const Profile &profile, bool movies) {
 
 void VodLibrary::requestMovieInfo(const Profile &profile, const std::string &streamId) {
     std::string key = "m" + streamId;
-    if (streamId.empty() || movieInfos.contains(streamId) || inFlight.count(key)) {
+    if (streamId.empty() || profile.isPlaylist() || movieInfos.contains(streamId) || inFlight.count(key)) {
         return;
     }
     if (offlineMode) {
@@ -197,7 +203,7 @@ std::shared_ptr<const MovieInfo> VodLibrary::movieInfo(const std::string &stream
 
 void VodLibrary::requestSeriesInfo(const Profile &profile, const std::string &seriesId, bool force) {
     std::string key = "s" + seriesId;
-    if (seriesId.empty() || inFlight.count(key) || (!force && seriesInfos.contains(seriesId))) {
+    if (seriesId.empty() || profile.isPlaylist() || inFlight.count(key) || (!force && seriesInfos.contains(seriesId))) {
         return;
     }
     if (offlineMode) {

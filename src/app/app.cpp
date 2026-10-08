@@ -20,6 +20,11 @@ namespace {
     const double IDLE_SLEEP_MS = 8;
 }
 
+Session::Session() {
+    static unsigned next = 0;
+    serial = ++next;
+}
+
 Screen::Screen(App &a, bool isModal) : RectangleShape(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H)),
                                        app(a), modal(isModal) {
     setFillColor(isModal ? theme::scrim() : Color::Transparent);
@@ -36,7 +41,8 @@ void Screen::redraw() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
-             profileStore(APP_DATA_DIR), settingsStore(APP_DATA_DIR), xtreamService(jobSystem), vodLibrary(xtreamService, APP_DATA_DIR),
+             profileStore(APP_DATA_DIR), settingsStore(APP_DATA_DIR), xtreamService(jobSystem), m3uService(jobSystem),
+             vodLibrary(xtreamService, APP_DATA_DIR),
              libraryStore(APP_DATA_DIR), imageLoader(jobSystem, APP_DATA_DIR "cache/images") {
     LOG_I("app", "renderer: %s", available ? "OK (SDL2 + OpenGL ES 2 / Piglet)" : "FAILED");
     romfsPath = getIo()->getRomFsPath();
@@ -193,9 +199,96 @@ void App::saveLibrary() {
     }
 }
 
+void App::resetSession() {
+    playlistToken.cancel();
+    currentSession = Session();
+}
+
+void App::setPlaylist(std::shared_ptr<iptv::LiveCatalog> catalog, const m3u::Info &info) {
+    currentSession.pendingLive = std::move(catalog);
+    currentSession.pendingPlaylist = info;
+    applyPendingPlaylist();
+}
+
+void App::applyPendingPlaylist() {
+    Session &s = currentSession;
+    if (!s.pendingLive || s.livePlayers > 0) {
+        return;
+    }
+    s.live = std::move(*s.pendingLive);
+    s.pendingLive.reset();
+    s.playlist = s.pendingPlaylist;
+    s.categories[0] = s.live.categories();
+    s.categoriesLoaded[0] = true;
+    s.liveLoaded = true;
+    s.liveGeneration++;
+    requestRedraw();
+}
+
+void App::notePlaylistLoaded(const std::string &profileId, int channels) {
+    const iptv::Profile *p = profileStore.find(profileId);
+    if (p == nullptr) {
+        return;
+    }
+    iptv::Profile copy = *p;
+    copy.playlistChannels = channels;
+    profileStore.upsert(copy, clockx::unixNow());
+    profileStore.setLastStatus(profileId, i18n::count("m3u.status_channels", channels), clockx::unixNow());
+    std::string err;
+    if (!profileStore.save(&err)) {
+        LOG_E("profiles", "save failed: %s", err.c_str());
+    }
+}
+
+void App::refreshPlaylist(bool manual) {
+    Session &s = currentSession;
+    if (!s.profile.isPlaylist() || !s.connected) {
+        return;
+    }
+    if (s.playlistRefreshing) {
+        if (manual) {
+            toast(i18n::tr("m3u.refresh_running"));
+        }
+        return;
+    }
+    s.playlistRefreshing = true;
+    s.liveGeneration++;   // screens show that a refresh is running
+    unsigned serial = s.serial;
+    std::string profileId = s.profile.id;
+    LOG_I("m3u", "refreshing the playlist (%s)", manual ? "requested" : "saved copy is old");
+    playlistToken = m3uService.load(s.profile, APP_DATA_DIR, M3uService::Source::Network, true,
+                                    [this, serial, profileId, manual](M3uService::Outcome &o) {
+        Session &cur = currentSession;
+        if (cur.serial != serial) {
+            return;   // signed in to another source meanwhile
+        }
+        cur.playlistRefreshing = false;
+        if (o.ok) {
+            int n = (int) o.catalog->channels().size();
+            cur.liveNotice.clear();
+            setPlaylist(o.catalog, o.info);
+            notePlaylistLoaded(profileId, n);
+            if (manual) {
+                toast(i18n::count("m3u.refreshed", n), ToastKind::Success);
+            }
+        } else {
+            // the current list stays
+            cur.liveNotice = i18n::tr("m3u.refresh_failed_notice", {o.message});
+            cur.liveGeneration++;
+            if (manual) {
+                toast(i18n::tr("m3u.refresh_failed", {o.message}), ToastKind::Error);
+            }
+        }
+        requestRedraw();
+    });
+}
+
 void App::syncDownloadProfiles() {
     std::vector<dl::Credentials> creds;
     for (const auto &p: profileStore.profiles()) {
+        if (p.isPlaylist()) {
+            continue;   // downloads come from Xtream sources only
+        }
         dl::Credentials c;
         c.profileId = p.id;
         c.name = p.name;
@@ -353,6 +446,7 @@ void App::logic() {
     if (jobSystem.pump() > 0) {
         requestRedraw();
     }
+    applyPendingPlaylist();   // a refreshed playlist waiting for the live player to close
     if (imageLoader.update(t)) {
         requestRedraw();  // logos became available (at most two new textures per frame)
     }

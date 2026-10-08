@@ -1,5 +1,6 @@
 // Favorites of all types: Channels | Movies | Series tabs (L1/R1). Movies and Series catalogs are loaded
 // lazily (saved copy first) when the screen opens, so their favorites can be shown with posters.
+// Favorites are per source; playlist (M3U) sources only have the Channels tab.
 
 #include "common.h"
 #include "../core/format.h"
@@ -16,6 +17,8 @@ namespace {
     class FavoritesScreen : public Screen {
     public:
         explicit FavoritesScreen(App &a) : Screen(a), listAdapter(this), gridAdapter(this) {
+            tabs = app.session().profile.isPlaylist() ? 1 : 3;
+            liveGen = app.session().liveGeneration;
             ui::background(this);
             screens::header(this, tr("home.favorites"));
             tabLayer = new RectangleShape(FloatRect(theme::SAFE_X, 140, 1200, 60));
@@ -41,6 +44,7 @@ namespace {
         const char *name() const override { return "favorites"; }
 
         void onResume() override {
+            liveGen = app.session().liveGeneration;
             rebuild();
         }
 
@@ -49,7 +53,9 @@ namespace {
         }
 
         void tick(double) override {
-            if (app.vod().generation() != vodGen || app.images().generation() != imageGen) {
+            if (app.vod().generation() != vodGen || app.images().generation() != imageGen
+                || app.session().liveGeneration != liveGen) {
+                liveGen = app.session().liveGeneration;
                 imageGen = app.images().generation();
                 rebuild();
                 redraw();
@@ -61,7 +67,7 @@ namespace {
                 case PadButton::L1:
                 case PadButton::R1: {
                     int t = tab + (e.button == PadButton::L1 ? -1 : 1);
-                    if (!e.repeat && t >= 0 && t < 3) {
+                    if (!e.repeat && t >= 0 && t < tabs) {
                         tab = t;
                         rebuild();
                     }
@@ -76,13 +82,13 @@ namespace {
                     if (tab == 0) {
                         if (dy != 0) {
                             channels->moveSelection(dy);
-                        } else if (dx != 0 && !e.repeat) {
-                            tab = dx > 0 ? 1 : tab;
+                        } else if (dx > 0 && !e.repeat && tabs > 1) {
+                            tab = 1;
                             rebuild();
                         }
                     } else if (!grid->navigate(dx, dy) && dx != 0 && !e.repeat) {
                         int t = tab + dx;
-                        if (t >= 0 && t < 3) {
+                        if (t >= 0 && t < tabs) {
                             tab = t;
                             rebuild();
                         }
@@ -227,12 +233,7 @@ namespace {
         };
 
         std::string categoryName(const std::string &id) const {
-            for (const auto &c: app.session().live.categories()) {
-                if (c.id == id) {
-                    return c.name;
-                }
-            }
-            return "";
+            return app.session().live.categoryName(id);   // Uncategorized in the current UI language
         }
 
         void itemInfo(int index, std::string &title, std::string &image) const {
@@ -265,7 +266,7 @@ namespace {
                 delete c;
             }
             float x = 0;
-            for (int t = 0; t < 3; t++) {
+            for (int t = 0; t < tabs; t++) {
                 bool sel = t == tab;
                 std::string text = tr(TAB_KEYS[t]) + "  " + std::to_string(counts[t]);
                 auto *chip = ui::box(tabLayer, FloatRect(x, 0, 260, 56), sel ? theme::accent() : theme::surface(), 28);
@@ -359,6 +360,8 @@ namespace {
         std::vector<int> liveItems;
         std::vector<int> vodItems;
         int tab = 0;
+        int tabs = 3;            // Channels, Movies, Series (playlist sources: Channels only)
+        unsigned liveGen = 0;
         unsigned vodGen = 0;
         unsigned imageGen = 0;
     };

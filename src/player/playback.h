@@ -30,6 +30,7 @@ enum class PlaybackError {
     HttpClient,       // 401 / 404: retrying does not help
     HttpOther,        // other HTTP errors (5xx...)
     HttpsUnsupported,
+    UnsupportedProtocol,  // rtsp://, mms://, srt://...: not in this FFmpeg build
     Network,          // DNS / connect / timeout
     Demux,
     UnsupportedCodec,
@@ -91,6 +92,14 @@ public:
 
     // `format` is shown in the info overlay ("TS", "HLS", "mkv"...). URL is never logged unredacted.
     void open(const std::string &url, const std::string &format, const OpenOptions &options);
+
+    // Media protocols the linked FFmpeg 5.0 build can open (audited in its protocol table: file, ftp, http,
+    // rtmp, rtp, tcp, udp; no https / tls). Returns false with the user-facing reason otherwise.
+    static bool protocolSupported(const std::string &url, std::string *why = nullptr);
+
+    // HTTP User-Agent for the next open() (mpv's "user-agent" option). "" restores mpv's own default, which
+    // Xtream playback has always used; a playlist's #EXTVLCOPT:http-user-agent / custom User-Agent sets it.
+    void setUserAgent(const std::string &userAgent);
 
     void open(const std::string &url, const std::string &format);   // Live TV: no start, no subtitles
 
@@ -191,6 +200,8 @@ private:
     std::vector<tracks::Track> trackItems;
     std::function<std::pair<int, int>(const std::vector<tracks::Track> &)> chooser;
     bool subtitleRenderFailed = false;
+    std::string defaultUserAgent;   // mpv's value at init (restored after a playlist's own User-Agent)
+    bool userAgentChanged = false;
 
     void readTracks();
 

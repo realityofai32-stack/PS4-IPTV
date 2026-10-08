@@ -27,6 +27,9 @@ namespace fmt {
 
     // "1080p" / "720p" / "4K" from a frame height ("" when unknown)
     std::string resolution(int width, int height);
+
+    // "19,797" / "19.797" (thousands separator of the UI language)
+    std::string number(long long n);
 }
 
 #endif // PS4IPTV_CORE_FORMAT_H

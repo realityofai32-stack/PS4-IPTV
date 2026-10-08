@@ -4,6 +4,10 @@
 // When the provider cannot be reached (no network, server down, expired account...), "Continue offline" opens
 // Home with the saved channel / movie / series lists and the Downloads section: completed downloads play
 // without any provider request. It is focused first when the failure is a network one and downloads exist.
+//
+// Playlist (M3U / M3U8) sources have no sign-in: the saved playlist opens Home at once and is refreshed in the
+// background when it is older than M3uService::REFRESH_AFTER. Only a source without a saved playlist waits for
+// the download (a failure offers Retry / Edit / Profiles; there is nothing to continue offline with).
 
 #include "common.h"
 #include "../iptv/xtream.h"
@@ -30,10 +34,13 @@ namespace {
             auto *t = ui::label(this, tr("connect.title", {p.name}), theme::TITLE, 0, 230, ui::Weight::SemiBold);
             t->setAlign(ui::Align::Center, theme::SCREEN_W);
             t->setMaxWidth(1400);
-            auto *h = ui::label(this, screens::hostOf(p.server), theme::BODY, 0, 300, ui::Weight::Regular,
+            auto *h = ui::label(this, screens::sourceLocation(p), theme::BODY, 0, 300, ui::Weight::Regular,
                                 theme::textDim());
             h->setAlign(ui::Align::Center, theme::SCREEN_W);
-            const char *names[] = {"connect.step_account", "connect.step_live"};
+            h->setMaxWidth(1400);
+            const char *xtreamSteps[] = {"connect.step_account", "connect.step_live"};
+            const char *playlistSteps[] = {"connect.step_saved_playlist", "connect.step_download_playlist"};
+            const char **names = p.isPlaylist() ? playlistSteps : xtreamSteps;
             float x = (theme::SCREEN_W - 760) / 2;
             for (int i = 0; i < STEPS; i++) {
                 Step &s = steps[i];
@@ -94,7 +101,7 @@ namespace {
 
         void handleInput(const InputEvent &e) override {
             if (failed) {
-                if (e.button == PadButton::Left && focus > 0) {
+                if (e.button == PadButton::Left && focus > firstButton()) {
                     focus--;
                 } else if (e.button == PadButton::Right && focus < BUTTONS - 1) {
                     focus++;
@@ -168,7 +175,11 @@ namespace {
             for (int i = 0; i < STEPS; i++) {
                 setStep(i, State::Pending, "");
             }
-            app.session() = Session();
+            app.resetSession();
+            if (profile.isPlaylist()) {
+                startPlaylist();
+                return;
+            }
             setStep(0, State::Running, tr("connect.signing_in"));
             // the token is canceled in the destructor, so the callback never runs after this screen is gone
             token = app.xtream().authenticate(profile, [this](const XtreamService::AuthOutcome &o) {
@@ -213,8 +224,8 @@ namespace {
                 b->setVisibility(Visibility::Hidden);
             }
             message->setText("");
+            app.resetSession();
             Session &s = app.session();
-            s = Session();
             s.profile = profile;
             s.offline = true;
             app.library().setProfile(profile.id);
@@ -249,14 +260,74 @@ namespace {
             }, cacheOnly);
         }
 
+        // ------------------------------------------------------------------ playlist sources
+        void startPlaylist() {
+            Session &s = app.session();
+            s.profile = profile;
+            app.library().setProfile(profile.id);
+            app.vod().reset();
+            app.vod().setOffline(false);
+            setStep(0, State::Running, tr("connect.loading_saved"));
+            token = app.m3u().load(profile, APP_DATA_DIR, M3uService::Source::Cache, false, [this](M3uService::Outcome &o) {
+                if (!o.ok) {
+                    setStep(0, State::Done, tr("connect.no_saved_playlist"));
+                    downloadPlaylist();
+                    return;
+                }
+                setStep(0, State::Done, playlistDetail(o));
+                bool stale = clockx::unixNow() - o.info.savedAt > M3uService::REFRESH_AFTER;
+                setStep(1, State::Done, tr(stale ? "connect.update_background" : "connect.playlist_current"));
+                finishPlaylist(o, stale);
+            });
+        }
+
+        void downloadPlaylist() {
+            setStep(1, State::Running, tr("connect.downloading_playlist"));
+            token = app.m3u().load(profile, APP_DATA_DIR, M3uService::Source::Network, true, [this](M3uService::Outcome &o) {
+                if (!o.ok) {
+                    setStep(1, State::Failed, o.message);
+                    app.profiles().setLastStatus(profile.id, o.message, clockx::unixNow());
+                    app.profiles().save();
+                    fail(o.networkFailure ? tr("connect.check_playlist_network", {o.message}) : o.message, false);
+                    return;
+                }
+                setStep(1, State::Done, playlistDetail(o));
+                finishPlaylist(o, false);
+            });
+        }
+
+        static std::string playlistDetail(const M3uService::Outcome &o) {
+            return i18n::count("connect.categories", (long long) o.catalog->categories().size()) + "  \xE2\x80\xA2  "
+                   + i18n::count("home.channels", (long long) o.catalog->channels().size());
+        }
+
+        void finishPlaylist(M3uService::Outcome &o, bool refreshAfter) {
+            int channels = (int) o.catalog->channels().size();
+            Session &s = app.session();
+            s.connected = true;
+            app.setPlaylist(o.catalog, o.info);
+            app.notePlaylistLoaded(profile.id, channels);
+            LOG_I("connect", "playlist ready: %d groups / %d channels%s", (int) s.live.categories().size(), channels,
+                  refreshAfter ? ", refreshing in the background" : "");
+            app.replaceAll(screens::makeHome(app));
+            if (refreshAfter) {
+                app.refreshPlaylist(false);
+            }
+        }
+
+        // playlist sources have nothing to continue offline with: the buttons start at Retry
+        int firstButton() const {
+            return profile.isPlaylist() ? BTN_RETRY : BTN_OFFLINE;
+        }
+
         void fail(const std::string &msg, bool networkProblem) {
             failed = true;
             message->setText(msg);
             // with downloads on the console and no connection, watching them is the likely wish
             dl::Totals t = app.downloads().totals();
-            focus = networkProblem && t.completed > 0 ? BTN_OFFLINE : BTN_RETRY;
+            focus = networkProblem && t.completed > 0 && !profile.isPlaylist() ? BTN_OFFLINE : BTN_RETRY;
             for (int i = 0; i < BUTTONS; i++) {
-                buttons[i]->setVisibility(Visibility::Visible);
+                buttons[i]->setVisibility(i >= firstButton() ? Visibility::Visible : Visibility::Hidden);
                 buttons[i]->setFocused(i == focus);
             }
             hints->setHints({{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("connect.profiles")}});

@@ -3,6 +3,10 @@
 // Lists are virtualized (ui::ListView: only the rows on screen exist and are re-bound when scrolling).
 // Channel logos come from ImageLoader: the selected channel, the visible rows and - once scrolling pauses
 // - a small window above/below are requested; rows show the initials until a logo is ready.
+//
+// Playlist (M3U) sources use the same browser: Favorites, All Channels, then the playlist's groups in playlist
+// order (Uncategorized last). Options opens Refresh Playlist / Playlist Info. A refreshed playlist replaces the
+// catalog (Session::liveGeneration): the screen rebuilds from channel / category ids, never from old indices.
 
 #include <unordered_map>
 
@@ -50,7 +54,13 @@ namespace {
     public:
         LiveScreen(App &a, bool startOnFavorites) : Screen(a), categoriesAdapter(this), channelsAdapter(this) {
             ui::background(this);
-            screens::header(this, tr("home.live_tv"), app.session().liveNotice);
+            playlist = app.session().profile.isPlaylist();
+            screens::header(this, tr("home.live_tv"));
+            notice = ui::label(this, "", theme::LABEL, theme::SAFE_X, theme::SAFE_Y + 62, ui::Weight::Regular,
+                               theme::textDim());
+            notice->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
+            generation = app.session().liveGeneration;
+            updateNotice();
 
             ui::label(this, tr("live.categories_caption"), theme::CAPTION, CAT_X + 20, TOP - 40, ui::Weight::SemiBold,
                       theme::textMuted());
@@ -81,6 +91,9 @@ namespace {
         }
 
         void onResume() override {
+            if (app.session().liveGeneration != generation) {
+                listReplaced();   // refreshed while another screen was on top
+            }
             // favorites may have changed in the player or in search
             categoryList->reload();
             if (categoryList->selected() == FAVORITES_ROW) {
@@ -104,6 +117,10 @@ namespace {
         }
 
         void tick(double now) override {
+            if (app.session().liveGeneration != generation) {
+                listReplaced();
+                redraw();
+            }
             unsigned gen = app.images().generation();
             if (gen != logoGeneration) {
                 logoGeneration = gen;
@@ -178,6 +195,11 @@ namespace {
                         app.push(screens::makeSearch(app));
                     }
                     return;
+                case PadButton::Options:
+                    if (!e.repeat && playlist) {
+                        playlistMenu();
+                    }
+                    return;
                 case PadButton::Circle:
                     if (e.repeat) {
                         return;
@@ -239,7 +261,7 @@ namespace {
                         n = (int) live.channels().size();
                     } else {
                         const Category &c = live.categories()[(size_t) (index - FIRST_CATEGORY_ROW)];
-                        name = c.name;
+                        name = live.categoryName(c.id);   // Uncategorized in the current UI language
                         n = live.countInCategory(c.id);
                     }
                     r.name->setText(name);
@@ -351,6 +373,7 @@ namespace {
 
         void refreshDetails() {
             const LiveChannel *c = selectedChannel();
+            focusedId = c ? c->id : std::string();
             bool show = c != nullptr;
             for (C2DObject *o: std::initializer_list<C2DObject *>{detailLogo, detailName, detailCategory, detailNumber,
                                                                   detailFav, watch}) {
@@ -383,12 +406,50 @@ namespace {
 
         // ------------------------------------------------------------------ behaviour
         std::string categoryName(const std::string &id) const {
-            for (const auto &cat: app.session().live.categories()) {
-                if (cat.id == id) {
-                    return cat.name;
+            return app.session().live.categoryName(id);
+        }
+
+        // ------------------------------------------------------------------ playlist sources
+        void updateNotice() {
+            const Session &s = app.session();
+            notice->setText(playlist && s.playlistRefreshing ? tr("m3u.refreshing") : s.liveNotice);
+        }
+
+        void playlistMenu() {
+            app.push(screens::makeMenu(app, tr("m3u.options"), {tr("m3u.refresh"), tr("m3u.info")}, -1,
+                                       whileAlive([this](int c) {
+                                           if (c == 0) {
+                                               app.refreshPlaylist(true);
+                                               updateNotice();
+                                           } else if (c == 1) {
+                                               app.push(screens::makePlaylistInfo(app));
+                                           }
+                                       })));
+        }
+
+        // the catalog was replaced (playlist refresh): every index this screen holds is stale. Rebuild from the
+        // open category's id and the focused channel's id.
+        void listReplaced() {
+            generation = app.session().liveGeneration;
+            std::string categoryId = openCategoryId;
+            std::string keep = focusedId;
+            visible.clear();                 // never read through an old index again
+            lastInCategory.clear();
+            categoryList->reload();
+            int row = currentCategoryRow < FIRST_CATEGORY_ROW ? std::max(currentCategoryRow, 0) : ALL_ROW;
+            const auto &cats = app.session().live.categories();
+            for (size_t i = 0; i < cats.size() && !categoryId.empty(); i++) {
+                if (cats[i].id == categoryId) {
+                    row = FIRST_CATEGORY_ROW + (int) i;
                 }
             }
-            return "";
+            categoryList->setSelected(row);
+            currentCategoryRow = -1;
+            lastInCategory[row] = keep;
+            selectCategory(row);
+            channelList->reload();
+            updateNotice();
+            requestLogos(true);
         }
 
         std::string selectedStreamId() const {
@@ -420,8 +481,10 @@ namespace {
             } else {
                 const Category &cat = live.categories()[(size_t) (row - FIRST_CATEGORY_ROW)];
                 visible = live.inCategory(cat.id);
-                caption = cat.name;
+                caption = live.categoryName(cat.id);
             }
+            openCategoryId = row >= FIRST_CATEGORY_ROW ? live.categories()[(size_t) (row - FIRST_CATEGORY_ROW)].id
+                                                       : std::string();
             channelCaption->setText(visible.empty() ? caption : caption + "  \xC2\xB7  " + std::to_string(visible.size()));
             int index = 0;
             if (!keep.empty()) {
@@ -450,16 +513,20 @@ namespace {
             focus = f;
             categoryList->setFocused(focus == 0);
             channelList->setFocused(focus == 1);
+            screens::Hints h;
             if (focus == 0) {
-                hints->setHints({{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
-                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::Triangle, tr("home.search")},
-                                 {ui::Glyph::Circle, tr("common.back")}});
+                h = {{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
+                     {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::Triangle, tr("home.search")}};
             } else {
-                hints->setHints({{ui::Glyph::Cross, tr("live.watch")}, {ui::Glyph::Square, tr("common.favorite")},
-                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::L1, ""},
-                                 {ui::Glyph::R1, tr("live.category")}, {ui::Glyph::Triangle, tr("home.search")},
-                                 {ui::Glyph::Circle, tr("live.categories")}});
+                h = {{ui::Glyph::Cross, tr("live.watch")}, {ui::Glyph::Square, tr("common.favorite")},
+                     {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::L1, ""},
+                     {ui::Glyph::R1, tr("live.category")}, {ui::Glyph::Triangle, tr("home.search")}};
             }
+            if (playlist) {
+                h.push_back({ui::Glyph::Options, tr("m3u.options")});
+            }
+            h.push_back({ui::Glyph::Circle, tr(focus == 0 ? "common.back" : "live.categories")});
+            hints->setHints(h);
             refreshDetails();
         }
 
@@ -545,6 +612,11 @@ namespace {
         int currentCategoryRow = -1;
         int focus = 0;
         std::string returnStreamId;
+        std::string focusedId;        // the selected channel (survives a catalog replacement)
+        std::string openCategoryId;   // "" for Favorites / All Channels
+        ui::Label *notice = nullptr;
+        bool playlist = false;
+        unsigned generation = 0;
         unsigned logoGeneration = 0;
         double lastMoveAt = 0;
         bool prefetchPending = true;

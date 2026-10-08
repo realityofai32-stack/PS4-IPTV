@@ -56,6 +56,19 @@ namespace fmt {
         return buf;
     }
 
+    std::string number(long long n) {
+        std::string digits = std::to_string(n < 0 ? -n : n);
+        const std::string &sep = i18n::tr("format.thousands_sep");
+        std::string out = n < 0 ? "-" : "";
+        for (size_t i = 0; i < digits.size(); i++) {
+            if (i > 0 && (digits.size() - i) % 3 == 0) {
+                out += sep;
+            }
+            out += digits[i];
+        }
+        return out;
+    }
+
     std::string rating(float r) {
         if (r <= 0) {
             return "";

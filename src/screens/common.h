@@ -28,6 +28,13 @@ namespace screens {
 
     std::string hostOf(const std::string &server);
 
+    // "Xtream Codes" / "M3U / M3U8"
+    std::string sourceTypeName(iptv::SourceType type);
+
+    // where a source is, safe to show: the Xtream host, or the playlist's host and file name (never the
+    // credentials / tokens a playlist URL may contain)
+    std::string sourceLocation(const iptv::Profile &profile);
+
     std::string mask(const std::string &secret);
 
     // "Active - expires 21 Sep 2027 - 0/1 connections"

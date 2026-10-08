@@ -5,11 +5,16 @@
 // "Buffering...", when to reconnect (bounded, with back-off), when to try the other stream format, how
 // long to wait after HTTP 403, and when to give up. Circle always leaves (cancelling any pending retry);
 // X retries at once.
+//
+// Playlist (M3U) channels play their media URL as-is through the same backend: no Xtream URL, no TS / HLS
+// format fallback (the playlist decides the format), the entry's #EXTVLCOPT User-Agent or the source's custom
+// one. URLs the FFmpeg build cannot open (https, rtsp...) fail at once with a localized reason.
 
 #include <cmath>
 
 #include "common.h"
 #include "../player/display.h"
+#include "../iptv/m3u.h"
 #include "../iptv/xtream.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
@@ -26,6 +31,35 @@ namespace {
     const float CENTRE_H = 300;
     const float PILL_W = 460;
     const float PILL_H = 72;
+
+    // i18n-exempt-begin: technical stream format names
+    // "HLS" / "MPEG-TS" / "MP4" / "RTMP": what the info overlay calls a playlist channel's stream
+    std::string playlistFormat(const std::string &url) {
+        std::string key = m3u::stableUrlKey(url);
+        std::string ext;
+        size_t slash = key.rfind('/');
+        size_t dot = key.rfind('.');
+        if (dot != std::string::npos && (slash == std::string::npos || dot > slash)) {
+            for (size_t i = dot + 1; i < key.size(); i++) {
+                ext += (char) std::toupper((unsigned char) key[i]);
+            }
+        }
+        if (ext == "M3U8") {
+            return "HLS";
+        }
+        if (ext == "TS") {
+            return "MPEG-TS";
+        }
+        if (!ext.empty() && ext.size() <= 5) {
+            return ext;
+        }
+        std::string scheme = m3u::schemeOf(url);
+        for (char &c: scheme) {
+            c = (char) std::toupper((unsigned char) c);
+        }
+        return scheme;
+    }
+    // i18n-exempt-end
 
     stability::FormatSetting formatSetting(StreamFormat f) {
         return f == StreamFormat::Ts ? stability::FormatSetting::PreferTs
@@ -81,6 +115,7 @@ namespace {
                 : Screen(a), list(std::move(channelList)), index(start), onExit(std::move(exitCallback)) {
             setFillColor(Color::Black);
             app.setPlaybackActive(true);   // downloads pause while a stream is decoded
+            app.session().livePlayers++;   // a refreshed playlist waits: `list` holds indices into the catalog
             video = new VideoTexture(app.playback().backend(), {theme::SCREEN_W, theme::SCREEN_H});
             add(video);
 
@@ -145,7 +180,9 @@ namespace {
 
         ~LivePlayerScreen() override {
             app.playback().stop();
+            app.playback().setUserAgent("");
             app.setPlaybackActive(false);
+            app.session().livePlayers--;
         }
 
         const char *name() const override { return "live-player"; }
@@ -249,15 +286,6 @@ namespace {
             return app.session().live.channels()[(size_t) list[(size_t) i]];
         }
 
-        std::string categoryName(const std::string &id) const {
-            for (const auto &c: app.session().live.categories()) {
-                if (c.id == id) {
-                    return c.name;
-                }
-            }
-            return "";
-        }
-
         void zap(int delta) {
             int base = pendingIndex >= 0 ? pendingIndex : index;
             int n = (int) list.size();
@@ -274,8 +302,14 @@ namespace {
             index = i;
             historyRecorded = false;
             const Settings &s = app.settings().get();
-            plan = stability::planFormats(formatSetting(s.streamFormat), app.session().account.outputFormats,
-                                          app.session().learnedLiveFormat);
+            if (channel(index).isPlaylist()) {
+                // the playlist's URL is the stream: no alternative format to fall back to
+                plan = stability::FormatPlan();
+                plan.first = playlistFormat(channel(index).url) == "HLS" ? "m3u8" : "ts";
+            } else {
+                plan = stability::planFormats(formatSetting(s.streamFormat), app.session().account.outputFormats,
+                                              app.session().learnedLiveFormat);
+            }
             format = plan.first;
             preset = s.stability;
             recovery.begin(stability::policy(preset), s.retryOnStall, !plan.fallback.empty(), app.now());
@@ -294,8 +328,15 @@ namespace {
             // Options panel must not carry over to Live TV)
             pb.applyOptions(display::mpvOptions(app.settings().get().defaultGeometry(), (int) theme::SCREEN_W,
                                                 (int) theme::SCREEN_H));
-            std::string url = xtream::liveUrl(app.session().profile, channel(index).id, format);
-            pb.open(url, format == "ts" ? "MPEG-TS" : "HLS");
+            const LiveChannel &c = channel(index);
+            if (c.isPlaylist()) {
+                pb.setUserAgent(c.userAgent.empty() ? app.session().profile.userAgent : c.userAgent);
+                pb.open(c.url, playlistFormat(c.url));
+            } else {
+                pb.setUserAgent("");
+                std::string url = xtream::liveUrl(app.session().profile, c.id, format);
+                pb.open(url, format == "ts" ? "MPEG-TS" : "HLS");
+            }
             video->resetFrameStats();
             refresh(app.now());
         }
@@ -383,7 +424,7 @@ namespace {
             int shown = pendingIndex >= 0 ? pendingIndex : index;
             const LiveChannel &c = channel(shown);
             title->setText((c.num > 0 ? std::to_string(c.num) + "   " : std::string()) + c.name);
-            subtitle->setText(categoryName(c.categoryId));
+            subtitle->setText(app.session().live.categoryName(c.categoryId));
             clock->setText(clockx::localTime());
             fav->setText(app.library().isFavorite(ContentType::Live, c.id) ? "\xE2\x98\x85 " + tr("common.favorite") : "");
 

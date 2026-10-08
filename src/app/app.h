@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "cross2d/c2d.h"
+#include "m3u_service.h"
 #include "screen.h"
 #include "vod_library.h"
 #include "xtream_service.h"
@@ -30,8 +31,11 @@ namespace ui {
     class Label;
 }
 
-// state of the signed-in profile
+// state of the signed-in profile (source)
 struct Session {
+    Session();
+
+    unsigned serial;                             // differs for every sign-in: late callbacks check it
     bool connected = false;
     // the provider could not be reached at sign-in and the user continued with saved lists and downloads
     bool offline = false;
@@ -45,6 +49,16 @@ struct Session {
     std::string liveNotice;                      // e.g. "showing the saved list"
     std::string learnedLiveFormat;               // Auto format: "ts"/"m3u8" that played after a fallback
     std::set<std::string> seenLanguages;         // track languages met in played files (offered in Settings)
+
+    // the channel list changed (playlist refresh): screens holding indices into `live` rebuild
+    unsigned liveGeneration = 0;
+    // live player screens open: they hold indices into `live`, so a refreshed playlist waits until they close
+    int livePlayers = 0;
+    // playlist sources
+    m3u::Info playlist;                          // what the current list is (Playlist Info)
+    bool playlistRefreshing = false;
+    std::shared_ptr<iptv::LiveCatalog> pendingLive;   // refreshed list waiting for livePlayers == 0
+    m3u::Info pendingPlaylist;
 };
 
 enum class ToastKind {
@@ -93,10 +107,25 @@ public:
 
     XtreamService &xtream() { return xtreamService; }
 
+    M3uService &m3u() { return m3uService; }
+
     // Movies / Series catalogs (lazy) and their detail caches
     VodLibrary &vod() { return vodLibrary; }
 
     Session &session() { return currentSession; }
+
+    // a new sign-in starts: forgets the current source's session (pending playlist refreshes are dropped)
+    void resetSession();
+
+    // playlist sources: replaces the channel list now, or once no live player holds indices into it
+    void setPlaylist(std::shared_ptr<iptv::LiveCatalog> catalog, const m3u::Info &info);
+
+    // playlist sources: downloads the playlist again in the background. The list on screen is replaced only
+    // by a valid new playlist; on failure it stays (manual: the outcome is toasted).
+    void refreshPlaylist(bool manual);
+
+    // stores a playlist source's channel count / status after a load (Profiles shows it)
+    void notePlaylistLoaded(const std::string &profileId, int channels);
 
     LibraryStore &library() { return libraryStore; }
 
@@ -134,6 +163,8 @@ private:
 
     void updateVisibility();
 
+    void applyPendingPlaylist();
+
     bool running = true;
     bool inDrawPass = false;
     bool dirty = true;
@@ -146,6 +177,8 @@ private:
     ProfileStore profileStore;
     SettingsStore settingsStore;
     XtreamService xtreamService;
+    M3uService m3uService;
+    CancelToken playlistToken;
     VodLibrary vodLibrary;
     LibraryStore libraryStore;
     Playback player;

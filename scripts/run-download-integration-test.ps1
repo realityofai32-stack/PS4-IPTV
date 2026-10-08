@@ -40,6 +40,18 @@ $libs = "`"$Curl\lib\libcurl.lib`" ws2_32.lib crypt32.lib advapi32.lib wldap32.l
 cmd /c "$vcvars >nul && $cl /Fe`"$Out\download_it.exe`" /Fo`"$obj\\`" $src /link $libs"
 if ($LASTEXITCODE -ne 0) { throw 'download_it build failed' }
 
+# M3U playlist sources: M3uService + the app's libcurl HTTP client against the same server
+$m3uSources = @("$h\test_main.cpp", "$h\m3u_it.cpp", "$s\app\m3u_service.cpp", "$s\network\http.cpp",
+    "$s\network\jobs.cpp", "$s\iptv\m3u.cpp", "$s\iptv\catalog.cpp", "$s\iptv\search_index.cpp", "$s\iptv\xtream.cpp",
+    "$s\storage\catalog_cache.cpp", "$s\platform\fs.cpp", "$s\platform\log.cpp", "$s\platform\redact.cpp",
+    "$s\platform\clock.cpp", "$s\core\json.cpp", "$s\core\utf8.cpp", "$s\core\url.cpp", "$s\i18n\i18n.cpp",
+    "$s\i18n\strings_en.cpp", "$s\i18n\strings_tr.cpp")
+$m3uObj = Join-Path $Out 'obj-m3u_it'
+New-Item -ItemType Directory -Force $m3uObj | Out-Null
+$m3uSrc = ($m3uSources | ForEach-Object { "`"$_`"" }) -join ' '
+cmd /c "$vcvars >nul && $cl /Fe`"$Out\m3u_it.exe`" /Fo`"$m3uObj\\`" $m3uSrc /link $libs"
+if ($LASTEXITCODE -ne 0) { throw 'm3u_it build failed' }
+
 $portFile = Join-Path $Out 'download-test-server.port'
 Remove-Item $portFile -ErrorAction SilentlyContinue
 $server = Start-Process -FilePath $python.Source -ArgumentList @('-I', "`"$PSScriptRoot\download-test-server.py`"", "`"$portFile`"") -PassThru -WindowStyle Hidden
@@ -52,6 +64,8 @@ try {
     New-Item -ItemType Directory -Force $env:PS4IPTV_TEST_TMP | Out-Null
     & "$Out\download_it.exe"
     $failed = $LASTEXITCODE -ne 0
+    & "$Out\m3u_it.exe"
+    $failed = $failed -or ($LASTEXITCODE -ne 0)
 } finally {
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
 }

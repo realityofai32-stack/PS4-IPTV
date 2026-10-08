@@ -1,3 +1,4 @@
+#include <cctype>
 #include <cmath>
 #include <cstring>
 
@@ -91,7 +92,59 @@ bool Playback::init(const std::string &configDir) {
     char *v = mpv_get_property_string(h, "mpv-version");
     LOG_I("player", "pPlay playback backend ready: %s", v ? v : "?");
     mpv_free(v);
+    char *ua = mpv_get_property_string(h, "user-agent");
+    defaultUserAgent = ua ? ua : "";
+    mpv_free(ua);
     return true;
+}
+
+bool Playback::protocolSupported(const std::string &url, std::string *why) {
+    std::string scheme;
+    size_t sep = url.find("://");
+    if (sep != std::string::npos) {
+        for (size_t i = 0; i < sep; i++) {
+            scheme += (char) std::tolower((unsigned char) url[i]);
+        }
+    }
+    if (scheme == "https") {
+        if (why) {
+            *why = i18n::tr("player.https_unsupported");
+        }
+        return false;
+    }
+    static const char *const SUPPORTED[] = {"http", "rtmp", "rtp", "udp", "tcp", "ftp", "file"};
+    if (sep == std::string::npos && !url.empty() && url[0] == '/') {
+        return true;   // a local file (downloads)
+    }
+    for (const char *s: SUPPORTED) {
+        if (scheme == s) {
+            return true;
+        }
+    }
+    if (why) {
+        std::string shown = scheme.empty() ? "?" : scheme;
+        for (char &c: shown) {
+            c = (char) std::toupper((unsigned char) c);
+        }
+        *why = i18n::tr("player.protocol_unsupported", {shown});
+    }
+    return false;
+}
+
+void Playback::setUserAgent(const std::string &userAgent) {
+    if (!available()) {
+        return;
+    }
+    if (userAgent.empty()) {
+        if (userAgentChanged && !defaultUserAgent.empty()) {
+            mpv_set_option_string(mpv->getHandle(), "user-agent", defaultUserAgent.c_str());
+        }
+        userAgentChanged = false;
+        return;
+    }
+    int res = mpv_set_option_string(mpv->getHandle(), "user-agent", userAgent.c_str());
+    userAgentChanged = true;
+    LOG_I("player", "custom User-Agent for this stream%s", res < 0 ? " not accepted by mpv" : "");
 }
 
 void Playback::shutdown() {
@@ -137,9 +190,12 @@ void Playback::open(const std::string &url, const std::string &format, const Ope
     subtitleRenderFailed = false;
     redact::addUrl(url);
 
-    if (url.compare(0, 8, "https://") == 0) {
+    std::string why;
+    if (!protocolSupported(url, &why)) {
         // pPlay's FFmpeg build has no https/tls protocol (verified: file ftp http rtmp rtp tcp udp)
-        fail(PlaybackError::HttpsUnsupported, i18n::tr("player.https_unsupported"), "https URL");
+        bool https = url.compare(0, 8, "https://") == 0;
+        fail(https ? PlaybackError::HttpsUnsupported : PlaybackError::UnsupportedProtocol, why,
+             https ? "https URL" : "unsupported protocol");
         return;
     }
 
@@ -225,6 +281,7 @@ stability::FailKind Playback::failKind() const {
             return stability::FailKind::Refused;
         case PlaybackError::HttpClient:
         case PlaybackError::HttpsUnsupported:
+        case PlaybackError::UnsupportedProtocol:
         case PlaybackError::UnsupportedCodec:
         case PlaybackError::Renderer:
         case PlaybackError::Audio:

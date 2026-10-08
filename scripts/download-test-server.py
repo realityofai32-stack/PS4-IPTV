@@ -15,8 +15,17 @@ Modes:
   slow      like plain, sent in 32 KB pieces with a pause between them
   big       5 GiB + id bytes (only the requested range is generated)
   missing   404
+Playlists (M3U fetch test): /m3u/<mode>/<entries>.m3u with mode
+  plain     generated Extended M3U (Content-Length)
+  gzip      the same, Content-Encoding: gzip when the client accepts it
+  redirect  302 to /m3u/plain/...
+  slow      the same in 8 KB pieces with a pause (cancellation)
+  ua        403 unless the User-Agent is "ExamplePlaylistAgent/1.0"
+  html      200 with an HTML page (not a playlist)
+  missing   404
 Control: /_log (JSON list of requests), /_reset. Listens on 127.0.0.1, port written to the file in argv[1].
 """
+import gzip
 import json
 import sys
 import threading
@@ -26,6 +35,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 LOG = []
 SEEN = set()
 LOCK = threading.Lock()
+
+
+def playlist(n):
+    lines = ['#EXTM3U']
+    for i in range(n):
+        group = 'Group %d' % (i % 40)
+        lines.append('#EXTINF:-1 tvg-id="ch%d.example" tvg-logo="http://img.example.com/%d.png" group-title="%s",'
+                     'Channel %d' % (i, i, group, i))
+        lines.append('http://stream.example.com/exampleuser/examplepass/%d.ts' % (100000 + i))
+    return ('\n'.join(lines) + '\n').encode('utf-8')
 
 
 def byte_at(i):
@@ -83,6 +102,12 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         parts = path.strip('/').split('/')
+        if len(parts) == 3 and parts[0] == 'm3u':
+            with LOCK:
+                LOG.append({'path': path, 'agent': self.headers.get('User-Agent', ''),
+                            'encoding': self.headers.get('Accept-Encoding', '')})
+            self.serve_playlist(parts[1], parts[2])
+            return
         rng = self.headers.get('Range', '')
         if_range = self.headers.get('If-Range', '')
         with LOCK:
@@ -146,6 +171,44 @@ class Handler(BaseHTTPRequestHandler):
             self.send_body(start, size - 1, chunk=32 * 1024, delay=0.02)
         else:
             self.send_body(start, size - 1)
+
+    def serve_playlist(self, mode, name):
+        if mode == 'missing':
+            self.reply_status(404)
+            return
+        if mode == 'redirect':
+            self.send_response(302)
+            self.send_header('Location', '/m3u/plain/' + name)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+            return
+        if mode == 'ua' and self.headers.get('User-Agent', '') != 'ExamplePlaylistAgent/1.0':
+            self.reply_status(403)
+            return
+        if mode == 'html':
+            body = b'<!DOCTYPE html><html><body>Not a playlist</body></html>'
+        else:
+            n = int(name.split('.')[0]) if name.split('.')[0].isdigit() else 0
+            body = playlist(n)
+        encoded = mode == 'gzip' and 'gzip' in self.headers.get('Accept-Encoding', '')
+        if encoded:
+            body = gzip.compress(body)
+        self.send_response(200)
+        self.send_header('Content-Type', 'audio/x-mpegurl')
+        if encoded:
+            self.send_header('Content-Encoding', 'gzip')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        try:
+            if mode == 'slow':
+                for i in range(0, len(body), 8192):
+                    self.wfile.write(body[i:i + 8192])
+                    self.wfile.flush()
+                    time.sleep(0.05)
+            else:
+                self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
 
     def reply_status(self, status):
         body = b'error'

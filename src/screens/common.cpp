@@ -1,5 +1,6 @@
 #include "common.h"
 #include "../core/utf8.h"
+#include "../iptv/m3u.h"
 #include "../platform/clock.h"
 
 using namespace c2d;
@@ -55,6 +56,14 @@ namespace screens {
     std::string hostOf(const std::string &server) {
         size_t s = server.find("://");
         return s == std::string::npos ? server : server.substr(s + 3);
+    }
+
+    std::string sourceTypeName(iptv::SourceType type) {
+        return tr(type == iptv::SourceType::M3u ? "source.type_m3u_short" : "source.type_xtream");
+    }
+
+    std::string sourceLocation(const iptv::Profile &p) {
+        return p.isPlaylist() ? m3u::displayUrl(p.playlistUrl) : hostOf(p.server);
     }
 
     std::string mask(const std::string &secret) {
