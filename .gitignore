@@ -43,6 +43,10 @@ downloads.json
 *.part
 *.largefile-probe
 
+# Unedited console screenshots: may show server addresses or account details. Only the sanitized copies in
+# docs/screenshots/ are published.
+/docs/screenshots/raw/
+
 # Local logs and download test artifacts
 *.log
 log.txt
