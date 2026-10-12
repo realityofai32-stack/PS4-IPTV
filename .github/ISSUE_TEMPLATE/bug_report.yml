@@ -1,0 +1,80 @@
+name: Bug report
+description: Report a reproducible problem with PS4 IPTV
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please do not include IPTV credentials, private playlist URLs, tokens, or other sensitive information.
+
+  - type: input
+    id: version
+    attributes:
+      label: PS4 IPTV version
+      description: You can find this in Settings > About.
+      placeholder: e.g. 0.2.0
+    validations:
+      required: true
+
+  - type: input
+    id: firmware
+    attributes:
+      label: PS4 firmware / homebrew environment
+      placeholder: e.g. firmware version and HEN/homebrew environment
+    validations:
+      required: true
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: Source type
+      options:
+        - Xtream Codes
+        - M3U / M3U8
+        - Offline / downloaded content
+        - Not source-related
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected to happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Start ...
+        4. See error ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: media
+    attributes:
+      label: Relevant media / stream details
+      description: If relevant, describe the container, codec, resolution, subtitle/audio setup, or stream type. Do not paste private URLs or credentials.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Additional information
+      description: Add screenshots, diagnostics, or any other context that may help. Redact private information first.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked the README and Known limitations first.
+          required: true
+        - label: I removed credentials, private playlist URLs, tokens, and personal information from this report.
+          required: true
