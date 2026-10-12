@@ -1,17 +1,50 @@
 # PS4 IPTV
 
-A native IPTV client for jailbroken PlayStation 4 systems, built for the TV and the DualShock 4.
-Connect **your own Xtream Codes compatible service** or **your own M3U / M3U8 playlist** and watch live
-channels and, from Xtream services, movies and series. Offline downloads are available for services that allow
-storing content.
-
-> **PS4 IPTV is a client only.** It ships with no channels, movies, series, accounts, credentials or playlists,
-> and it is not affiliated with any IPTV provider. You need your own source and you are responsible for having
-> permission to access, play and download its content.
+Native, open-source IPTV/media client for jailbroken PlayStation 4 consoles, built for the TV and the DualShock 4.
 
 <p align="center">
-  <img src="docs/screenshots/home.jpg" alt="Home: Live TV, Movies, Series, Downloads, Favorites, Search, Continue Watching and Recently Watched" width="100%">
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/realityofai32-stack/PS4-IPTV?label=release" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/platform-PlayStation%204-003791" alt="Platform: PlayStation 4">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue" alt="License: GPL-3.0-or-later"></a>
 </p>
+
+<p align="center">
+  <strong>Xtream Codes · M3U / M3U8 · Live TV · Movies · Series · Offline Downloads</strong>
+</p>
+
+<p align="center">
+  <a href="../../releases/latest"><strong>Download Latest Release</strong></a>
+  · <a href="../../issues">Report a Bug</a>
+  · <a href="#building-from-source">Build from Source</a>
+</p>
+
+> **PS4 IPTV is a client only.** It ships with no channels, movies, series, accounts, subscriptions, credentials or playlists, and it is not affiliated with any IPTV provider. Bring your own legitimate source and make sure you have permission to access, play and download its content.
+
+<p align="center">
+  <img src="docs/screenshots/home.jpg" alt="PS4 IPTV home screen with Live TV, Movies, Series, Downloads, Favorites, Search, Continue Watching and Recently Watched" width="100%">
+</p>
+
+## Highlights
+
+- **Xtream Codes** accounts and **M3U / M3U8** playlists, with multiple sources
+- **Live TV** with categories, channel logos, favorites, fast zapping and MPEG-TS / HLS fallback
+- **Movies & Series** with poster grids, metadata, seasons and episodes
+- **Search** across Live TV, Movies and Series, including tolerant matching for small typos
+- **Favorites, Continue Watching and Recently Watched** with exact resume positions
+- **Offline downloads** for movies and episodes, including interrupted-download resume and offline playback
+- **Multiple audio tracks and embedded subtitles**, switchable during playback
+- **Aspect ratio, crop / fill, zoom and position controls** applied live during playback
+- **DualShock 4 optimized interface** with accelerated hold-to-scroll, smooth lists and an on-screen keyboard
+- **English and Turkish UI**, plus broad international title/channel-name support
+
+## Quick Start
+
+1. Download the latest `.pkg` from [Releases](../../releases/latest).
+2. Install it with the package installer in your PS4 homebrew environment.
+3. Launch **PS4 IPTV** and choose **Add Source**.
+4. Add your own Xtream Codes compatible service or M3U / M3U8 playlist and start watching.
+
+## Screenshots
 
 <table>
   <tr>
@@ -51,28 +84,6 @@ storing content.
 <sub>Screenshots were taken on a PS4 and show the client interface only. Channel names and logos, posters,
 artwork and video frames come from the user's own source and belong to their respective owners; they are not
 part of this project and are not distributed with it.</sub>
-
-## Features
-
-- **Sources**: Xtream Codes accounts and M3U / M3U8 playlists, as many as you like (see the table below)
-- **Live TV**: categories, channel logos, favorites, fast zapping, MPEG-TS or HLS with automatic fallback
-- **Movies and Series**: poster grids by category; details (plot, cast, rating, duration), seasons and episodes
-- **Search** across Live TV, Movies and Series (Turkish letters, apostrophes and small typos are fine)
-- **Sorting**: A–Z, newest added, year, rating, recently watched, provider order
-- **Favorites** for channels, movies and series
-- **Continue Watching** with exact resume, and **Recently Watched**; a card can be removed from Continue Watching
-  without losing its position
-- **Offline downloads** of movies and episodes to the console's internal storage, with **resume of interrupted
-  downloads** and **offline playback**
-- **Multiple audio tracks** and **embedded subtitles**, switchable during playback; preferred languages
-- **Video geometry**: Aspect Ratio, Crop / Fill, Zoom and position, changed live during playback
-- **Playback stability presets** with stall detection and bounded reconnects
-- **DualShock 4 interface**: hold-to-scroll that accelerates, smoothly gliding lists and poster grids,
-  controller hints on every screen, on-screen keyboard
-- **Near-black TV design** with clear focus and readable contrast from the couch
-- **English and Turkish** user interface (English by default; *Settings › Language*)
-- **International channel and title names**: Latin, Greek, Cyrillic, Arabic, Hebrew, Armenian, Georgian,
-  Japanese, Korean and Chinese characters (see *Known limitations*)
 
 ### What each source type supports
 
