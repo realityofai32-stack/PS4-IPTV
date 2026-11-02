@@ -1,9 +1,11 @@
 // Settings (main page, Storage & downloads, Diagnostics) and About.
 //
 // Settings rows: caption on the left, the value in one right-aligned column - a choice (with dots showing
-// its position among the options), a switch for On/Off settings, or a short info text for actions. The
-// panel on the right explains the focused setting and its current value. Up/Down move, Left/Right or X
-// change a value, X runs an action.
+// its position among the options), a switch for On/Off settings, or a short info text for actions. Rows are
+// separators on the background; the focused one gets the tinted surface and the accent edge. The column on
+// the right (no box) explains the focused setting and its current value. Up/Down move, Left/Right or X
+// change a value, X runs an action. Appearance shows the accent presets as a 3 x 3 palette: the D-pad moves
+// inside it, X applies a colour. Geometry: ui/layout.h (layout::settings).
 //
 // Language changes apply at once: the screens are rebuilt (App::applyLanguage) and Settings opens again.
 
@@ -21,28 +23,20 @@ using screens::SettingsPage;
 namespace {
 
     // three columns: categories | the category's settings | what the focused setting does
-    const float TOP = 200;
-    const float LIST_H = 760;
-    const float CAT_X = theme::SAFE_X;
-    const float CAT_W = 400;
-    const float CAT_ROW_H = 70;
-    const float LIST_X = CAT_X + CAT_W + 32;
-    const float LIST_W = 900;
-    const float ROW_H = 88;
-    const float ROW_GAP = 12;
-    const float PANEL_X = LIST_X + LIST_W + 32;
-    const float PANEL_W = theme::SCREEN_W - theme::SAFE_X - PANEL_X;
-    const float VALUE_RIGHT = 32;      // right padding of the value column
-    const float VALUE_W = 320;
-    const float SWITCH_W = 76;
-    const float SWITCH_H = 40;
-    const float SWATCH_R = 16;
+    namespace L = layout::settings;
+
+    const float VALUE_RIGHT = 24;      // right padding of the value column
+    const float VALUE_W = 300;
+    const float SWITCH_W = 64;
+    const float SWITCH_H = 34;
+    const float SWATCH_R = 14;
+    const float CELL_GAP = 8;          // between palette cells
 
     enum class Kind {
         Choice,
         Toggle,
         Action,
-        Swatch      // one accent preset (Appearance): X applies it
+        Palette     // a row of accent presets (Appearance): Left / Right pick one, X applies it
     };
 
     struct SettingItem {
@@ -56,7 +50,7 @@ namespace {
         std::function<std::string()> info;        // Action: short text in the value column
         std::function<void()> run;                // Action, Swatch
         std::function<std::string()> describe;    // text for the description panel
-        int swatch = -1;                          // Swatch: palette::ACCENTS index
+        std::vector<int> swatches;                // Palette: palette::ACCENTS indices, left to right
     };
 
     struct Category {
@@ -71,20 +65,22 @@ namespace {
         return bytes == 0 ? tr("settings.empty") : dl::formatBytes(bytes);
     }
 
+    // one cell of the accent palette: swatch, name, a check mark on the colour in use
+    struct PaletteCell {
+        RectangleShape *bg;
+        CircleShape *swatch;
+        ui::Label *name;
+        ui::Label *check;
+    };
+
     // one settings row (re-bound to different items while scrolling)
-    class SettingRow : public RectangleShape {
+    class SettingRow : public ui::RowFrame {
     public:
-        SettingRow(float w, float h) : RectangleShape(FloatRect(0, 0, w, h)) {
-            setCornersRadius(theme::RADIUS_SMALL + 2);
-            setCornerPointCount(8);
-            swatch = new CircleShape(SWATCH_R);
-            swatch->setPointCount(24);
-            swatch->setPosition(32, (h - 2 * SWATCH_R) / 2);
-            swatch->setOutlineColor(theme::textStrong());
-            add(swatch);
-            caption = ui::label(this, "", theme::BODY, 32, ui::Label::centerOffset(theme::BODY, h));
-            caption->setMaxWidth(w - 32 - VALUE_W - 40);
-            value = ui::label(this, "", theme::BODY, 0, ui::Label::centerOffset(theme::BODY, h), ui::Weight::SemiBold);
+        SettingRow(float w, float h) : ui::RowFrame(w, h, 0) {
+            caption = ui::label(this, "", theme::BODY, layout::ROW_PAD + 4, ui::Label::centerOffset(theme::BODY, h));
+            caption->setMaxWidth(w - layout::ROW_PAD - VALUE_W - 40);
+            value = ui::label(this, "", theme::LABEL + 2, 0, ui::Label::centerOffset(theme::LABEL + 2, h),
+                              ui::Weight::SemiBold);
             value->setAlign(ui::Align::Right, w - VALUE_RIGHT);
             value->setMaxWidth(VALUE_W);
             for (int i = 0; i < 6; i++) {
@@ -103,35 +99,65 @@ namespace {
             switchText = ui::label(this, "", theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, h),
                                    ui::Weight::Regular, theme::textSecondary());
             switchText->setAlign(ui::Align::Right, sx - 16);
+            // palette cells: three per row, each a third of the row
+            const float cw = std::floor((w - (L::PALETTE_COLUMNS - 1) * CELL_GAP) / L::PALETTE_COLUMNS);
+            for (int i = 0; i < L::PALETTE_COLUMNS; i++) {
+                PaletteCell c;
+                c.bg = ui::box(this, FloatRect((float) i * (cw + CELL_GAP), 6, cw, h - 12), theme::none(), theme::RADIUS);
+                c.swatch = new CircleShape(SWATCH_R);
+                c.swatch->setPointCount(24);
+                c.swatch->setPosition(20, (h - 12) / 2 - SWATCH_R);
+                c.swatch->setOutlineColor(theme::textStrong());
+                c.bg->add(c.swatch);
+                c.name = ui::label(c.bg, "", theme::LABEL + 2, 20 + 2 * SWATCH_R + 16,
+                                   ui::Label::centerOffset(theme::LABEL + 2, h - 12));
+                c.name->setMaxWidth(cw - (20 + 2 * SWATCH_R + 16) - 44);
+                c.check = ui::label(c.bg, "\xE2\x9C\x93", theme::BODY, 0, ui::Label::centerOffset(theme::BODY, h - 12),
+                                    ui::Weight::SemiBold, theme::accentText());
+                c.check->setAlign(ui::Align::Right, cw - 18);
+                cells.push_back(c);
+            }
         }
 
-        void bind(const SettingItem &item, bool focused) {
+        // column: the focused palette cell (Palette rows)
+        void bind(const SettingItem &item, bool focused, int column) {
             float w = getSize().x;
             float h = getSize().y;
+            bool isPalette = item.kind == Kind::Palette;
+            bool isToggle = item.kind == Kind::Toggle;
+            setDivider(!isPalette);
+            setState(focused && !isPalette);   // palette rows: the focused cell carries the focus
+            caption->setVisibility(isPalette ? Visibility::Hidden : Visibility::Visible);
             caption->setText(item.caption);
             caption->setColor(focused ? theme::textStrong() : theme::textPrimary());
-            setFillColor(focused ? theme::focus() : theme::surface());
-            setOutlineColor(theme::accent());
-            setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
-
-            bool isToggle = item.kind == Kind::Toggle;
-            bool isSwatch = item.kind == Kind::Swatch;
             track->setVisibility(isToggle ? Visibility::Visible : Visibility::Hidden);
             switchText->setVisibility(isToggle ? Visibility::Visible : Visibility::Hidden);
-            value->setVisibility(isToggle ? Visibility::Hidden : Visibility::Visible);
-            swatch->setVisibility(isSwatch ? Visibility::Visible : Visibility::Hidden);
-            caption->setPosition(isSwatch ? 32 + 2 * SWATCH_R + 20 : 32, ui::Label::centerOffset(theme::BODY, h));
+            value->setVisibility(isToggle || isPalette ? Visibility::Hidden : Visibility::Visible);
             for (auto *d: dots) {
                 d->setVisibility(Visibility::Hidden);
             }
-            if (isSwatch) {
-                // the preset's own colour, a white ring on the one in use, and a check mark
-                bool current = item.swatch == theme::accentIndex();
-                swatch->setFillColor(theme::swatch(item.swatch));
-                swatch->setOutlineThickness(current ? 3 : 0);
-                value->setText(current ? "\xE2\x9C\x93" : "");
-                value->setColor(theme::accentText());
-                value->setPosition(0, ui::Label::centerOffset(theme::BODY, h));
+            for (size_t i = 0; i < cells.size(); i++) {
+                PaletteCell &c = cells[i];
+                bool shown = isPalette && i < item.swatches.size();
+                c.bg->setVisibility(shown ? Visibility::Visible : Visibility::Hidden);
+                if (!shown) {
+                    continue;
+                }
+                int preset = item.swatches[i];
+                bool current = preset == theme::accentIndex();
+                bool cellFocused = focused && (int) i == column;
+                c.bg->setFillColor(cellFocused ? theme::focus() : theme::none());
+                c.bg->setOutlineColor(theme::accent());
+                c.bg->setOutlineThickness(cellFocused ? theme::ROW_FOCUS_BORDER : 0);
+                // the preset's own colour, a white ring and a check mark on the one in use
+                c.swatch->setFillColor(theme::swatch(preset));
+                c.swatch->setOutlineThickness(current ? 3 : 0);
+                c.name->setText(tr(palette::ACCENTS[preset].nameKey));
+                c.name->setWeight(current ? ui::Weight::SemiBold : ui::Weight::Regular);
+                c.name->setColor(cellFocused ? theme::textStrong() : current ? theme::textPrimary() : theme::textSecondary());
+                c.check->setVisibility(current ? Visibility::Visible : Visibility::Hidden);
+            }
+            if (isPalette) {
                 return;
             }
             if (isToggle) {
@@ -144,17 +170,18 @@ namespace {
                 switchText->setColor(focused ? theme::textPrimary() : theme::textSecondary());
                 return;
             }
+            const unsigned vs = theme::LABEL + 2;
             if (item.kind == Kind::Choice) {
                 int current = item.choice();
                 // position dots only for short choices (language lists are long)
                 int n = (int) item.options.size() <= (int) dots.size() ? (int) item.options.size() : 0;
                 value->setText(item.options[(size_t) current]);
                 value->setColor(focused ? theme::textStrong() : theme::textPrimary());
-                value->setPosition(0, ui::Label::centerOffset(theme::BODY, h) - (n > 0 ? 7 : 0));
+                value->setPosition(0, ui::Label::centerOffset(vs, h) - (n > 0 ? 7 : 0));
                 // option position: small dots under the value, right-aligned with it
                 for (int i = 0; i < n; i++) {
                     CircleShape *d = dots[(size_t) i];
-                    d->setPosition(w - VALUE_RIGHT - (float) (n - i) * 16 + 8, h - 20);
+                    d->setPosition(w - VALUE_RIGHT - (float) (n - i) * 16 + 8, h - 18);
                     d->setFillColor(i == current ? theme::accent() : theme::withAlpha(theme::textMuted(), 140));
                     d->setVisibility(Visibility::Visible);
                 }
@@ -162,17 +189,17 @@ namespace {
             }
             value->setText(item.info ? item.info() : "");
             value->setColor(focused ? theme::textPrimary() : theme::textMuted());
-            value->setPosition(0, ui::Label::centerOffset(theme::BODY, h));
+            value->setPosition(0, ui::Label::centerOffset(vs, h));
         }
 
     private:
-        CircleShape *swatch;
         ui::Label *caption;
         ui::Label *value;
         std::vector<CircleShape *> dots;
         RectangleShape *track;
         CircleShape *knob;
         ui::Label *switchText;
+        std::vector<PaletteCell> cells;
     };
 
     class SettingsScreen : public Screen, public ui::ListView::Adapter {
@@ -192,26 +219,29 @@ namespace {
                     catIndex = CAT_APPEARANCE;
                     break;
             }
-            categoryList = new ui::ListView(FloatRect(CAT_X, TOP, CAT_W, LIST_H), CAT_ROW_H, 6, &categoriesAdapter);
+            categoryList = new ui::ListView(FloatRect(layout::RAIL_X, L::SECTION_Y, layout::RAIL_W,
+                                                      layout::CONTENT_BOTTOM - L::SECTION_Y), L::CAT_ROW_H,
+                                            layout::RAIL_ROW_GAP, &categoriesAdapter);
             add(categoryList);
-            categoryTitle = ui::label(this, "", theme::CAPTION, LIST_X + 4, TOP - 40, ui::Weight::SemiBold,
-                                      theme::textMuted());
-            list = new ui::ListView(FloatRect(LIST_X, TOP, LIST_W, LIST_H), ROW_H, ROW_GAP, this);
+            // the open category as the heading of its settings
+            categoryTitle = ui::label(this, "", theme::HEADING - 2, L::LIST_X + layout::ROW_PAD + 4, L::SECTION_Y,
+                                      ui::Weight::SemiBold, theme::textPrimary());
+            list = new ui::ListView(FloatRect(L::LIST_X, L::LIST_Y, L::LIST_W, L::LIST_H), L::ROW_H, 0, this);
             add(list);
-
-            auto *panel = ui::box(this, FloatRect(PANEL_X, TOP, PANEL_W, LIST_H), theme::card(), theme::RADIUS);
-            panelTitle = ui::label(panel, "", theme::HEADING - 2, 32, 32, ui::Weight::SemiBold);
-            panelTitle->setMaxWidth(PANEL_W - 64);
+            // the description: plain text after a thin rule, no box
+            ui::box(this, FloatRect(L::DIVIDER_X, L::LIST_Y, 1, L::LIST_H), theme::dividerSoft(), 0);
+            panelTitle = ui::label(this, "", theme::LABEL + 2, L::PANEL_X, L::LIST_Y, ui::Weight::SemiBold);
+            panelTitle->setMaxWidth(L::PANEL_W);
             panelTitle->setMaxLines(3);
-            panelText = ui::label(panel, "", theme::LABEL, 32, 0, ui::Weight::Regular, theme::textSecondary());
-            panelText->setMaxWidth(PANEL_W - 64);
-            panelText->setMaxLines(18);
-
+            panelText = ui::label(this, "", theme::LABEL, L::PANEL_X, 0, ui::Weight::Regular, theme::textSecondary());
+            panelText->setMaxWidth(L::PANEL_W);
+            panelText->setMaxLines(20);
             hints = screens::hintBar(this, {});
             categoryList->setSelected(catIndex);
             if (p == SettingsPage::Appearance) {
                 // back after an accent change: on the preset that was just applied
-                list->setSelected(theme::accentIndex());
+                list->setSelected(theme::accentIndex() / L::PALETTE_COLUMNS);
+                paletteColumn = theme::accentIndex() % L::PALETTE_COLUMNS;
                 setFocus(1);
             } else {
                 list->setSelected(0);
@@ -252,7 +282,7 @@ namespace {
         }
 
         void bindRow(C2DObject *obj, int index, bool, bool focused) override {
-            ((SettingRow *) obj)->bind(items()[(size_t) index], focused);
+            ((SettingRow *) obj)->bind(items()[(size_t) index], focused, paletteColumn);
         }
 
         void handleInput(const InputEvent &e) override {
@@ -272,6 +302,20 @@ namespace {
                     return;
                 case PadButton::Left:
                 case PadButton::Right:
+                    if (item.kind == Kind::Palette) {
+                        // inside the palette; Left on its first column goes back to the categories
+                        int col = paletteColumn + (e.button == PadButton::Right ? 1 : -1);
+                        if (col < 0) {
+                            if (!e.repeat) {
+                                setFocus(0);
+                            }
+                        } else if (col < (int) item.swatches.size()) {
+                            paletteColumn = col;
+                            list->reload();
+                            refreshPanel();
+                        }
+                        return;
+                    }
                     if (e.repeat) {
                         return;
                     }
@@ -324,33 +368,30 @@ namespace {
 
             C2DObject *createRow(float w, float h) override {
                 Row r;
-                r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::none(), theme::RADIUS_SMALL);
-                r.marker = ui::box(r.bg, FloatRect(0, 18, 4, h - 36), theme::accent(), 2);
-                r.name = ui::label(r.bg, "", theme::BODY, 24, ui::Label::centerOffset(theme::BODY, h));
-                r.name->setMaxWidth(w - 48);
+                r.bg = new ui::RowFrame(w, h, -1);
+                r.name = ui::label(r.bg, "", theme::LABEL + 2, layout::ROW_PAD, ui::Label::centerOffset(theme::LABEL + 2, h));
+                r.name->setMaxWidth(w - layout::ROW_PAD - 14);
                 rows.push_back(r);
                 return r.bg;
             }
 
             void bindRow(C2DObject *obj, int index, bool selected, bool focused) override {
+                bool railFocused = screen->focus == 0;
                 for (auto &r: rows) {
                     if (r.bg != obj) {
                         continue;
                     }
                     r.name->setText(screen->cats[(size_t) index].name);
-                    r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surface() : theme::none());
-                    r.bg->setOutlineColor(theme::accent());
-                    r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
-                    // the open category keeps an accent marker while its settings have focus
-                    r.marker->setVisibility(selected && !focused ? Visibility::Visible : Visibility::Hidden);
+                    // the open category keeps its accent edge while its settings have focus
+                    r.bg->setState(focused, selected);
                     r.name->setWeight(selected ? ui::Weight::SemiBold : ui::Weight::Regular);
-                    r.name->setColor(focused ? theme::textStrong() : selected ? theme::textPrimary() : theme::textSecondary());
+                    r.name->setColor(focused ? theme::textStrong() : selected ? theme::textPrimary()
+                                     : railFocused ? theme::textSecondary() : theme::textMuted());
                 }
             }
 
             struct Row {
-                RectangleShape *bg;
-                RectangleShape *marker;
+                ui::RowFrame *bg;
                 ui::Label *name;
             };
             SettingsScreen *screen;
@@ -409,6 +450,7 @@ namespace {
             focus = f;
             categoryList->setFocused(focus == 0);
             list->setFocused(focus == 1);
+            categoryList->reload();   // the other categories step back while the settings have focus
             if (focus == 0) {
                 hints->setHints({{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""},
                                  {ui::Glyph::R1, tr("live.category")}, {ui::Glyph::Circle, tr("common.back")}});
@@ -441,6 +483,11 @@ namespace {
                     return;
                 }
                 item.setToggle(want);
+            } else if (activate && item.kind == Kind::Palette) {
+                if (paletteColumn < (int) item.swatches.size()) {
+                    applyAccent(item.swatches[(size_t) paletteColumn]);
+                }
+                return;   // the screens are rebuilt with the new accent: this screen is on its way out
             } else if (activate && item.run) {
                 item.run();
                 return;   // an action may have rebuilt the screens (accent): this screen may be on its way out
@@ -449,6 +496,19 @@ namespace {
             }
             list->reload();
             refreshPanel();
+        }
+
+        // saves the preset and rebuilds every screen with it (this one included: nothing of it is used after)
+        void applyAccent(int preset) {
+            if (preset == theme::accentIndex()) {
+                return;
+            }
+            app.settings().get().accentColor = palette::ACCENTS[preset].key;
+            save();
+            App &a = app;
+            std::string name = tr(palette::ACCENTS[preset].nameKey);
+            a.applyAccent(true);   // back here, on Appearance, with the new accent
+            a.toast(tr("appearance.accent.applied", {name}), ToastKind::Success);
         }
 
         void refreshPanel() {
@@ -460,7 +520,7 @@ namespace {
             std::string text = focus == 0 && catIndex == CAT_APPEARANCE ? tr("settings.cat.appearance.desc")
                                : item.describe ? item.describe() : "";
             panelText->setText(text);
-            panelText->setPosition(32, 32 + panelTitle->height() + 20);
+            panelText->setPosition(L::PANEL_X, L::LIST_Y + panelTitle->height() + 14);
         }
 
         void save() {
@@ -536,28 +596,21 @@ namespace {
         // ------------------------------------------------------------------ Appearance
         void buildAppearance(std::vector<SettingItem> &items) {
             Settings &s = app.settings().get();
-            for (int i = 0; i < palette::ACCENT_COUNT; i++) {
-                SettingItem accent;
-                accent.kind = Kind::Swatch;
-                accent.swatch = i;
-                accent.caption = tr(palette::ACCENTS[i].nameKey);
-                accent.run = [this, &s, i] {
-                    if (i == theme::accentIndex()) {
-                        return;
-                    }
-                    s.accentColor = palette::ACCENTS[i].key;
-                    save();
-                    std::string name = tr(palette::ACCENTS[i].nameKey);
-                    app.applyAccent(true);   // rebuilds every screen with the new accent, back here
-                    app.toast(tr("appearance.accent.applied", {name}), ToastKind::Success);
-                };
-                accent.describe = [] {
+            (void) s;
+            // the presets as rows of three: V7 Blue Cyan Teal / Green Purple Magenta / Red Orange White
+            for (int i = 0; i < palette::ACCENT_COUNT; i += L::PALETTE_COLUMNS) {
+                SettingItem row;
+                row.kind = Kind::Palette;
+                row.caption = tr("appearance.accent");
+                for (int j = i; j < std::min(palette::ACCENT_COUNT, i + L::PALETTE_COLUMNS); j++) {
+                    row.swatches.push_back(j);
+                }
+                row.describe = [] {
                     return tr("appearance.accent.desc") + "\n\n"
                            + tr("appearance.accent.current", {tr(theme::accentPreset().nameKey)});
                 };
-                items.push_back(accent);
+                items.push_back(row);
             }
-
             SettingItem smooth;
             smooth.kind = Kind::Toggle;
             smooth.caption = tr("settings.smooth_scrolling");
@@ -1032,6 +1085,7 @@ namespace {
         CategoriesAdapter categoriesAdapter;
         std::vector<Category> cats;
         int catIndex = 0;
+        int paletteColumn = 0;   // the focused cell of a palette row
         int focus = 0;
         ui::ListView *categoryList = nullptr;
         ui::ListView *list = nullptr;

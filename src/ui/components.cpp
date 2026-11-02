@@ -402,7 +402,14 @@ namespace ui {
         edge->setFillColor(theme::accent());
         edge->setVisibility(focused || selected ? Visibility::Visible : Visibility::Hidden);
         if (line) {
-            line->setVisibility(focused ? Visibility::Hidden : Visibility::Visible);
+            line->setVisibility(focused || !divider ? Visibility::Hidden : Visibility::Visible);
+        }
+    }
+
+    void RowFrame::setDivider(bool shown) {
+        divider = shown;
+        if (line) {
+            line->setVisibility(divider && getFillColor().a == 0 ? Visibility::Visible : Visibility::Hidden);
         }
     }
 

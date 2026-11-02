@@ -164,9 +164,13 @@ namespace ui {
 
         void setState(bool focused, bool selected = false);
 
+        // rows that hold their own focusable cells (the accent palette) draw no divider
+        void setDivider(bool shown);
+
     private:
         c2d::RectangleShape *edge;
         c2d::RectangleShape *line = nullptr;
+        bool divider = true;
     };
 
     class EmptyState : public c2d::RectangleShape {
