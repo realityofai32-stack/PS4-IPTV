@@ -1,13 +1,14 @@
-// Movies and Series browsers: categories | poster grid.
+// Movies and Series browsers (one template): a quiet category rail | a grid of large posters.
 //
 // Opening a browser loads its catalog lazily through VodLibrary (saved copy first, provider refresh in the
-// background). The grid is virtualized (8 x 3 cells exist); posters come from ImageLoader (kind Poster):
-// the cells on screen first, then one row above and below once scrolling pauses.
+// background). The grid is virtualized (7 columns, 2 whole rows and a third that peeks out under the bottom
+// fade); posters come from ImageLoader (kind Poster): the cells on screen first, then one row above and below
+// once scrolling pauses. Geometry: ui/layout.h (layout::catalog), docs/v7-ui-v2-layouts.md.
 //
-// Above the grid: the full name of the selected category with its count and order, and the complete title
-// of the focused poster (captions under posters stay truncated). Options opens Sort / Refresh catalog /
-// Catalog info. The order applies inside the selected category and is kept per profile for Movies and
-// Series separately; "Recently added" and "Continue watching" keep their own order.
+// The header line names the open category with its count and order. The focused poster grows a little, gets
+// the accent outline and full brightness (the others are dimmed), and shows its metadata under its title.
+// Options opens Sort / Refresh catalog / Catalog info. The order applies inside the selected category and is
+// kept per profile for Movies and Series separately; "Recently added" and "Continue watching" keep their own.
 
 #include <unordered_map>
 
@@ -27,17 +28,8 @@ namespace {
     const int FAVORITES_ROW = 3;
     const int FIRST_CATEGORY_ROW = 4;
 
-    const float TOP = 206;
-    const float LIST_H = 770;
-    const float CAT_X = theme::SAFE_X;
-    const float CAT_W = 420;
-    const float GRID_X = CAT_X + CAT_W + 32;
-    const float GRID_W = theme::SCREEN_W - theme::SAFE_X - GRID_X;
-    const int COLUMNS = 8;
-    const int ROWS = 3;
-    const float CELL_W = 140;
-    const float POSTER_H = 210;
-    const float CELL_H = 246;
+    namespace L = layout::catalog;
+
     const size_t RECENT_LIMIT = 200;
     const double PREFETCH_PAUSE = 0.30;
 
@@ -91,7 +83,7 @@ namespace {
             std::string s;
             auto add = [&s](const std::string &part) {
                 if (!part.empty()) {
-                    s += (s.empty() ? "" : "   \xC2\xB7   ") + part;
+                    s += (s.empty() ? "" : "  \xC2\xB7  ") + part;
                 }
             };
             add(m.year > 0 ? std::to_string(m.year) : "");
@@ -174,7 +166,7 @@ namespace {
             std::string out;
             auto add = [&out](const std::string &part) {
                 if (!part.empty()) {
-                    out += (out.empty() ? "" : "   \xC2\xB7   ") + part;
+                    out += (out.empty() ? "" : "  \xC2\xB7  ") + part;
                 }
             };
             add(s.year > 0 ? std::to_string(s.year) : "");
@@ -208,33 +200,27 @@ namespace {
     public:
         explicit BrowseScreen(App &a) : Screen(a), categoriesAdapter(this), gridAdapter(this) {
             ui::background(this);
-            screens::header(this, tr(Traits::headingKey()));
-            statusLabel = ui::label(this, "", theme::LABEL, 0, theme::SAFE_Y + 16, ui::Weight::Regular,
-                                    theme::textSecondary());
-            statusLabel->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
-            statusLabel->setMaxWidth(1100);
-            // above the grid: the selected category in full, then the focused title in full
-            categoryTitle = ui::label(this, "", theme::BODY, GRID_X, 120, ui::Weight::SemiBold, theme::accentText());
-            categoryTitle->setMaxWidth(GRID_W - 300);
-            categoryMeta = ui::label(this, "", theme::LABEL, GRID_X, 123, ui::Weight::Regular, theme::textSecondary());
-            infoTitle = ui::label(this, "", theme::BODY, GRID_X, 160, ui::Weight::SemiBold);
-            infoMeta = ui::label(this, "", theme::LABEL, 0, 163, ui::Weight::Regular, theme::textSecondary());
-            infoMeta->setAlign(ui::Align::Right, GRID_X + ui::ListView::rowWidth(GRID_W));
-            infoMeta->setMaxWidth(420);
+            ui::Label *title = screens::header(this, tr(Traits::headingKey()));
+            context = new screens::HeaderContext(this, title);
+            statusLabel = screens::headerStatus(this);
 
-            categoryList = new ui::ListView(FloatRect(CAT_X, TOP, CAT_W, LIST_H), 58, 6, &categoriesAdapter);
+            categoryList = new ui::ListView(FloatRect(layout::RAIL_X, L::GRID_Y, layout::RAIL_W, L::RAIL_H),
+                                            layout::RAIL_ROW_H, layout::RAIL_ROW_GAP, &categoriesAdapter);
             add(categoryList);
-            grid = new ui::GridView(FloatRect(GRID_X, TOP, GRID_W, LIST_H), CELL_W, CELL_H, COLUMNS, ROWS,
-                                    &gridAdapter);
+            grid = new ui::GridView(FloatRect(L::GRID_X, L::GRID_Y, L::GRID_W, L::GRID_H), L::POSTER_W, L::CELL_H,
+                                    L::COLUMNS, L::ROWS, &gridAdapter, L::PEEK_ROWS);
             add(grid);
+            // the peek row and the rail's last rows dissolve before the hints
+            screens::bottomFade(this);
 
-            const float gw = ui::ListView::rowWidth(GRID_W);
-            stateText = ui::label(this, "", theme::BODY, GRID_X, TOP + 300, ui::Weight::Regular, theme::textMuted());
+            const float gw = L::GRID_W - L::SCROLL_GUTTER;
+            stateText = ui::label(this, "", theme::BODY, L::GRID_X, L::GRID_Y + 260, ui::Weight::Regular,
+                                  theme::textMuted());
             stateText->setAlign(ui::Align::Center, gw);
             stateText->setMaxWidth(gw - 160);
             stateText->setMaxLines(3);
             spinner = new ui::Spinner(18);
-            spinner->setPosition(GRID_X + (gw - 18 * 3.6f) / 2, TOP + 400);
+            spinner->setPosition(L::GRID_X + (gw - 18 * 3.6f) / 2, L::GRID_Y + 380);
             add(spinner);
 
             hints = screens::hintBar(this, {});
@@ -398,37 +384,40 @@ namespace {
 
             C2DObject *createRow(float w, float h) override {
                 Row r;
-                r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::none(), theme::RADIUS_SMALL);
-                r.marker = ui::box(r.bg, FloatRect(0, 14, 4, h - 28), theme::accent(), 2);
-                r.name = ui::label(r.bg, "", theme::LABEL + 2, 20, ui::Label::centerOffset(theme::LABEL + 2, h));
-                r.name->setMaxWidth(w - 20 - 72);
+                r.bg = new ui::RowFrame(w, h, -1);   // the rail has no dividers: it stays quiet next to the grid
+                r.name = ui::label(r.bg, "", theme::LABEL, layout::ROW_PAD, ui::Label::centerOffset(theme::LABEL, h));
+                r.name->setMaxWidth(w - layout::ROW_PAD - 64);
                 r.count = ui::label(r.bg, "", theme::CAPTION, 0, ui::Label::centerOffset(theme::CAPTION, h),
                                     ui::Weight::Regular, theme::textMuted());
-                r.count->setAlign(ui::Align::Right, w - 16);
+                r.count->setAlign(ui::Align::Right, w - 14);
                 rows.push_back(r);
                 return r.bg;
             }
 
             void bindRow(C2DObject *obj, int index, bool selected, bool focused) override {
+                // rest: quiet (muted while the grid has the focus); the open category: accent edge + semibold;
+                // focused: the accent-tinted surface
+                bool railFocused = screen->focus == 0;
                 for (auto &r: rows) {
                     if (r.bg != obj) {
                         continue;
                     }
                     int n = 0;
-                    r.name->setText(screen->rowName(index, n));
+                    std::string name = screen->rowName(index, n);
                     r.count->setText(n >= 0 ? std::to_string(n) : "");
-                    r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surface() : theme::none());
-                    r.bg->setOutlineColor(theme::accent());
-                    r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
-                    r.marker->setVisibility(selected && !focused ? Visibility::Visible : Visibility::Hidden);
+                    // the name takes what the count leaves (most counts are two or three digits)
+                    r.name->setMaxWidth(r.bg->getSize().x - layout::ROW_PAD - (n >= 0 ? r.count->width() + 26 : 14));
+                    r.name->setText(name);
+                    r.bg->setState(focused, selected);
                     r.name->setWeight(selected ? ui::Weight::SemiBold : ui::Weight::Regular);
-                    r.name->setColor(focused ? theme::textStrong() : selected ? theme::textPrimary() : theme::textSecondary());
+                    r.name->setColor(focused ? theme::textStrong() : selected ? theme::textPrimary()
+                                     : railFocused ? theme::textSecondary() : theme::textMuted());
+                    r.count->setColor(focused ? theme::textSecondary() : theme::textMuted());
                 }
             }
 
             struct Row {
-                RectangleShape *bg;
-                RectangleShape *marker;
+                ui::RowFrame *bg;
                 ui::Label *name;
                 ui::Label *count;
             };
@@ -445,11 +434,20 @@ namespace {
                 Cell c;
                 c.root = new RectangleShape(FloatRect(0, 0, w, h));
                 c.root->setFillColor(theme::none());
-                c.poster = new ui::PosterView(FloatRect(0, 0, w, POSTER_H), theme::CAPTION);
+                c.poster = new ui::PosterView(FloatRect(0, 0, w, L::POSTER_H), theme::LABEL);
+                c.poster->setCornersRadius(theme::RADIUS);
+                c.poster->setFocusScale(L::POSTER_FOCUS_SCALE);
                 c.root->add(c.poster);
-                c.title = ui::label(c.root, "", theme::CAPTION, 0, POSTER_H + 8, ui::Weight::Regular, theme::textSecondary());
+                const float ty = L::POSTER_H + L::TITLE_GAP;
+                c.title = ui::label(c.root, "", theme::LABEL, 0, ty, ui::Weight::Regular, theme::textMuted());
                 c.title->setAlign(ui::Align::Center, w);
                 c.title->setMaxWidth(w);
+                // the focused poster's facts may use part of the gaps beside it
+                const float extra = 28;
+                c.meta = ui::label(c.root, "", theme::CAPTION, -extra / 2, ty + 32, ui::Weight::Regular,
+                                   theme::textSecondary());
+                c.meta->setAlign(ui::Align::Center, w + extra);
+                c.meta->setMaxWidth(w + extra);
                 cells.push_back(c);
                 return c.root;
             }
@@ -468,9 +466,11 @@ namespace {
                     c.poster->setWatched(watched);
                     c.poster->setDownloaded(Traits::downloaded(screen->app, it));
                     c.poster->setFocused(focused);
+                    c.poster->setDimmed(!focused);
                     c.title->setText(Traits::title(it));
                     c.title->setColor(focused ? theme::textStrong() : theme::textMuted());
                     c.title->setWeight(focused ? ui::Weight::SemiBold : ui::Weight::Regular);
+                    c.meta->setText(focused ? Traits::meta(screen->app, it) : "");
                 }
             }
 
@@ -478,6 +478,7 @@ namespace {
                 RectangleShape *root;
                 ui::PosterView *poster;
                 ui::Label *title;
+                ui::Label *meta;
             };
             BrowseScreen *screen;
             std::vector<Cell> cells;
@@ -648,20 +649,16 @@ namespace {
             stateText->setText(text);
             spinner->setVisibility(loading && cat.empty() ? Visibility::Visible : Visibility::Hidden);
 
+            // the counts are on the header line already: the status only says where the list comes from
             std::string status;
             if (!cat.empty()) {
-                status = i18n::count(Traits::countKey(), (long long) cat.size());
-                if (st.refreshing) {
-                    status += "   \xC2\xB7   " + tr("browse.refreshing");
-                } else if (st.fromCache) {
-                    status += "   \xC2\xB7   " + tr("browse.saved_list");
-                }
+                status = st.refreshing ? tr("browse.refreshing") : st.fromCache ? tr("browse.saved_list") : "";
             }
             if (!st.message.empty() && !cat.empty()) {
                 status = st.message;
             }
             statusLabel->setText(status);
-            statusLabel->setColor(!st.message.empty() ? theme::warning() : theme::textSecondary());
+            statusLabel->setColor(!st.message.empty() ? theme::warning() : theme::textMuted());
         }
 
         static std::string withThousands(size_t n) {
@@ -677,35 +674,19 @@ namespace {
         }
 
         void refreshInfo() {
-            // the selected category, complete, with its count and order
+            // the header line: the open category, complete, with its count and order
             int dummy = 0;
             int row = currentRow < 0 ? ALL_ROW : currentRow;
-            categoryTitle->setText(row < categoriesAdapter.count() ? rowName(row, dummy) : "");
-            std::string meta = i18n::count(Traits::countKey(), (long long) visible.size());
-            bool ownOrder = row == RECENT_ROW || row == CONTINUE_ROW;
-            if (!ownOrder) {
-                meta += "   \xC2\xB7   " + std::string(sortModeName(sortMode, Traits::TYPE));
+            std::string name = row < categoriesAdapter.count() ? rowName(row, dummy) : "";
+            std::string meta;
+            if (!Traits::catalog(app).empty()) {
+                meta = i18n::count(Traits::countKey(), (long long) visible.size());
+                bool ownOrder = row == RECENT_ROW || row == CONTINUE_ROW;
+                if (!ownOrder) {
+                    meta += "   \xC2\xB7   " + std::string(sortModeName(sortMode, Traits::TYPE));
+                }
             }
-            categoryMeta->setText(Traits::catalog(app).empty() ? "" : meta);
-            categoryMeta->setPosition(GRID_X + categoryTitle->width() + 24, 123);
-
-            const Item *it = focus == 1 ? selectedItem() : nullptr;
-            if (it == nullptr) {
-                infoTitle->setText("");
-                infoMeta->setText("");
-                return;
-            }
-            // the focused title in full: a smaller size when it does not fit, then two lines' worth of room
-            std::string m = Traits::meta(app, *it);
-            infoMeta->setText(m);
-            float room = ui::ListView::rowWidth(GRID_W) - (m.empty() ? 0 : infoMeta->width() + 32);
-            infoTitle->setMaxWidth(0);
-            infoTitle->setCharSize(theme::BODY);
-            infoTitle->setText(Traits::title(*it));
-            if (infoTitle->width() > room) {
-                infoTitle->setCharSize(theme::LABEL);
-            }
-            infoTitle->setMaxWidth(room);
+            context->set(Traits::catalog(app).empty() ? "" : name, meta);
         }
 
         // ------------------------------------------------------------------ options
@@ -824,13 +805,14 @@ namespace {
             grid->setFocused(focus == 1);
             if (focus == 0) {
                 hints->setHints({{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
-                                 {ui::Glyph::Triangle, tr("home.search")}, {ui::Glyph::Options, tr("browse.sort_refresh")},
+                                 {ui::Glyph::Triangle, tr("home.search")}, {ui::Glyph::Options, tr("browse.sort")},
                                  {ui::Glyph::Circle, tr("common.back")}});
             } else {
                 hints->setHints({{ui::Glyph::Cross, tr("browse.details")}, {ui::Glyph::Square, tr("common.favorite")},
                                  {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
                                  {ui::Glyph::Options, tr("browse.sort")}, {ui::Glyph::Circle, tr("live.categories")}});
             }
+            categoryList->reload();   // rail texts step back while the grid has the focus
             refreshInfo();
         }
 
@@ -857,7 +839,7 @@ namespace {
                 for (int i = first; i <= last; i++) {
                     add(i);
                 }
-                for (int d = 1; prefetch && d <= COLUMNS; d++) {   // one row below and above
+                for (int d = 1; prefetch && d <= L::COLUMNS; d++) {   // one row below and above
                     add(last + d);
                     add(first - d);
                 }
@@ -869,11 +851,8 @@ namespace {
         GridAdapter gridAdapter;
         ui::ListView *categoryList;
         ui::GridView *grid;
+        screens::HeaderContext *context;
         ui::Label *statusLabel;
-        ui::Label *categoryTitle;
-        ui::Label *categoryMeta;
-        ui::Label *infoTitle;
-        ui::Label *infoMeta;
         ui::Label *stateText;
         ui::Spinner *spinner;
         ui::HintBar *hints;

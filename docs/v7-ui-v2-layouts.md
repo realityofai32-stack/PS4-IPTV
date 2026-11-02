@@ -19,7 +19,7 @@ cached textures, eased gradients.
 | Sub-page header | `[V7 30 px] Title 44 px` at y 54 (~54..108); context text on the same line, 36 px after the title; status right-aligned at 1824 |
 | First content row | y 150 |
 | Scrolling pages | eased fade y 872..968 into the background, solid band 968..1080 behind the hints |
-| Left rails | x 96..396 (300 wide), 52 px rows + 4 px gaps, 24 px text; main column starts at x 436 |
+| Left rails | x 96..426 (330 wide), 52 px rows + 4 px gaps, 24 px text; main column starts at x 462 |
 | Radii | 8 small (keys, tiles, rows), 12 cards / posters, 18 panels; pills only for buttons, tabs, chips |
 | Type | 64 hero / detail title, 44 screen title, 32 section heading, 28 body, 24 card title + metadata, 22 captions |
 | Fades | every gradient that meets artwork or video is 4 eased segments (smoothstep alpha), never one linear ramp |
@@ -71,7 +71,7 @@ y744 │ [ 408 x 230 ]  [ 408 x 230 ]  [ 408 x 230 ]  [ 408 x 230 ]   (peek, fad
 
 ```
 y 54   [V7] Movies   All movies  19,826 · Provider order ............... Refreshing…
-y 150  Rail 96..396 │ Grid 436..1824: 7 x 166 x 249 posters, 34 px apart
+y 150  Rail 96..426 │ Grid 462..1824: 7 x 166 x 249 posters, ~30 px apart
        ▌All movies   │ [poster][poster][poster][poster][poster][poster][poster]   row 1 y 150
         Recently add.│  Title    Title   ...                                             (title y 415)
         Continue…  2 │ [poster][poster] ...                                        row 2 y 505
@@ -82,12 +82,12 @@ y 150  Rail 96..396 │ Grid 436..1824: 7 x 166 x 249 posters, 34 px apart
 | Item | Value |
 |---|---|
 | Header context | open category in 28 px semibold primary + count and order in 24 px secondary, on the header line; catalog status (refreshing / saved list / error) right-aligned at 1824 |
-| Category rail | x 96..396, y 150..930 (14 rows of 52 + 4) |
+| Category rail | x 96..426, y 150..930 (14 rows of 52 + 4); names 24 px, counts 22 px muted |
 | Rail states | rest: 24 px, muted when the grid has focus, secondary when the rail has focus; open category: 4 px accent edge + primary semibold; focused: accent-tinted surface + edge, strong; counts 22 px muted |
-| Grid | x 436..1824 (1366 + 22 px scrollbar gutter), y 150; 7 columns x 166 px, gap (1366 - 7 x 166) / 6 = 34 |
+| Grid | x 462..1824 (1340 + 22 px scrollbar gutter), y 150; 7 columns x 166 px, gap (1340 - 7 x 166) / 6 = 29.7 |
 | Cell | poster 166 x 249 (2:3), title 24 px at +16, metadata 22 px at +48 (focused cell only); cell 325, row gap 30, pitch 355 |
 | Rows | 2 whole rows (y 150..475, 505..830) + a peek row at y 860 (about 110 px visible before the fade); 14 full + 7 partial posters |
-| Density vs v1 | v1: 24 posters of 140 x 210; v2: 14 + 7 peeking of 166 x 249 (+41 % area each), gaps 34 / 30 instead of 19 / 36 |
+| Density vs v1 | v1: 24 posters of 140 x 210; v2: 14 + 7 peeking of 166 x 249 (+41 % area each), gaps 30 / 30 instead of 19 / 36; rail 330 instead of 400 |
 | Focus | scale 1.06 around the centre (+5 / +7.5 px), 4 px outline, artwork 100 % (others 82 %), title strong semibold, metadata line (year · rating · progress) |
 | Image | the 140 x 210 grid poster drawn at 166 x 249 (1.19x bilinear) - see uncertainties |
 
@@ -145,9 +145,9 @@ y 150  Rail 96..396 │ Grid 436..1824: 7 x 166 x 249 posters, 34 px apart
 | Item | Value |
 |---|---|
 | Header context | open category + channel count on the header line; playlist notices after it |
-| Categories | rail x 96..396, y 150..958 (rows 52 + 4) |
-| Channels | x 436..1336 (878 + scrollbar), y 150..948: 10 rows of 78 + 2. Number 22 px muted right-aligned in 56; logo tile 96 x 56 at x 72; name 28 px at x 192; ★ right. Rest: no surface, divider from x 72; focused: accent-tinted surface + edge, name semibold strong, number primary |
-| Channel panel | x 1376..1824 (448), y 150..750 (600, compact): logo tile 384 x 216 (padding 32), name 34 px (2 lines), category 24 px secondary, "Channel 12" 24 px muted, ★ in favorites, Watch pill 384 x 64 at the bottom (accent while the channel list has focus) |
+| Categories | rail x 96..426, y 150..958 (rows 52 + 4) |
+| Channels | x 462..1342 (858 + scrollbar), y 150..948: 10 rows of 78 + 2. Number 22 px muted right-aligned in 56; logo tile 96 x 56 at x 72; name 28 px at x 192; ★ right. Rest: no surface, divider from x 72; focused: accent-tinted surface + edge, name semibold strong, number primary |
+| Channel panel | x 1382..1824 (442), y 150..750 (600, compact): logo tile 378 x 212 (padding 32), name 34 px (2 lines), category 24 px secondary, "Channel 12" 24 px muted, ★ in favorites, Watch pill 384 x 64 at the bottom (accent while the channel list has focus) |
 
 ## SEARCH
 
@@ -173,10 +173,10 @@ y 150  Rail 96..396 │ Grid 436..1824: 7 x 166 x 249 posters, 34 px apart
 
 | Item | Value |
 |---|---|
-| Categories | rail x 96..396, y 150, rows 60 + 4, 26 px |
-| Section heading | category name 32 px semibold at x 436, y 150 |
-| Settings | x 436..1296, y 214..958: rows of 72 without gaps, divider lines; caption 28 px, value 26 px semibold right-aligned, compact switch 64 x 34 |
-| Description | no card: thin vertical rule at x 1328 (214..958), title 26 px semibold + text 24 px secondary at x 1360..1824 |
+| Categories | rail x 96..426, y 150, rows 60 + 4, 26 px |
+| Section heading | category name 32 px semibold at x 462, y 150 |
+| Settings | x 462..1302, y 214..958: rows of 72 without gaps, divider lines; caption 28 px, value 26 px semibold right-aligned, compact switch 64 x 34 |
+| Description | no card: thin vertical rule at x 1334 (214..958), title 26 px semibold + text 24 px secondary at x 1366..1824 |
 | Accent palette | 3 rows x 3 presets (V7 Blue Cyan Teal / Green Purple Magenta / Red Orange White): each cell 1/3 of the row, swatch + name, ✓ and a white ring on the active one; D-pad moves inside the grid, X applies, Left on the first column returns to the categories |
 
 ## DOWNLOADS

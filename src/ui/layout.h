@@ -36,9 +36,9 @@ namespace layout {
 
     // ---------------------------------------------------------------- left rails (catalogs, Live TV, Settings)
     constexpr float RAIL_X = SAFE_X;
-    constexpr float RAIL_W = 300;
-    constexpr float RAIL_GAP = 40;                     // rail -> main column
-    constexpr float MAIN_X = RAIL_X + RAIL_W + RAIL_GAP;   // 436
+    constexpr float RAIL_W = 330;
+    constexpr float RAIL_GAP = 36;                     // rail -> main column
+    constexpr float MAIN_X = RAIL_X + RAIL_W + RAIL_GAP;   // 462
     constexpr float RAIL_ROW_H = 52;
     constexpr float RAIL_ROW_GAP = 4;
 
@@ -96,9 +96,9 @@ namespace layout {
 
     // ---------------------------------------------------------------- Movies / Series
     namespace catalog {
-        constexpr float GRID_X = MAIN_X;               // 436
+        constexpr float GRID_X = MAIN_X;               // 462
         constexpr float GRID_Y = CONTENT_TOP;          // 150
-        constexpr float GRID_W = SAFE_RIGHT - GRID_X;  // 1388 (incl. the 22 px scrollbar gutter)
+        constexpr float GRID_W = SAFE_RIGHT - GRID_X;  // 1362 (incl. the 22 px scrollbar gutter)
         constexpr float SCROLL_GUTTER = 22;
         constexpr int COLUMNS = 7;
         constexpr int ROWS = 2;                        // whole rows; a third row peeks under the bottom fade
@@ -161,8 +161,8 @@ namespace layout {
     namespace live {
         constexpr float LIST_Y = CONTENT_TOP;
         constexpr float LIST_H = 808;                  // 150..958
-        constexpr float CH_X = MAIN_X;                 // 436
-        constexpr float CH_W = 900;                    // 436..1336
+        constexpr float CH_X = MAIN_X;                 // 462
+        constexpr float CH_W = 880;                    // 462..1342
         constexpr float CH_ROW_H = 78;
         constexpr float CH_ROW_GAP = 2;                // ten rows
         constexpr float NUM_W = 56;
@@ -170,11 +170,11 @@ namespace layout {
         constexpr float LOGO_W = 96;
         constexpr float LOGO_H = 56;
         constexpr float NAME_X = LOGO_X + LOGO_W + 24; // 192
-        constexpr float PANEL_X = CH_X + CH_W + 40;    // 1376
-        constexpr float PANEL_W = SAFE_RIGHT - PANEL_X; // 448
+        constexpr float PANEL_X = CH_X + CH_W + 40;    // 1382
+        constexpr float PANEL_W = SAFE_RIGHT - PANEL_X; // 442
         constexpr float PANEL_H = 600;                 // 150..750: compact, no empty tail
         constexpr float PANEL_PAD = 32;
-        constexpr float PANEL_LOGO_H = 216;            // 384 x 216 tile
+        constexpr float PANEL_LOGO_H = 212;            // 378 x 212 tile
         constexpr float WATCH_H = 64;
     }
 
@@ -204,14 +204,14 @@ namespace layout {
     namespace settings {
         constexpr float CAT_ROW_H = 60;
         constexpr float SECTION_Y = CONTENT_TOP;       // category name above the settings
-        constexpr float LIST_X = MAIN_X;               // 436
+        constexpr float LIST_X = MAIN_X;               // 462
         constexpr float LIST_Y = 214;
-        constexpr float LIST_W = 860;                  // 436..1296
+        constexpr float LIST_W = 840;                  // 462..1302
         constexpr float LIST_H = CONTENT_BOTTOM - LIST_Y - 2;   // 744
         constexpr float ROW_H = 72;
-        constexpr float DIVIDER_X = 1328;              // light vertical rule before the description
-        constexpr float PANEL_X = 1360;
-        constexpr float PANEL_W = SAFE_RIGHT - PANEL_X;   // 464
+        constexpr float DIVIDER_X = 1334;              // light vertical rule before the description
+        constexpr float PANEL_X = 1366;
+        constexpr float PANEL_W = SAFE_RIGHT - PANEL_X;   // 458
         constexpr int PALETTE_COLUMNS = 3;             // accent presets as a 3 x 3 grid
     }
 
