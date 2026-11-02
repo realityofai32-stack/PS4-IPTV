@@ -1,9 +1,10 @@
 // Search across Movies, Series and Live TV, from the prebuilt per-catalog indexes (iptv/search_index.h):
 // nothing is normalized per keypress and no server request is made.
 //
-// Left: the query and an on-screen keyboard (typing searches as you go, 200 ms after the last key).
-// Right: All / Movies / Series / Live TV filters with their counts (L1 / R1), the result count and the
-// results with their type and poster / logo. Opening Search loads the Movies / Series catalogs lazily
+// Top: the query in a full-width field. Left: a compact on-screen keyboard (typing searches as you go, 200 ms
+// after the last key). Right, owning the rest of the screen: All / Movies / Series / Live TV filters with their
+// counts (L1 / R1), the result count and the results with their type and poster / logo; before the first query
+// a short left-aligned instruction sits where the results will be. Geometry: ui/layout.h (layout::search). Opening Search loads the Movies / Series catalogs lazily
 // (saved copy first) when needed; results appear as each catalog becomes ready.
 //
 // Playlist (M3U) sources only have Live TV: the filters are All / Live TV. Search covers the source that is
@@ -25,21 +26,9 @@ namespace {
     const size_t SERIES_LIMIT = 200;
     const size_t LIVE_LIMIT = 200;
 
-    const float LEFT_X = theme::SAFE_X;
-    const float LEFT_W = 652;
-    const float FIELD_Y = 138;
-    const float FIELD_H = 80;
-    const float KEYS_Y = 244;
-    const float KEY_UNIT = 47;
-    const float KEY_GAP = 8;
-    const float KEY_H = 64;
-    const float RIGHT_X = 800;
-    const float RIGHT_W = theme::SCREEN_W - theme::SAFE_X - RIGHT_X;
-    const float CHIP_W = 236;
-    const float CHIP_H = 56;
-    const float LIST_Y = 262;
-    const float LIST_H = 712;
-    const float ROW_H = 104;
+    namespace L = layout::search;
+
+    const float CHIP_GAP = 12;
 
     const char *FILTER_KEYS[] = {"search.filter_all", "home.movies", "home.series", "home.live_tv"};
 
@@ -60,56 +49,53 @@ namespace {
             }
             liveGen = app.session().liveGeneration;
             ui::background(this);
-            screens::header(this, tr("home.search"));
+            ui::Label *title = screens::header(this, tr("home.search"));
+            context = new screens::HeaderContext(this, title);
 
-            // query + keyboard
-            field = ui::box(this, FloatRect(LEFT_X, FIELD_Y, LEFT_W, FIELD_H), theme::card(), theme::RADIUS);
+            // query: one wide field over the keyboard and the results
+            field = ui::box(this, FloatRect(theme::SAFE_X, L::FIELD_Y, theme::CONTENT_W, L::FIELD_H), theme::surface(),
+                            theme::RADIUS);
             field->setOutlineColor(theme::accent());
             auto *icon = new ui::IconButton(ui::Icon::Search, 52);
-            icon->setPosition(14, (FIELD_H - 52) / 2);
+            icon->setPosition(16, (L::FIELD_H - 52) / 2);
             field->add(icon);
-            queryText = ui::label(field, "", theme::HEADING, 84, ui::Label::centerOffset(theme::HEADING, FIELD_H));
-            queryText->setMaxWidth(LEFT_W - 84 - 24);
+            queryText = ui::label(field, "", theme::HEADING, 84, ui::Label::centerOffset(theme::HEADING, L::FIELD_H));
+            queryText->setMaxWidth(theme::CONTENT_W - 84 - 32);
             const auto &rows = keyboard.rows();
             for (int r = 0; r < (int) rows.size(); r++) {
                 std::vector<KeyView> line;
                 for (int c = 0; c < (int) rows[(size_t) r].size(); c++) {
                     const Key &k = rows[(size_t) r][(size_t) c];
-                    float x = LEFT_X + (float) keyboard.keyStart(r, c) * (KEY_UNIT + KEY_GAP);
-                    float w = (float) k.span * KEY_UNIT + (float) (k.span - 1) * KEY_GAP;
+                    float x = L::KEYS_X + (float) keyboard.keyStart(r, c) * (L::KEY_UNIT + L::KEY_GAP);
+                    float w = (float) k.span * L::KEY_UNIT + (float) (k.span - 1) * L::KEY_GAP;
                     KeyView v;
-                    v.bg = ui::box(this, FloatRect(x, KEYS_Y + (float) r * (KEY_H + KEY_GAP), w, KEY_H),
-                                   theme::surfaceElevated(), 10);
+                    v.bg = ui::box(this, FloatRect(x, L::KEYS_Y + (float) r * (L::KEY_H + L::KEY_GAP), w, L::KEY_H),
+                                   theme::surfaceElevated(), theme::RADIUS_SMALL);
                     bool special = k.action != KeyAction::Char;
                     unsigned size = special ? theme::CAPTION : theme::BODY;
-                    v.label = ui::label(v.bg, keyboard.label(k), size, 0, ui::Label::centerOffset(size, KEY_H),
+                    v.label = ui::label(v.bg, keyboard.label(k), size, 0, ui::Label::centerOffset(size, L::KEY_H),
                                         ui::Weight::SemiBold);
                     v.label->setAlign(ui::Align::Center, w);
+                    v.label->setMaxWidth(w - 8);
                     line.push_back(v);
                 }
                 keys.push_back(line);
             }
-            float below = KEYS_Y + (float) rows.size() * (KEY_H + KEY_GAP) + 24;
-            catalogsText = ui::label(this, "", theme::LABEL, LEFT_X, below, ui::Weight::Regular, theme::textSecondary());
-            catalogsText->setMaxWidth(LEFT_W);
-            catalogsText->setMaxLines(4);
 
             // filters + results
             for (int i = 0; i < 4; i++) {
-                // filter i sits at its place among the filters this source has
-                auto slot = std::find(filters.begin(), filters.end(), i);
-                float x = RIGHT_X + (float) (slot - filters.begin()) * (CHIP_W + 16);
-                chips[i] = ui::box(this, FloatRect(x, FIELD_Y, CHIP_W, CHIP_H), theme::surface(), CHIP_H / 2);
-                chips[i]->setVisibility(slot == filters.end() ? Visibility::Hidden : Visibility::Visible);
-                chipText[i] = ui::label(chips[i], "", theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, CHIP_H),
-                                        ui::Weight::SemiBold);
-                chipText[i]->setAlign(ui::Align::Center, CHIP_W);
+                chips[i] = new ui::Chip(tr(FILTER_KEYS[i]), L::RESULTS_X, L::CHIPS_Y, 0, L::CHIP_H);
+                bool has = std::find(filters.begin(), filters.end(), i) != filters.end();
+                chips[i]->setVisibility(has ? Visibility::Visible : Visibility::Hidden);
+                add(chips[i]);
             }
-            summary = ui::label(this, "", theme::BODY, RIGHT_X, 214, ui::Weight::Regular, theme::textSecondary());
-            summary->setMaxWidth(RIGHT_W);
-            list = new ui::ListView(FloatRect(RIGHT_X, LIST_Y, RIGHT_W, LIST_H), ROW_H, 8, this);
+            summary = ui::label(this, "", theme::LABEL, L::RESULTS_X, L::SUMMARY_Y, ui::Weight::Regular,
+                                theme::textSecondary());
+            summary->setMaxWidth(L::RESULTS_W);
+            list = new ui::ListView(FloatRect(L::RESULTS_X, L::LIST_Y, L::RESULTS_W, L::LIST_H), L::ROW_H, L::ROW_GAP, this);
             add(list);
-            empty = new ui::EmptyState(FloatRect(RIGHT_X, LIST_Y + 60, ui::ListView::rowWidth(RIGHT_W), 420));
+            empty = new ui::EmptyState(FloatRect(L::RESULTS_X, L::LIST_Y + 8, ui::ListView::rowWidth(L::RESULTS_W), 400),
+                                       true);
             add(empty);
             hints = screens::hintBar(this, {});
             list->setFocused(false);
@@ -188,17 +174,20 @@ namespace {
 
         C2DObject *createRow(float w, float h) override {
             Row r;
-            r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::surface(), theme::RADIUS_SMALL);
-            r.poster = new ui::PosterView(FloatRect(18, 7, 60, 90), 14);
+            r.bg = new ui::RowFrame(w, h, 0);
+            r.poster = new ui::PosterView(FloatRect(20, (h - 84) / 2, 56, 84), 14);
+            r.poster->setCornersRadius(theme::RADIUS_SMALL);
             r.bg->add(r.poster);
-            r.logo = new ui::LogoView(FloatRect(14, (h - 64) / 2, 112, 64), 22, 4, 1.25f);
+            r.logo = new ui::LogoView(FloatRect(16, (h - 54) / 2, 96, 54), 22, 4, 1.25f);
+            r.logo->setCornersRadius(theme::RADIUS_SMALL);
             r.bg->add(r.logo);
-            r.title = ui::label(r.bg, "", theme::BODY, 148, ui::Label::centerOffset(theme::BODY, h) - 16,
+            const float x = 136;
+            r.title = ui::label(r.bg, "", theme::BODY, x, ui::Label::centerOffset(theme::BODY, h) - 16,
                                 ui::Weight::SemiBold);
-            r.title->setMaxWidth(w - 148 - 24);
-            r.meta = ui::label(r.bg, "", theme::LABEL, 148, ui::Label::centerOffset(theme::LABEL, h) + 20,
+            r.title->setMaxWidth(w - x - 24);
+            r.meta = ui::label(r.bg, "", theme::LABEL, x, ui::Label::centerOffset(theme::LABEL, h) + 18,
                                ui::Weight::Regular, theme::textSecondary());
-            r.meta->setMaxWidth(w - 148 - 24);
+            r.meta->setMaxWidth(w - x - 24);
             rows.push_back(r);
             return r.bg;
         }
@@ -209,9 +198,7 @@ namespace {
                 if (r.bg != obj) {
                     continue;
                 }
-                r.bg->setFillColor(focused ? theme::focus() : theme::surface());
-                r.bg->setOutlineColor(theme::accent());
-                r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
+                r.bg->setState(focused);
                 r.title->setColor(focused ? theme::textStrong() : theme::textPrimary());
                 bool live = res.type == ContentType::Live;
                 r.poster->setVisibility(live ? Visibility::Hidden : Visibility::Visible);
@@ -304,7 +291,7 @@ namespace {
         };
 
         struct Row {
-            RectangleShape *bg;
+            ui::RowFrame *bg;
             ui::PosterView *poster;
             ui::LogoView *logo;
             ui::Label *title;
@@ -565,11 +552,13 @@ namespace {
             refreshKeys();
 
             bool searched = !search::normalize(lastQuery).empty();
-            for (int i = 0; i < 4; i++) {
-                bool sel = i == filter;
-                chips[i]->setFillColor(sel ? theme::accentMuted() : theme::surfaceElevated());
-                chipText[i]->setText(searched ? tr(FILTER_KEYS[i]) + "  " + countText(totals[i]) : tr(FILTER_KEYS[i]));
-                chipText[i]->setColor(sel ? theme::textStrong() : theme::textSecondary());
+            // chips fitted to their text, in the order this source has them
+            float cx = L::RESULTS_X;
+            for (int f: filters) {
+                chips[f]->setText(searched ? tr(FILTER_KEYS[f]) + "  " + countText(totals[f]) : tr(FILTER_KEYS[f]));
+                chips[f]->setState(f == filter, false);
+                chips[f]->setPosition(cx, L::CHIPS_Y);
+                cx += chips[f]->width() + CHIP_GAP;
             }
             int n = searched ? totals[filter] : 0;
             if (!searched) {
@@ -600,21 +589,22 @@ namespace {
             std::string channels = app.session().liveLoaded
                                    ? tr("search.channels.count", {countText((int) app.session().live.channels().size())})
                                    : tr("search.channels.unavailable");
+            // what is searched, on the header line
             if (playlist) {
-                catalogsText->setText(tr("search.searching", {channels}));
+                context->set("", tr("search.searching", {channels}));
             } else {
-                catalogsText->setText(tr("search.searching", {sectionState(ms, app.vod().movies().size(), "search.movies") + sep
-                                      + sectionState(ss, app.vod().series().size(), "search.series") + sep + channels}));
+                context->set("", tr("search.searching", {sectionState(ms, app.vod().movies().size(), "search.movies") + sep
+                                + sectionState(ss, app.vod().series().size(), "search.series") + sep + channels}));
             }
             list->reload();
             if (zone == 0) {
+                // the essentials (R2 still jumps to the results; so does Right at the keyboard's edge)
                 hints->setHints({{ui::Glyph::Cross, tr("keyboard.hint_type")}, {ui::Glyph::Square, tr("common.delete")},
                                  {ui::Glyph::Triangle, tr("keyboard.hint_space")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("search.filter")},
-                                 {ui::Glyph::R2, tr("search.results")}, {ui::Glyph::Circle, tr("common.back")}});
+                                 {ui::Glyph::Circle, tr("common.back")}});
             } else {
                 hints->setHints({{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("search.filter")},
-                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::Square, tr("common.delete")},
-                                 {ui::Glyph::Circle, tr("search.keyboard")}});
+                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::Circle, tr("search.keyboard")}});
             }
         }
 
@@ -634,9 +624,8 @@ namespace {
         RectangleShape *field;
         ui::Label *queryText;
         std::vector<std::vector<KeyView>> keys;
-        ui::Label *catalogsText;
-        RectangleShape *chips[4];
-        ui::Label *chipText[4];
+        screens::HeaderContext *context;
+        ui::Chip *chips[4];
         ui::Label *summary;
         ui::ListView *list;
         ui::EmptyState *empty;
