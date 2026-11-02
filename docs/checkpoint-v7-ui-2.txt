@@ -1,0 +1,185 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UI-2: VISUAL RECONSTRUCTION (HOME, CATALOGS, DETAILS, LIVE TV, SEARCH)
+=======================================================================================================
+Branch feature/v7-ui-v2 (local only, from v7-ui-1 build 9a3061e). Version 0.2.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: see build/checkpoint-v7-ui-2/BUILD.txt and SHA256SUMS.txt.
+Why this pass: docs/v7-ui-v2-audit.md (what the v7-ui-1 hardware screenshots showed).
+Intended geometry: docs/v7-ui-v2-layouts.md (every number on this list comes from there).
+
+This checkpoint is about HOW IT LOOKS. Please judge every screen from the couch (2-3 m) first, then up close.
+Take a SHARE screenshot of every step marked [SHOT] and put them in docs/v7-ui-hardware/v2/.
+
+Install OVER the existing V7 IPTV / PS4 IPTV (same title ID): sources, favorites, history, positions,
+downloads and settings stay. This PKG contains NO credentials and NO playlists. Media, downloads, search
+ranking, parsers and storage formats are unchanged since v7-ui-1.
+
+THE QUESTION FOR EVERY SCREEN: does it look like a new application, or like the old UI with a V7 logo?
+
+-----------------------------------------------------------------------------------------------------
+HARDWARE UNKNOWNS (what this checkpoint decides)
+-----------------------------------------------------------------------------------------------------
+  V1 eased fades: every fade is 4 gradient segments (smoothstep). Expected: no visible line where a fade starts
+     or ends (v1 showed bands at the HUD y~190/254, Home x~1120, series backdrop x~1280 / y~600).
+     Wrong: faint steps / stripes inside a fade, or a seam between segments.
+  V2 full-bleed poster layer: Home hero and details draw the poster cover-cropped (upper part) over the right of
+     the screen, ~4x bilinear. Expected: a soft cinematic colour wash that dissolves into the page, no frame.
+     Wrong: a visible rectangle, a recognisable stretched face, or the image competing with the title.
+  V3 focus scale: posters (1.06) and Home cards (1.04) grow around their centre. Expected: crisp, no jump of
+     the titles, no overlap with neighbours. Wrong: blurry text inside the poster, outline drawn offset, the
+     poster drifting after many moves (it must come back exactly to its place).
+  V4 rounded artwork: poster and card images now follow the 12 px corners. Wrong: square image corners poking
+     out of the outline, or distorted images.
+  V5 grid peek row: Movies / Series draw a third row that dissolves under the bottom fade. Wrong: the peek row
+     drawn over the hints, popping in/out while scrolling, or images missing in it.
+  V6 landscape cards: Continue Watching / Recently Watched show the upper part of the large poster (16:9).
+     Expected: sharp, faces visible. Wrong: soft / pixelated (then only the grid poster arrived), or titles of
+     the poster artwork cut in an ugly way on most cards.
+  V7 grid poster upscale: catalog posters are drawn at 166 x 249 from the 140 x 210 image (1.19x). Expected:
+     still sharp from the couch. Wrong: clearly soft compared with v1 -> tell me, it is a one-constant change.
+
+-----------------------------------------------------------------------------------------------------
+HOME                                                                                (rest view = [SHOT])
+-----------------------------------------------------------------------------------------------------
+ 1. Header proportions: "V7 IPTV" with the symbol left; Home / Live TV / Movies / Series as TEXT (Home strong
+    with a thin accent underline), four small icons with no discs around them, clock right. The navigation
+    should be quieter than the content. No "ps4-iptv" status line under the logo. [SHOT]
+ 2. Navigation focus: Up from the hero -> the focused tab becomes an accent pill; the icons become an accent
+    disc with their name under it; X opens each; Circle returns.
+ 3. Hero composition: ONE picture - text on the left over a dark area, the poster's colours dissolving in from
+    the right edge. NO separate poster tile, NO hard vertical edge, NO stretched rectangle. [SHOT]
+ 4. Artwork crop: the layer shows the upper/middle part of the poster (faces, not the credit block), soft.
+ 5. Text readability: eyebrow "Continue Watching" (accent text), the title is the largest and strongest text on
+    screen, then "S02E02 · Episode 2", then "Series · 15 min left", then the bar with "42:31 / 57:36".
+ 6. CTA placement: Resume (accent fill) and Details directly under the bar, no empty band between text and
+    buttons (v1 had ~150 px).
+ 7. Rest view bottom: the Continue Watching heading and the top of its cards are visible, the cards dissolve
+    under the hint bar; the hints never sit on top of content (v1 bug).
+ 8. Down to Continue Watching: the page moves up; the rail is fully visible above the hints; the navigation
+    sits on a dark band with a soft lower edge (no strip of the hero image left under it - v1 bug). [SHOT]
+ 9. Cards: wide 16:9 artwork, title and ONE line under it ("S02E02 · Episode 2 · 15 min left"), progress bar
+    inside the bottom of the artwork. Focused card: slightly larger, accent outline, brighter; others dimmer.
+10. Move right past the 4th card: the rail shifts by one card; artwork of the new card appears.
+11. Recently Watched: movies/episodes as poster crops, channels as their logo on a grey tile. [SHOT]
+12. Favorites: real favorites as cards; if only movie/series favorites exist and their catalog was not opened
+    yet: one quiet line, and Down skips the rail. NO "See all" tile. [SHOT]
+13. Hero Resume and Details still work; Square on a Continue Watching card still removes it.
+14. With no Continue Watching (new source): "What would you like to watch?" with Live TV / Movies / Series.
+
+-----------------------------------------------------------------------------------------------------
+MOVIES
+-----------------------------------------------------------------------------------------------------
+15. Header line: "[V7] Movies   All movies  19,826 movies · Provider order"; status right only while
+    refreshing / from the saved list. [SHOT categories focused]
+16. Category rail width (330 px): names readable, counts small and quiet; the open category has an accent edge
+    at its left; the rail does not compete with the posters.
+17. Poster size / columns: 7 columns of larger posters, clear gaps, 2 full rows + a third row fading out under
+    the hints. Compare with v1 (8 x 3 wall). [SHOT grid focused]
+18. Title readability: titles under posters readable from the couch (24 px), muted; the focused title is white
+    and semibold, with "year · rating" (and progress) under it.
+19. Selected poster: larger, accent outline, full brightness; the other posters slightly dimmer. Moving
+    around never shifts titles or neighbours. Grid focused -> the rail texts step back.
+20. Scroll down many rows (and L2/R2 page): smooth, the peek row glides with the others, posters load.
+21. L1/R1 category, Square favorite, Options sort / refresh, Triangle search, Circle back: as before.
+
+-----------------------------------------------------------------------------------------------------
+SERIES CATALOG
+-----------------------------------------------------------------------------------------------------
+22. Same checks as 15-21: identical density, card size, focus, rail and typography. [SHOT]
+
+-----------------------------------------------------------------------------------------------------
+MOVIE DETAIL
+-----------------------------------------------------------------------------------------------------
+23. Backdrop integration: the poster's colours fill the right side and dissolve towards the text and the
+    bottom; NO visible screen split or rectangle edge. [SHOT]
+24. Poster size: 320 x 480 at the left, sharp, rounded corners.
+25. Plot width: the plot stays in a readable column (~1040 px, max 4 lines), not across the whole screen.
+26. CTA hierarchy: Play / Resume first and accent-filled, then Start over / Download / Favorite as quiet pills;
+    people and codec lines small and muted under the buttons.
+27. Resume / Play / Download / Favorite / Delete download behave as before.
+
+-----------------------------------------------------------------------------------------------------
+SERIES DETAIL
+-----------------------------------------------------------------------------------------------------
+28. Backdrop: dissolves before the season chips; the episodes sit on the clean page. [SHOT]
+29. Information height: cover 180 x 270, title, facts, two plot lines, Resume + Favorite bottom-aligned with
+    the cover - all above y ~400.
+30. Season chips: fitted to their text, the current one tinted, accent when focused; many seasons scroll.
+31. Episode density: four episodes fully visible without scrolling. [SHOT episodes focused]
+32. Episode rows: separators instead of filled slabs; the focused row has a tinted surface and an accent edge
+    (not a bright block); 16:9 thumbnail (the cover's upper part when the provider repeats the cover).
+33. Progress: "42:31 / 57:36" and a bar on the right of a started episode; downloads "↓ 42%" / "↓ Downloaded".
+34. X plays, Square downloads, Options episode menu, L1/R1 seasons: as before.
+
+-----------------------------------------------------------------------------------------------------
+LIVE TV
+-----------------------------------------------------------------------------------------------------
+35. Header line: "[V7] Live TV   All channels  573". No uppercase caption row. [SHOT]
+36. Category width: 330 px, quiet; the open category keeps an accent edge while the channels have focus.
+37. Channel list density: 10 rows, separated by thin lines, small logo tiles, no box around every channel.
+38. Focused channel: tinted surface + accent edge, name semibold; while the categories have focus the channel
+    cursor shows only the accent edge.
+39. Right panel size: a compact card (logo, name, category, channel number, favorite, Watch) - no large
+    empty area inside it. Watch turns accent while the channel list has focus.
+40. Zapping, favorites, playlist Options: as before.
+
+-----------------------------------------------------------------------------------------------------
+SEARCH
+-----------------------------------------------------------------------------------------------------
+41. Empty state: wide search field on top, compact keyboard left, short instructions top-left of the results
+    area; what is searched ("Searching 19,838 movies · ...") on the header line. No giant centred void. [SHOT]
+42. Keyboard / results balance: keyboard ~616 px wide, results own the rest of the screen.
+43. Query results: type "dixon" -> fitted filter chips with counts, summary line, six result rows (poster or
+    logo, title, "Movie · 2019 · ★ 7.1"); focused row = tinted surface + edge. [SHOT]
+44. Filter chips: L1/R1 switch the tinted chip and the list; results -> keyboard dims.
+
+-----------------------------------------------------------------------------------------------------
+SETTINGS
+-----------------------------------------------------------------------------------------------------
+45. Density: rows of 72 px separated by lines (no slabs), category name as a heading over the rows, the
+    description on the right as plain text after a thin rule. [SHOT]
+46. Accent grid: Appearance shows 3 rows x 3 colours (V7 Blue Cyan Teal / Green Purple Magenta / Red Orange
+    White) with swatch + name, check and white ring on the active one. [SHOT]
+47. Accent focus: D-pad moves between cells and rows; Left on the first column returns to the categories; X
+    applies (screens rebuild, toast) and the focus is back on the chosen colour.
+48. Other categories: switches, choices with dots, actions - values change as before.
+
+-----------------------------------------------------------------------------------------------------
+DOWNLOADS
+-----------------------------------------------------------------------------------------------------
+49. Header line "Downloads   0 B downloaded · 347 GB free"; two fitted tab chips; empty state as before.
+50. With a download running: the row shows title, state, percentage and bar clearly; focus = tinted surface.
+
+-----------------------------------------------------------------------------------------------------
+PLAYER
+-----------------------------------------------------------------------------------------------------
+51. HUD gradients: over a BRIGHT scene, the top and bottom shades have no visible band or line. [SHOT]
+52. Progress bar: thin accent bar with a white knob; time left, "1080p · Audio · Subtitles" right.
+53. Hints: X Pause, D-PAD 10 s, OPTIONS Options, (R1 Next episode), Circle Back - one calm line. Triangle still
+    toggles the technical info.
+54. Live player: same shades; hints and status readable.
+
+-----------------------------------------------------------------------------------------------------
+PLAYBACK OPTIONS
+-----------------------------------------------------------------------------------------------------
+55. Grouping: Audio, Subtitles, Video, Subtitle style, Technical info as before. [SHOT]
+56. Selected row: tinted surface + accent edge (no outline box); chevrons and rows end inside the safe area
+    (v1: rows reached the right screen edge area).
+57. Readability: names 28 px, details 22 px; soft left edge of the panel over the video.
+58. Sort / download-action menus (Options in Movies, episode Options) use the same panel look.
+
+-----------------------------------------------------------------------------------------------------
+THEMES (repeat steps 3, 9, 17, 19, 32, 38, 46 with each)
+-----------------------------------------------------------------------------------------------------
+59. V7 Blue  [SHOT Home + Movies]
+60. Purple   [SHOT Home + Movies]
+61. Orange   [SHOT Home + Movies]
+62. White    [SHOT Home + Movies] - focus must stay obvious (white outline, grey tinted rows, dark captions on
+    white pills).
+
+-----------------------------------------------------------------------------------------------------
+STABILITY / PERFORMANCE
+-----------------------------------------------------------------------------------------------------
+63. Scroll the Movies grid quickly for 30 s and the Home rails left/right: no stutter worse than v1.
+64. Home <-> Movies <-> details <-> player round trips x10: no crash, artwork comes back.
+65. Change accent 3 times in a row: no crash, no missing images.
+
+REPORT: screenshots + which steps look wrong (step number + what you see).

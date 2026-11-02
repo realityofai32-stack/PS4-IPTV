@@ -184,3 +184,27 @@ per screen, a fixed 6 px focus lift (existing), outline + fill focus.
 - Movies, Series, Live TV, Search, Favorites and Downloads keep their existing layouts with the new tokens and
   components; the structural redesign this phase is Home, details, Settings, Add Source and Playback Options.
 - The public README and the PowerShell scripts still say "PS4 IPTV"; they change with the next release.
+
+## 10. UI v2 (branch feature/v7-ui-v2, checkpoint v7-ui-2)
+
+The v7-ui-1 hardware screenshots showed the old layouts under the new palette (docs/v7-ui-v2-audit.md). v2
+rebuilds the composition while keeping v1's infrastructure (palette, accent presets and their storage,
+localization, components, focus tokens, Kubuntu build, all media systems):
+
+- Layout: every screen's 1920 x 1080 geometry in `src/ui/layout.h`, documented in docs/v7-ui-v2-layouts.md,
+  checked by tests/host/test_layout.cpp.
+- Fades: `ui::fade` (4 smoothstep segments) replaces single linear gradients everywhere they meet artwork or
+  video; flat at both ends, so neither the start nor a join with a solid band shows a line.
+- Backdrop: one full-bleed poster layer (cover crop, anchor ~0.25-0.3), eased fades on its inner edges; Home has
+  no separate poster tile.
+- Focus language: posters / cards scale (1.06 / 1.04) with the accent outline and full brightness while the
+  others are dimmed (`theme::artworkDim`); list rows are `ui::RowFrame` (divider at rest, tinted surface +
+  4 px accent edge when focused); tabs / chips fill with the accent.
+- Screens: Home (text-tab navigation, one hero composition, 16:9 rails from the large poster / logo), catalogs
+  (330 px rail, 7 x 166 x 249 posters with a peek row), details (poster + text over the layer; series shows four
+  episodes), Live TV (compact channel card, divider rows), Search (full-width field, compact keyboard, results
+  own the right), Settings (divider rows, 3 x 3 accent palette, unboxed description), Downloads, HUD, Options.
+- Headers: `screens::header` + `HeaderContext` (open category / counts / storage on the title line) +
+  `headerStatus`; details keep the smaller symbol + section breadcrumb.
+- Cost: no new image kind, no new texture format, no blur; Home cards request the existing PosterLarge for the
+  cards on screen (+1) - about 1 MB of GPU memory per visible card, inside the 48 MB image cache.
