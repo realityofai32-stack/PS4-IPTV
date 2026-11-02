@@ -212,8 +212,9 @@ namespace ui {
 
     void IconButton::setFocused(bool f) {
         focused = f;
-        setFillColor(focused ? theme::accent() : theme::surfaceElevated());
-        Color fg = focused ? theme::onAccent() : theme::textPrimary();
+        // at rest only the icon is drawn (no disc competing with the content); focused: an accent disc
+        setFillColor(focused ? theme::accent() : theme::none());
+        Color fg = focused ? theme::onAccent() : theme::textSecondary();
         for (auto &p: parts) {
             if (p.second) {
                 p.first->setFillColor(theme::none());
@@ -232,30 +233,68 @@ namespace ui {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
+    // one primary section of the navigation: text at rest, an accent underline when it is the current section,
+    // an accent pill while focused
+    class NavTab : public RectangleShape {
+    public:
+        NavTab(const std::string &text, float x, float h) : RectangleShape(FloatRect(x, 0, 1, h)) {
+            setCornersRadius(h / 2);
+            setCornerPointCount(10);
+            caption = new Label(text, theme::BODY, Weight::Regular, theme::textSecondary());
+            caption->setWeight(Weight::SemiBold);   // measured at the widest weight: no width jump on focus
+            float w = std::round(caption->width() + 2 * layout::home::TAB_PAD);
+            setSize(w, h);
+            caption->setAlign(Align::Center, w);
+            caption->setPosition(0, Label::centerOffset(theme::BODY, h));
+            add(caption);
+            underline = new RectangleShape(FloatRect(layout::home::TAB_PAD, h - 7, w - 2 * layout::home::TAB_PAD, 3));
+            underline->setCornersRadius(1.5f);
+            underline->setCornerPointCount(4);
+            add(underline);
+            setState(false, false);
+        }
+
+        void setState(bool current, bool focused) {
+            setFillColor(focused ? theme::accent() : theme::none());
+            caption->setWeight(current || focused ? Weight::SemiBold : Weight::Regular);
+            caption->setColor(focused ? theme::onAccent() : current ? theme::textStrong() : theme::textSecondary());
+            underline->setFillColor(theme::accent());
+            underline->setVisibility(current && !focused ? Visibility::Visible : Visibility::Hidden);
+        }
+
+        float width() const { return getSize().x; }
+
+    private:
+        Label *caption;
+        RectangleShape *underline;
+    };
+
     TopNav::TopNav(const std::string &brandName, const std::vector<std::string> &sections, const std::vector<Icon> &icons)
-            : RectangleShape(FloatRect(theme::SAFE_X, theme::SAFE_Y - 8, theme::CONTENT_W, 72)) {
+            : RectangleShape(FloatRect(theme::SAFE_X, layout::home::NAV_Y, theme::CONTENT_W, layout::home::NAV_H)) {
+        using namespace layout::home;
         setFillColor(theme::none());
         const float h = getSize().y;
-        auto *brand = new Brand(brandName, 40, theme::HEADING);
-        brand->setPosition(0, std::round((h - 40) / 2));
+        auto *brand = new Brand(brandName, BRAND_MARK_H, theme::HEADING);
+        brand->setPosition(0, std::round((h - BRAND_MARK_H) / 2));
         add(brand);
-        float x = brand->getSize().x + theme::SPACE_XL;
+        float x = brand->getSize().x + TABS_GAP;
         for (const std::string &s: sections) {
-            auto *chip = new Chip(s, x, (h - theme::CHIP_H) / 2);
-            add(chip);
-            pills.push_back(chip);
-            x += chip->width() + theme::SPACE_XS;
+            auto *tab = new NavTab(s, x, TAB_H);
+            tab->setPosition(x, std::round((h - TAB_H) / 2));
+            add(tab);
+            pills.push_back(tab);
+            x += tab->width() + TAB_GAP;
         }
-        clock = new Label("", theme::HEADING, Weight::SemiBold, theme::textPrimary());
+        clock = new Label("", theme::BODY, Weight::SemiBold, theme::textPrimary());
         clock->setAlign(Align::Right, getSize().x);
-        clock->setPosition(0, Label::centerOffset(theme::HEADING, h));
+        clock->setPosition(0, Label::centerOffset(theme::BODY, h));
         add(clock);
-        // icons right-aligned before the clock ("00:00" is about 100 px at this size)
-        float right = getSize().x - 140;
+        // small round actions right-aligned before the clock
+        float right = getSize().x - CLOCK_W;
         for (size_t i = 0; i < icons.size(); i++) {
-            auto *b = new IconButton(icons[i], theme::ICON_BUTTON);
-            float bx = right - (float) (icons.size() - i) * (theme::ICON_BUTTON + theme::SPACE_S) + theme::SPACE_S;
-            b->setPosition(bx, (h - theme::ICON_BUTTON) / 2);
+            auto *b = new IconButton(icons[i], ICON);
+            float bx = right - (float) (icons.size() - i) * (ICON + ICON_GAP) + ICON_GAP;
+            b->setPosition(bx, std::round((h - ICON) / 2));
             add(b);
             buttons.push_back(b);
         }
@@ -304,27 +343,89 @@ namespace ui {
         const Vector2f &p = buttons[(size_t) i]->getPosition();
         float w = iconCaption->width();
         // centred under the icon, kept inside the bar's right edge (the TV-safe area)
-        float x = std::min(p.x + theme::ICON_BUTTON / 2 - w / 2, getSize().x - w);
-        iconCaption->setPosition(std::round(x), getSize().y + 6);
+        float x = std::min(p.x + layout::home::ICON / 2 - w / 2, getSize().x - w);
+        iconCaption->setPosition(std::round(x), getSize().y + 4);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    EmptyState::EmptyState(const FloatRect &rect) : RectangleShape(rect) {
+    RectangleShape *fade(C2DObject *parent, const FloatRect &rect, const Color &color, Edge solid) {
+        auto *box = new RectangleShape(rect);
+        box->setFillColor(theme::none());
+        // smoothstep at 0, 1/4, 1/2, 3/4, 1 (u = 0 at the transparent edge, 1 at the solid edge)
+        const float steps[5] = {0.0f, 0.15625f, 0.5f, 0.84375f, 1.0f};
+        const bool vertical = solid == Edge::Top || solid == Edge::Bottom;
+        const float len = vertical ? rect.height : rect.width;
+        for (int i = 0; i < 4; i++) {
+            // segment i runs from the transparent side towards the solid side
+            float a0 = steps[i];
+            float a1 = steps[i + 1];
+            float from = len * (float) i / 4;
+            float to = len * (float) (i + 1) / 4;
+            bool reversed = solid == Edge::Top || solid == Edge::Left;   // solid side at the origin
+            float start = reversed ? len - to : from;
+            float size = to - from;
+            FloatRect r = vertical ? FloatRect(0, start, rect.width, size) : FloatRect(start, 0, size, rect.height);
+            auto *g = new GradientRectangle(r);
+            Color c0 = theme::withAlpha(color, (uint8_t) std::lround((float) color.a * (reversed ? a1 : a0)));
+            Color c1 = theme::withAlpha(color, (uint8_t) std::lround((float) color.a * (reversed ? a0 : a1)));
+            g->setColor(c0, c1, vertical ? GradientRectangle::Down : GradientRectangle::Right);
+            box->add(g);
+        }
+        if (parent) {
+            parent->add(box);
+        }
+        return box;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    RowFrame::RowFrame(float w, float h, float dividerInset) : RectangleShape(FloatRect(0, 0, w, h)) {
+        setCornersRadius(theme::RADIUS);
+        setCornerPointCount(8);
+        if (dividerInset >= 0) {
+            line = new RectangleShape(FloatRect(dividerInset, h - 1, w - dividerInset, 1));
+            line->setFillColor(theme::dividerSoft());
+            add(line);
+        }
+        const float inset = std::round(h * 0.22f);
+        edge = new RectangleShape(FloatRect(0, inset, layout::ROW_EDGE_W, h - 2 * inset));
+        edge->setCornersRadius(layout::ROW_EDGE_W / 2);
+        edge->setCornerPointCount(4);
+        add(edge);
+        setState(false, false);
+    }
+
+    void RowFrame::setState(bool focused, bool selected) {
+        setFillColor(focused ? theme::focus() : theme::none());
+        setOutlineThickness(0);
+        edge->setFillColor(theme::accent());
+        edge->setVisibility(focused || selected ? Visibility::Visible : Visibility::Hidden);
+        if (line) {
+            line->setVisibility(focused ? Visibility::Hidden : Visibility::Visible);
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    EmptyState::EmptyState(const FloatRect &rect, bool leftAligned) : RectangleShape(rect), left(leftAligned) {
         setFillColor(theme::none());
+        const float pad = left ? 0 : 40;
         title = new Label("", theme::HEADING, Weight::SemiBold, theme::textPrimary());
-        title->setAlign(Align::Center, rect.width);
-        title->setMaxWidth(rect.width - 40);
+        title->setMaxWidth(rect.width - pad);
         add(title);
         message = new Label("", theme::BODY, Weight::Regular, theme::textSecondary());
-        message->setAlign(Align::Center, rect.width);
-        message->setMaxWidth(std::min(rect.width - 40, 1100.0f));
-        message->setMaxLines(3);
+        message->setMaxWidth(std::min(rect.width - pad, 1100.0f));
+        message->setMaxLines(4);
         add(message);
         action = new Label("", theme::LABEL, Weight::SemiBold, theme::accentText());
-        action->setAlign(Align::Center, rect.width);
-        action->setMaxWidth(rect.width - 40);
+        action->setMaxWidth(rect.width - pad);
         add(action);
+        if (!left) {
+            title->setAlign(Align::Center, rect.width);
+            message->setAlign(Align::Center, rect.width);
+            action->setAlign(Align::Center, rect.width);
+        }
         setVisibility(Visibility::Hidden);
     }
 
@@ -337,7 +438,7 @@ namespace ui {
         message->setText(m);
         action->setText(a);
         float h = title->height() + (m.empty() ? 0 : 16 + message->height()) + (a.empty() ? 0 : 24 + action->height());
-        float y = std::round(std::max(0.0f, (getSize().y - h) / 2));
+        float y = left ? 0 : std::round(std::max(0.0f, (getSize().y - h) / 2));
         title->setPosition(0, y);
         y += title->height() + 16;
         message->setPosition(0, y);
@@ -348,11 +449,11 @@ namespace ui {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    Backdrop::Backdrop(const FloatRect &rect, float fadeLeft, float fadeBottom) : RectangleShape(rect) {
+    Backdrop::Backdrop(const FloatRect &rect, float fadeLeft, float fadeBottom, float fadeTop) : RectangleShape(rect) {
         setFillColor(theme::none());
         // no artwork: a faint glow of the accent's dark tint from the right edge
         glow = new GradientRectangle(FloatRect(0, 0, rect.width, rect.height));
-        glow->setColor(theme::withAlpha(theme::accentMuted(), 120), theme::none(), GradientRectangle::Left);
+        glow->setColor(theme::withAlpha(theme::accentMuted(), 90), theme::none(), GradientRectangle::Left);
         add(glow);
         image = new RectangleShape(FloatRect(0, 0, rect.width, rect.height));
         image->setFillColor(theme::backdropTint());   // texture modulation: the artwork itself is dimmed
@@ -362,16 +463,21 @@ namespace ui {
         shade->setFillColor(theme::backdropShade());
         shade->setVisibility(Visibility::Hidden);
         add(shade);
+        // every edge that is not a screen edge dissolves into the page: no frame, no band
         if (fadeLeft > 0) {
-            auto *l = new GradientRectangle(FloatRect(0, 0, fadeLeft, rect.height));
-            l->setColor(theme::background(), theme::withAlpha(theme::background(), 0), GradientRectangle::Right);
-            add(l);
+            fade(this, FloatRect(0, 0, fadeLeft, rect.height), theme::background(), Edge::Left);
         }
         if (fadeBottom > 0) {
-            auto *b = new GradientRectangle(FloatRect(0, rect.height - fadeBottom, rect.width, fadeBottom));
-            b->setColor(theme::withAlpha(theme::background(), 0), theme::background(), GradientRectangle::Down);
-            add(b);
+            fade(this, FloatRect(0, rect.height - fadeBottom, rect.width, fadeBottom), theme::background(), Edge::Bottom);
         }
+        if (fadeTop > 0) {
+            fade(this, FloatRect(0, 0, rect.width, fadeTop), theme::withAlpha(theme::background(), 200), Edge::Top);
+        }
+    }
+
+    void Backdrop::setAnchor(float a) {
+        anchor = std::min(1.0f, std::max(0.0f, a));
+        recrop = true;   // the next set() crops again (the texture stays referenced meanwhile)
     }
 
     void Backdrop::set(const std::shared_ptr<Texture> &texture, const Vector2i &size) {
@@ -379,11 +485,12 @@ namespace ui {
         image->setVisibility(has ? Visibility::Visible : Visibility::Hidden);
         shade->setVisibility(has ? Visibility::Visible : Visibility::Hidden);
         glow->setVisibility(has ? Visibility::Hidden : Visibility::Visible);
-        if (!has || texture == shown) {
+        if (!has || (texture == shown && !recrop)) {
             return;
         }
         image->setTexture(texture.get(), true);
         shown = texture;   // the previous texture is released only now
+        recrop = false;
         // cover the box: crop the image's centre to the box's aspect ratio (never stretched)
         float boxAspect = getSize().x / getSize().y;
         float imgAspect = (float) size.x / (float) size.y;
@@ -393,7 +500,7 @@ namespace ui {
             crop.left = (size.x - crop.width) / 2;
         } else {
             crop.height = std::max(1, (int) std::round((float) size.x / boxAspect));
-            crop.top = (size.y - crop.height) / 3;   // a little above the centre: faces, not feet
+            crop.top = (int) std::round((float) (size.y - crop.height) * anchor);   // faces, not credits
         }
         image->setTextureRect(crop);
         image->setSize(getSize().x, getSize().y);

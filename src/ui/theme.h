@@ -16,18 +16,20 @@
 #define PS4IPTV_UI_THEME_H
 
 #include "cross2d/c2d.h"
+#include "layout.h"
 #include "palette.h"
 
 namespace theme {
 
     // ---------------------------------------------------------------- layout
-    const float SCREEN_W = 1920;
-    const float SCREEN_H = 1080;
-    const float SAFE_X = 96;        // ~5% TV-safe area: no text, navigation or hints outside it
-    const float SAFE_Y = 54;
-    const float CONTENT_W = SCREEN_W - 2 * SAFE_X;
+    // screen measurements per screen: ui/layout.h (docs/v7-ui-v2-layouts.md)
+    const float SCREEN_W = layout::SCREEN_W;
+    const float SCREEN_H = layout::SCREEN_H;
+    const float SAFE_X = layout::SAFE_X;    // ~5% TV-safe area: no text, navigation or hints outside it
+    const float SAFE_Y = layout::SAFE_Y;
+    const float CONTENT_W = layout::CONTENT_W;
     const float TOPBAR_H = 108;
-    const float HINTS_Y = SCREEN_H - SAFE_Y - 40;   // top of the controller hint bar
+    const float HINTS_Y = layout::HINTS_Y;  // top of the controller hint bar
 
     // spacing scale
     const float SPACE_XS = 8;
@@ -37,10 +39,10 @@ namespace theme {
     const float SPACE_XL = 48;
     const float SPACE_XXL = 64;
 
-    // radii
-    const float RADIUS_LARGE = 24;  // hero, large panels
-    const float RADIUS = 16;        // cards, panels
-    const float RADIUS_SMALL = 10;  // rows, posters, keys
+    // radii: restrained, one scale everywhere (pills only for buttons, tabs and chips)
+    const float RADIUS_LARGE = 18;  // panels, dialogs
+    const float RADIUS = 12;        // cards, posters, focused rows
+    const float RADIUS_SMALL = 8;   // keys, logo tiles, small surfaces
 
     // focus
     const float FOCUS_BORDER = 4;   // cards, posters, buttons
@@ -110,6 +112,7 @@ namespace theme {
     inline c2d::Color cardHover() { return color(palette::CARD_HOVER); }
     inline c2d::Color panel() { return color(palette::PANEL); }
     inline c2d::Color divider() { return color(palette::DIVIDER); }
+    inline c2d::Color dividerSoft() { return color(palette::DIVIDER_SOFT); }
     // tile behind channel logos: lighter than the rows, so dark and transparent logos stay readable
     inline c2d::Color logoTile() { return color(palette::LOGO_TILE); }
 
@@ -135,6 +138,7 @@ namespace theme {
     inline c2d::Color progressTrackOnImage() { return color(palette::PROGRESS_TRACK_ON_IMAGE); }
     inline c2d::Color backdropTint() { return color(palette::BACKDROP_TINT); }
     inline c2d::Color backdropShade() { return color(palette::BACKDROP_SHADE); }
+    inline c2d::Color artworkDim() { return color(palette::ARTWORK_DIM); }
 
     // ---------------------------------------------------------------- controls
     inline c2d::Color scrollTrack() { return color(palette::SCROLL_TRACK); }

@@ -120,24 +120,28 @@ namespace {
             add(video);
 
             // top overlay
-            top = ui::box(this, FloatRect(0, 0, theme::SCREEN_W, 190), theme::overlay(), 0);
-            screens::hudFade(top, true);
-            title = ui::label(top, "", theme::TITLE, theme::SAFE_X, 44, ui::Weight::SemiBold);
+            namespace P = layout::player;
+            top = ui::box(this, FloatRect(0, 0, theme::SCREEN_W, P::TOP_FADE_H), theme::none(), 0);
+            screens::hudShade(top, P::TOP_FADE_H, 100, true);
+            title = ui::label(top, "", theme::TITLE, theme::SAFE_X, P::TITLE_Y, ui::Weight::SemiBold);
             title->setMaxWidth(1300);
-            subtitle = ui::label(top, "", theme::LABEL, theme::SAFE_X, 110, ui::Weight::Regular, theme::textSecondary());
+            subtitle = ui::label(top, "", theme::LABEL, theme::SAFE_X, P::SUBTITLE_Y + 4, ui::Weight::Regular,
+                                 theme::textSecondary());
             subtitle->setMaxWidth(1300);
-            clock = ui::label(top, "", theme::HEADING, 0, 48, ui::Weight::SemiBold);
+            clock = ui::label(top, "", theme::HEADING, 0, P::TITLE_Y + 4, ui::Weight::SemiBold);
             clock->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
-            fav = ui::label(top, "", theme::BODY, 0, 110, ui::Weight::SemiBold, theme::warning());
+            fav = ui::label(top, "", theme::BODY, 0, P::SUBTITLE_Y, ui::Weight::SemiBold, theme::warning());
             fav->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
 
-            // bottom overlay
-            bottom = ui::box(this, FloatRect(0, theme::SCREEN_H - 170, theme::SCREEN_W, 170), theme::overlay(), 0);
-            screens::hudFade(bottom, false);
-            status = ui::label(bottom, "", theme::BODY, theme::SAFE_X, 24, ui::Weight::SemiBold);
+            // bottom overlay: status line and hints on a shade that fades up into the picture
+            const float bh = 300;
+            bottom = ui::box(this, FloatRect(0, theme::SCREEN_H - bh, theme::SCREEN_W, bh), theme::none(), 0);
+            screens::hudShade(bottom, bh, 150, false);
+            status = ui::label(bottom, "", theme::BODY, theme::SAFE_X, layout::HINTS_Y - (theme::SCREEN_H - bh) - 60,
+                               ui::Weight::SemiBold);
             status->setMaxWidth(1700);
             hints = new ui::HintBar();
-            hints->setPosition(theme::SAFE_X, 92);
+            hints->setPosition(theme::SAFE_X, layout::HINTS_Y - (theme::SCREEN_H - bh));
             bottom->add(hints);
             hints->setHints({{ui::Glyph::Cross, tr("live.controls")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.channel")},
                              {ui::Glyph::Square, tr("common.favorite")}, {ui::Glyph::Triangle, tr("player.info")},

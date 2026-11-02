@@ -527,31 +527,38 @@ namespace {
 
         // ------------------------------------------------------------------ overlay
         void buildOverlay() {
-            top = ui::box(this, FloatRect(0, 0, theme::SCREEN_W, 190), theme::overlay(), 0);
-            screens::hudFade(top, true);
-            title = ui::label(top, "", theme::TITLE, theme::SAFE_X, 44, ui::Weight::SemiBold);
+            namespace P = layout::player;
+            // top: overlay behind the title, then an eased fade into the picture (no band edge)
+            top = ui::box(this, FloatRect(0, 0, theme::SCREEN_W, P::TOP_FADE_H), theme::none(), 0);
+            screens::hudShade(top, P::TOP_FADE_H, 100, true);
+            title = ui::label(top, "", theme::TITLE, theme::SAFE_X, P::TITLE_Y, ui::Weight::SemiBold);
             title->setMaxWidth(1400);
-            subtitle = ui::label(top, "", theme::BODY, theme::SAFE_X, 112, ui::Weight::Regular, theme::textSecondary());
+            subtitle = ui::label(top, "", theme::BODY, theme::SAFE_X, P::SUBTITLE_Y, ui::Weight::Regular,
+                                 theme::textSecondary());
             subtitle->setMaxWidth(1400);
-            clock = ui::label(top, "", theme::HEADING, 0, 48, ui::Weight::SemiBold);
+            clock = ui::label(top, "", theme::HEADING, 0, P::TITLE_Y + 4, ui::Weight::SemiBold);
             clock->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
 
-            bottom = ui::box(this, FloatRect(0, theme::SCREEN_H - 230, theme::SCREEN_W, 230), theme::overlay(), 0);
-            screens::hudFade(bottom, false);
+            // bottom: progress, time and track info, hints, on a shade that fades up into the picture
+            const float bh = theme::SCREEN_H - P::BOTTOM_Y;
+            bottom = ui::box(this, FloatRect(0, P::BOTTOM_Y, theme::SCREEN_W, bh), theme::none(), 0);
+            screens::hudShade(bottom, bh, 180, false);
             const float barW = theme::SCREEN_W - 2 * theme::SAFE_X;
-            barTrack = ui::box(bottom, FloatRect(theme::SAFE_X, 40, barW, 8), theme::progressTrack(), 4);
-            barFill = ui::box(barTrack, FloatRect(0, 0, 8, 8), theme::accent(), 4);
-            barThumb = new CircleShape(11);
+            barTrack = ui::box(bottom, FloatRect(theme::SAFE_X, P::BAR_Y - P::BOTTOM_Y, barW, P::BAR_H),
+                               theme::progressTrack(), P::BAR_H / 2);
+            barFill = ui::box(barTrack, FloatRect(0, 0, P::BAR_H, P::BAR_H), theme::accent(), P::BAR_H / 2);
+            barThumb = new CircleShape(10);
             barThumb->setPointCount(20);
             barThumb->setFillColor(theme::textStrong());
             barThumb->setOrigin(Origin::Center);
             barTrack->add(barThumb);
-            timeLabel = ui::label(bottom, "", theme::BODY, theme::SAFE_X, 70, ui::Weight::SemiBold);
-            chips = ui::label(bottom, "", theme::LABEL, 0, 74, ui::Weight::Regular, theme::textSecondary());
+            timeLabel = ui::label(bottom, "", theme::BODY, theme::SAFE_X, P::TIME_Y - P::BOTTOM_Y, ui::Weight::SemiBold);
+            chips = ui::label(bottom, "", theme::LABEL, 0, P::TIME_Y - P::BOTTOM_Y + 4, ui::Weight::Regular,
+                              theme::textSecondary());
             chips->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
             chips->setMaxWidth(1100);
             hints = new ui::HintBar();
-            hints->setPosition(theme::SAFE_X, 150);
+            hints->setPosition(theme::SAFE_X, layout::HINTS_Y - P::BOTTOM_Y);
             bottom->add(hints);
 
             pausePill = ui::box(this, FloatRect((theme::SCREEN_W - 260) / 2, 460, 260, 90), theme::overlayPanel(), 45);
@@ -653,8 +660,8 @@ namespace {
             double position = pendingSeek ? seekTarget : (pb.started() ? pb.position() : tracker.position());
             float frac = (float) progress::fraction(position, duration);
             float w = barTrack->getSize().x;
-            barFill->setSize(std::max(8.0f, std::round(w * frac)), 8);
-            barThumb->setPosition(std::round(w * frac), 4);
+            barFill->setSize(std::max(layout::player::BAR_H, std::round(w * frac)), layout::player::BAR_H);
+            barThumb->setPosition(std::round(w * frac), layout::player::BAR_H / 2);
             std::string time = fmt::clockPair(position, duration);
             if (pendingSeek) {
                 time = "\xE2\x86\x92 " + time;   // arrow: target of the pending seek
@@ -667,10 +674,10 @@ namespace {
             }
             chips->setText(chipText);
             // the everyday controls only (L2 / R2 still seek a minute)
+            // (Triangle still shows the technical info; it is also in Options > Technical info)
             std::vector<std::pair<ui::Glyph, std::string>> h = {
                     {ui::Glyph::Cross, tr(pb.state() == PlaybackState::Paused ? "common.play" : "player.pause")},
-                    {ui::Glyph::DPad, tr("player.seek_10")}, {ui::Glyph::Options, tr("player.options")},
-                    {ui::Glyph::Triangle, tr("player.info")}};
+                    {ui::Glyph::DPad, tr("player.seek_10")}, {ui::Glyph::Options, tr("player.options")}};
             if (isEpisode()) {
                 h.push_back({ui::Glyph::R1, tr("player.next_episode")});
             }

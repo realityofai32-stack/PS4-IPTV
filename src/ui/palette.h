@@ -27,6 +27,7 @@ namespace palette {
     constexpr Rgba CARD_HOVER = rgb(42, 52, 73);             // focused card / field (with the accent border)
     constexpr Rgba LOGO_TILE = rgb(46, 54, 72);              // behind channel logos (dark logos stay readable)
     constexpr Rgba DIVIDER = rgb(40, 49, 68);
+    constexpr Rgba DIVIDER_SOFT = rgb(27, 34, 48);           // 1 px separators between list rows on the background
     constexpr Rgba PANEL = rgb(11, 14, 22, 246);             // side panels (Options, keyboard)
 
     // ---------------------------------------------------------------- text
@@ -90,14 +91,16 @@ namespace palette {
     constexpr Rgba VIDEO_BACKGROUND = rgb(0, 0, 0);
     constexpr Rgba PROGRESS_TRACK = rgb(255, 255, 255, 46);
     constexpr Rgba PROGRESS_TRACK_ON_IMAGE = rgb(0, 0, 0, 170);
-    constexpr Rgba SCROLL_TRACK = rgb(255, 255, 255, 18);
-    constexpr Rgba SCROLL_THUMB = rgb(255, 255, 255, 150);
-    constexpr Rgba SCROLL_THUMB_IDLE = rgb(255, 255, 255, 70);
+    constexpr Rgba SCROLL_TRACK = rgb(255, 255, 255, 10);
+    constexpr Rgba SCROLL_THUMB = rgb(255, 255, 255, 120);
+    constexpr Rgba SCROLL_THUMB_IDLE = rgb(255, 255, 255, 44);
     constexpr Rgba SWITCH_OFF = rgb(62, 72, 92);
     constexpr Rgba SWITCH_KNOB_OFF = rgb(190, 198, 212);
     // backdrop artwork (an enlarged poster) is drawn under these: it stays a dark, quiet wash behind text
     constexpr Rgba BACKDROP_TINT = rgb(150, 156, 170);      // texture modulation: dims the image itself
     constexpr Rgba BACKDROP_SHADE = rgb(7, 10, 16, 150);     // uniform shade over the whole image
+    // texture modulation of artwork that is not focused (posters, cards): the focused one is drawn at 100 %
+    constexpr Rgba ARTWORK_DIM = rgb(206, 209, 216);
 
     // DualShock symbol colours (the shapes are drawn, the UI font has no PlayStation glyphs)
     constexpr Rgba PAD_CROSS = rgb(125, 170, 240);

@@ -22,20 +22,44 @@ namespace screens {
 
     using Hints = std::vector<std::pair<ui::Glyph, std::string>>;
 
-    // page title (+ optional subtitle) at the top-left of a full screen, after the V7 symbol
-    void header(c2d::C2DObject *parent, const std::string &title, const std::string &subtitle = "");
+    // page title (+ optional subtitle under it) at the top-left of a full screen, after the V7 symbol; returns
+    // the title (headerContext places text after it)
+    ui::Label *header(c2d::C2DObject *parent, const std::string &title, const std::string &subtitle = "");
+
+    // the contextual part of a sub-page header, on the title's line and baseline: "All movies · 19,826" or
+    // "0 B downloaded · 347 GB free". Call place() after changing its text.
+    class HeaderContext {
+    public:
+        HeaderContext(c2d::C2DObject *parent, ui::Label *title);
+
+        // lead: stronger part (the open category), rest: quieter part after it (counts, order)
+        void set(const std::string &lead, const std::string &rest = "");
+
+    private:
+        ui::Label *title;
+        ui::Label *lead;
+        ui::Label *rest;
+    };
+
+    // a status on the header line, right-aligned at the safe edge ("Refreshing...", "Saved list")
+    ui::Label *headerStatus(c2d::C2DObject *parent);
 
     // detail pages: a small V7 symbol and the section they belong to ("Movies"), above the artwork
     void breadcrumb(c2d::C2DObject *parent, const std::string &section);
+
+    // scrolling pages: content slides under an eased fade and a solid band behind the controller hints
+    void bottomFade(c2d::C2DObject *parent);
 
     // poster-derived backdrop: the large poster when it is ready, else the grid poster, else nothing (a glow)
     void bindBackdrop(App &app, ui::Backdrop *backdrop, const std::string &posterUrl);
 
     ui::HintBar *hintBar(c2d::C2DObject *parent, const Hints &hints);
 
-    // playback HUD bands: a short fade from the band's solid overlay into the video, so the band has no hard
-    // edge (the text stays on the solid part). below = the fade hangs under a top band, else above a bottom band.
-    void hudFade(c2d::RectangleShape *band, bool below);
+    // playback HUD shade over the video, added to `parent` (a HUD band of `height`, at its top or bottom edge):
+    // `solid` px of the overlay at the screen edge (behind the text), then an eased fade into the picture. The
+    // smoothstep fade is flat at both ends, so neither the join nor the end shows a line over bright video.
+    void hudShade(c2d::C2DObject *parent, float height, float solid, bool top);
+
 
     std::string hostOf(const std::string &server);
 

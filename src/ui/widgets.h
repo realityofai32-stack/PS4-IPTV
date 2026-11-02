@@ -194,7 +194,20 @@ namespace ui {
 
         void setFocused(bool focused);
 
+        // Always fill the tile, whatever the image's shape (cropping the longer side; a portrait poster in a
+        // landscape tile keeps the part `anchorY` (0 top .. 1 bottom) of its height). Default: images far from
+        // the tile's shape are fitted inside it instead.
+        void setCover(bool cover, float anchorY = 0.5f);
+
+        // Focus enlarges the tile around its centre by `scale` (e.g. 1.06) instead of lifting it.
+        void setFocusScale(float scale);
+
+        // artwork drawn slightly darker (not the focused item): texture modulation only
+        void setDimmed(bool dimmed);
+
     private:
+        void place(const c2d::Vector2i &imageSize);
+
         c2d::RectangleShape *image;
         Label *fallback;
         c2d::RectangleShape *barTrack;
@@ -204,8 +217,13 @@ namespace ui {
         c2d::CircleShape *downloadBadge;
         std::shared_ptr<c2d::Texture> shown;
         std::string currentTitle;
+        c2d::Vector2i shownSize;
         bool showingImage = false;
         bool lifted = false;
+        bool cover = false;
+        float anchor = 0.5f;
+        float focusScale = 0;
+        bool dimmed = false;
     };
 
     // Virtualized grid: only the cells on screen (+ one row) exist and are re-bound when scrolling by whole
@@ -223,8 +241,10 @@ namespace ui {
             virtual void bindCell(c2d::C2DObject *cell, int index, bool focused) = 0;
         };
 
+        // peekRows: rows drawn below the visible ones (partly off the grid, e.g. fading out under the hints); they
+        // never take the focus, the grid scrolls as if they were not there
         GridView(const c2d::FloatRect &rect, float cellWidth, float cellHeight, int columns, int rows,
-                 Adapter *adapter);
+                 Adapter *adapter, int peekRows = 0);
 
         void reload();
 
@@ -243,10 +263,10 @@ namespace ui {
 
         int visibleRows() const { return rows; }
 
-        // first item on screen and how many cells there are (for image requests)
+        // first item on screen and how many cells are drawn, peek rows included (for image requests)
         int firstVisible() const { return firstRow * cols; }
 
-        int cellCount() const { return cols * rows; }
+        int cellCount() const { return cols * (rows + peek); }
 
     protected:
         void onUpdate() override;
@@ -264,6 +284,7 @@ namespace ui {
         ScrollBar *bar;
         int cols;
         int rows;
+        int peek = 0;
         int sel = 0;
         int firstRow = 0;
         bool focus = true;

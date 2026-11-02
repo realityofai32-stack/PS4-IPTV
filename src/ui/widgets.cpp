@@ -490,23 +490,32 @@ namespace ui {
             image->setTexture(texture.get(), true);
             shown = texture;
         }
+        place(size);
+        image->setVisibility(Visibility::Visible);
+        fallback->setVisibility(Visibility::Hidden);
+    }
+
+    void PosterView::place(const Vector2i &size) {
+        shownSize = size;
         float tw = getSize().x;
         float th = getSize().y;
         float tileAspect = tw / th;
         float imgAspect = (float) size.x / (float) size.y;
-        if (std::fabs(imgAspect / tileAspect - 1.0f) < 0.15f) {
-            // close to the tile shape: fill it, cropping the longer side evenly (no distortion)
+        if (cover || std::fabs(imgAspect / tileAspect - 1.0f) < 0.15f) {
+            // fill the tile, cropping the longer side (evenly, or at the anchor for a taller image): no distortion
             IntRect crop(0, 0, size.x, size.y);
             if (imgAspect > tileAspect) {
-                crop.width = (int) std::round((float) size.y * tileAspect);
+                crop.width = std::max(1, (int) std::round((float) size.y * tileAspect));
                 crop.left = (size.x - crop.width) / 2;
             } else {
-                crop.height = (int) std::round((float) size.x / tileAspect);
-                crop.top = (size.y - crop.height) / 2;
+                crop.height = std::max(1, (int) std::round((float) size.x / tileAspect));
+                crop.top = (int) std::round((float) (size.y - crop.height) * anchor);
             }
             image->setTextureRect(crop);
             image->setSize(tw, th);
             image->setPosition(0, 0);
+            image->setCornersRadius(getCornersRadius());   // the artwork follows the tile's rounded corners
+            image->setCornerPointCount(8);
         } else {
             image->setTextureRect(IntRect(0, 0, size.x, size.y));
             float scale = std::min(tw / (float) size.x, th / (float) size.y);
@@ -514,9 +523,27 @@ namespace ui {
             float h = std::round((float) size.y * scale);
             image->setSize(w, h);
             image->setPosition(std::round((tw - w) / 2), std::round((th - h) / 2));
+            image->setCornersRadius(0);
         }
-        image->setVisibility(Visibility::Visible);
-        fallback->setVisibility(Visibility::Hidden);
+    }
+
+    void PosterView::setCover(bool c, float anchorY) {
+        cover = c;
+        anchor = std::min(1.0f, std::max(0.0f, anchorY));
+        if (showingImage) {
+            place(shownSize);
+        }
+    }
+
+    void PosterView::setFocusScale(float scale) {
+        focusScale = scale;
+    }
+
+    void PosterView::setDimmed(bool d) {
+        if (d != dimmed) {
+            dimmed = d;
+            image->setFillColor(dimmed ? theme::artworkDim() : theme::untinted());
+        }
     }
 
     void PosterView::setProgress(float fraction) {
@@ -538,9 +565,18 @@ namespace ui {
         }
         setOutlineColor(theme::accent());
         setOutlineThickness(focused ? theme::FOCUS_BORDER : 0);
-        // a focused poster rises a little: a position change, no animation and no shadow
         Vector2f p = getPosition();
-        p.y += (lifted ? theme::FOCUS_LIFT : 0) - (focused ? theme::FOCUS_LIFT : 0);
+        if (focusScale > 1.0f) {
+            // grows around its centre (children scale with it): no animation, no shadow, no layout change
+            float dx = getSize().x * (focusScale - 1.0f) / 2;
+            float dy = getSize().y * (focusScale - 1.0f) / 2;
+            p.x += (lifted ? dx : 0) - (focused ? dx : 0);
+            p.y += (lifted ? dy : 0) - (focused ? dy : 0);
+            setScale(focused ? focusScale : 1.0f, focused ? focusScale : 1.0f);
+        } else {
+            // a focused poster rises a little: a position change, no animation and no shadow
+            p.y += (lifted ? theme::FOCUS_LIFT : 0) - (focused ? theme::FOCUS_LIFT : 0);
+        }
         setPosition(p);
         lifted = focused;
     }
@@ -631,8 +667,10 @@ namespace ui {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    GridView::GridView(const FloatRect &rect, float cellW, float cellH, int columns, int visibleRows, Adapter *a)
-            : RectangleShape(rect), adapter(a), cols(std::max(1, columns)), rows(std::max(1, visibleRows)) {
+    GridView::GridView(const FloatRect &rect, float cellW, float cellH, int columns, int visibleRows, Adapter *a,
+                       int peekRows)
+            : RectangleShape(rect), adapter(a), cols(std::max(1, columns)), rows(std::max(1, visibleRows)),
+              peek(std::max(0, peekRows)) {
         setFillColor(theme::none());
         float usableW = rect.width - ScrollBar::WIDTH - ScrollBar::GAP;
         gapX = cols > 1 ? std::max(0.0f, (usableW - (float) cols * cellW) / (float) (cols - 1)) : 0;
@@ -641,8 +679,8 @@ namespace ui {
         cellHeight = cellH;
         pitchY = cellH + gapY;
         extent = (float) rows * cellH + (float) (rows - 1) * gapY;
-        // one extra row: while gliding, a row enters as another leaves
-        for (int r = 0; r <= rows; r++) {
+        // one extra row: while gliding, a row enters as another leaves (after the peek rows)
+        for (int r = 0; r <= rows + peek; r++) {
             for (int c = 0; c < cols; c++) {
                 C2DObject *cell = adapter->createCell(cellW, cellH);
                 add(cell);
@@ -717,9 +755,11 @@ namespace ui {
         float frac = smooth.pos - (float) base;
         bool rebind = base != boundBase;
         boundBase = base;
-        for (int r = 0; r <= rows; r++) {
+        const int drawn = rows + peek;
+        const float drawnExtent = extent + (float) peek * pitchY;
+        for (int r = 0; r <= drawn; r++) {
             float y = ((float) r - frac) * pitchY;
-            bool rowShown = y < extent && y + cellHeight > 0 && (r < rows || frac > 0);
+            bool rowShown = y < drawnExtent && y + cellHeight > 0 && (r < drawn || frac > 0);
             for (int c = 0; c < cols; c++) {
                 int i = r * cols + c;
                 int index = (base + r) * cols + c;
@@ -751,7 +791,8 @@ namespace ui {
     void GridView::onDraw(Transform &transform, bool draw) {
         bool gliding = draw && isVisible() && !smooth.settled((float) firstRow);
         if (gliding) {
-            pushClip(screenRect(transform * getTransform(), getSize().x, extent, CLIP_MARGIN_X));
+            // the peek rows glide with the others (the page's bottom fade hides where they end)
+            pushClip(screenRect(transform * getTransform(), getSize().x, extent + (float) peek * pitchY, CLIP_MARGIN_X));
         }
         RectangleShape::onDraw(transform, draw);
         if (gliding) {
