@@ -22,8 +22,11 @@ using screens::VodItem;
 
 namespace {
 
-    const float LIST_Y = 236;
-    const float LIST_H = 744;
+    namespace L = layout::downloads;
+
+    const float LIST_Y = L::LIST_Y;
+    const float LIST_H = L::LIST_H;
+    const float TAB_GAP = 12;
     const float ROW_H = 132;
     const float POSTER_W = 76;
     const float POSTER_H = 114;
@@ -100,19 +103,13 @@ namespace {
     public:
         explicit DownloadsScreen(App &a) : Screen(a) {
             ui::background(this);
-            screens::header(this, tr("downloads.title"));
-            storageLine = ui::label(this, "", theme::LABEL, theme::SAFE_X, theme::SAFE_Y + 62, ui::Weight::Regular,
-                                    theme::textSecondary());
-            storageLine->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
+            ui::Label *title = screens::header(this, tr("downloads.title"));
+            storage = new screens::HeaderContext(this, title);   // "0 B downloaded · 347 GB free" on the title line
             for (int i = 0; i < 2; i++) {
-                tabs[i] = ui::box(this, FloatRect(theme::SAFE_X + (float) i * 340, 160, 320, 56), theme::surfaceElevated(), 28);
-                tabLabels[i] = ui::label(tabs[i], "", theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, 56),
-                                         ui::Weight::SemiBold);
-                tabLabels[i]->setAlign(ui::Align::Center, 320);
-                tabLabels[i]->setMaxWidth(296);
+                tabs[i] = new ui::Chip("", theme::SAFE_X, L::TABS_Y, 0, L::TAB_H);
+                add(tabs[i]);
             }
-            list = new ui::ListView(FloatRect(theme::SAFE_X, LIST_Y, theme::SCREEN_W - 2 * theme::SAFE_X, LIST_H),
-                                    ROW_H, 10, this);
+            list = new ui::ListView(FloatRect(theme::SAFE_X, LIST_Y, theme::CONTENT_W, LIST_H), ROW_H, 4, this);
             add(list);
             empty = new ui::EmptyState(FloatRect(theme::SAFE_X, LIST_Y, theme::CONTENT_W, 420));
             add(empty);
@@ -153,8 +150,9 @@ namespace {
 
         C2DObject *createRow(float w, float h) override {
             Row r;
-            r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::surface(), theme::RADIUS_SMALL);
+            r.bg = new ui::RowFrame(w, h, 0);
             r.poster = new ui::PosterView(FloatRect(18, (h - POSTER_H) / 2, POSTER_W, POSTER_H), theme::CAPTION);
+            r.poster->setCornersRadius(theme::RADIUS_SMALL);
             r.bg->add(r.poster);
             const float tx = 18 + POSTER_W + 28;
             const float right = 620;
@@ -182,9 +180,7 @@ namespace {
                 if (r.bg != obj) {
                     continue;
                 }
-                r.bg->setFillColor(focused ? theme::focus() : theme::surface());
-                r.bg->setOutlineColor(theme::accent());
-                r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
+                r.bg->setState(focused);
                 std::shared_ptr<ImageSet> img = app.images().get(ImageKind::Poster, d.poster);
                 r.poster->set(titleOf(d), img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
                 r.title->setText(titleOf(d));
@@ -254,7 +250,7 @@ namespace {
 
     private:
         struct Row {
-            RectangleShape *bg;
+            ui::RowFrame *bg;
             ui::PosterView *poster;
             ui::Label *title;
             ui::Label *sub;
@@ -385,14 +381,15 @@ namespace {
             if (suspended) {
                 line += "   \xC2\xB7   " + tr("downloads.paused_for_playback");
             }
-            storageLine->setText(line);
+            storage->set("", line);
             int counts[2] = {(int) active.size(), (int) done.size()};
             const char *names[2] = {"downloads.tab_downloading", "downloads.tab_downloaded"};
+            float x = theme::SAFE_X;
             for (int i = 0; i < 2; i++) {
-                tabLabels[i]->setText(tr(names[i], {std::to_string(counts[i])}));
-                bool f = i == tab;
-                tabs[i]->setFillColor(f ? theme::accentMuted() : theme::surfaceElevated());
-                tabLabels[i]->setColor(f ? theme::textStrong() : theme::textSecondary());
+                tabs[i]->setText(tr(names[i], {std::to_string(counts[i])}));
+                tabs[i]->setState(i == tab, false);
+                tabs[i]->setPosition(x, L::TABS_Y);
+                x += tabs[i]->width() + TAB_GAP;
             }
             if (shown.empty()) {
                 empty->set(tr(tab == 0 ? "empty.downloads_active_title" : "empty.downloads_done_title"),
@@ -567,9 +564,8 @@ namespace {
             app.push(screens::makeVodPlayer(app, queue, position, resume));
         }
 
-        ui::Label *storageLine;
-        RectangleShape *tabs[2];
-        ui::Label *tabLabels[2];
+        screens::HeaderContext *storage;
+        ui::Chip *tabs[2];
         ui::ListView *list;
         ui::EmptyState *empty;
         ui::HintBar *hints;

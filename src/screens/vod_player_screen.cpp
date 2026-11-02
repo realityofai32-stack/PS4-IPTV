@@ -40,7 +40,6 @@ namespace {
     const double SEEK_COMMIT_DELAY = 0.45;    // seconds after the last seek press
     const double END_MARGIN = 30;             // an end of file this close to the duration is the real end
     const double AUTOPLAY_COUNTDOWN = 10;
-    const float PANEL_W = 680;
 
     const char *SIZE_KEYS[] = {"subtitle.size.small", "subtitle.size.medium", "subtitle.size.large"};
     const char *POSITION_KEYS[] = {"subtitle.position.bottom", "subtitle.position.raised"};
@@ -812,13 +811,20 @@ namespace {
         };
 
         void buildPanel() {
-            panel = ui::box(this, FloatRect(theme::SCREEN_W - PANEL_W, 0, PANEL_W, theme::SCREEN_H),
-                            theme::panel(), 0);
-            panelTitle = ui::label(panel, "", theme::TITLE, 48, 64, ui::Weight::SemiBold);
-            panelList = new ui::ListView(FloatRect(40, 170, PANEL_W - 70, 760), 84, 8, this);
+            namespace P = layout::player;
+            panel = ui::box(this, FloatRect(P::OPTIONS_X, 0, P::OPTIONS_W, theme::SCREEN_H), theme::panel(), 0);
+            // a soft left edge instead of a cut into the picture
+            ui::fade(panel, FloatRect(-P::OPTIONS_EDGE_W, 0, P::OPTIONS_EDGE_W, theme::SCREEN_H), theme::panel(),
+                     ui::Edge::Right);
+            panelTitle = ui::label(panel, "", theme::TITLE, P::OPTIONS_PAD, 70, ui::Weight::SemiBold);
+            panelTitle->setMaxWidth(P::OPTIONS_LIST_W);
+            // the rows end at the safe edge (x 1824), chevrons inside them
+            panelList = new ui::ListView(FloatRect(P::OPTIONS_PAD, 170, P::OPTIONS_LIST_W + ui::ScrollBar::WIDTH
+                                                                         + ui::ScrollBar::GAP, 760),
+                                         P::OPTIONS_ROW_H, 4, this);
             panel->add(panelList);
             auto *ph = new ui::HintBar();
-            ph->setPosition(48, theme::SCREEN_H - theme::SAFE_Y - 40);
+            ph->setPosition(P::OPTIONS_PAD, layout::HINTS_Y);
             ph->setHints({{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::DPad, tr("settings.hint_change")},
                           {ui::Glyph::Circle, tr("common.back")}});
             panel->add(ph);
@@ -829,18 +835,18 @@ namespace {
 
         C2DObject *createRow(float w, float h) override {
             PanelRow r;
-            r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::none(), theme::RADIUS_SMALL);
+            r.bg = new ui::RowFrame(w, h, -1);
             r.check = ui::label(r.bg, "", theme::BODY, 20, ui::Label::centerOffset(theme::BODY, h) - 12,
                                 ui::Weight::SemiBold, theme::accentText());
-            r.name = ui::label(r.bg, "", theme::BODY, 64, ui::Label::centerOffset(theme::BODY, h) - 12);
-            r.name->setMaxWidth(w - 64 - 24);
-            r.detail = ui::label(r.bg, "", theme::CAPTION, 64, ui::Label::centerOffset(theme::BODY, h) + 22,
-                                 ui::Weight::Regular, theme::textMuted());
-            r.detail->setMaxWidth(w - 64 - 24 - 40);
-            // rows that open a menu end with a chevron
-            r.chevron = ui::label(r.bg, "\xE2\x80\xBA", theme::HEADING, 0, ui::Label::centerOffset(theme::HEADING, h),
+            r.name = ui::label(r.bg, "", theme::BODY, 56, ui::Label::centerOffset(theme::BODY, h) - 12);
+            r.name->setMaxWidth(w - 56 - 52);
+            r.detail = ui::label(r.bg, "", theme::CAPTION, 56, ui::Label::centerOffset(theme::BODY, h) + 22,
+                                 ui::Weight::Regular, theme::textSecondary());
+            r.detail->setMaxWidth(w - 56 - 52);
+            // rows that open a menu end with a chevron, 20 px inside the row
+            r.chevron = ui::label(r.bg, "\xE2\x80\xBA", theme::HEADING, 0, ui::Label::centerOffset(theme::HEADING, h) - 2,
                                   ui::Weight::SemiBold, theme::textMuted());
-            r.chevron->setAlign(ui::Align::Right, w - 24);
+            r.chevron->setAlign(ui::Align::Right, w - 20);
             panelRows.push_back(r);
             return r.bg;
         }
@@ -960,9 +966,9 @@ namespace {
                 r.name->setText(name);
                 r.detail->setText(detail);
                 r.name->setColor(focused ? theme::textStrong() : theme::textPrimary());
-                r.bg->setFillColor(focused ? theme::focus() : theme::none());
-                r.bg->setOutlineColor(theme::accent());
-                r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
+                r.name->setWeight(focused ? ui::Weight::SemiBold : ui::Weight::Regular);
+                r.detail->setColor(focused ? theme::textSecondary() : theme::textMuted());
+                r.bg->setState(focused);
             }
         }
 
@@ -1208,7 +1214,7 @@ namespace {
         }
 
         struct PanelRow {
-            RectangleShape *bg;
+            ui::RowFrame *bg;
             ui::Label *check;
             ui::Label *name;
             ui::Label *detail;
