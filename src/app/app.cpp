@@ -18,6 +18,7 @@ using namespace c2d;
 namespace {
     const double KEEPALIVE_REDRAW = 1.0;   // idle screens are redrawn at most once per second
     const double IDLE_SLEEP_MS = 8;
+    const double CLOCK_CHECK_AT = 10.0;    // seconds after startup: one clock comparison in the log
 }
 
 Session::Session() {
@@ -50,6 +51,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     getInput()->setRepeatDelay(0);  // repeat/acceleration is handled by InputManager
 
     clockx::init();
+    LOG_I("clock", "startup: %s", clockx::clockReport().c_str());
     if (!ui::loadFonts(romfsPath + "assets/fonts/")) {
         LOG_E("app", "UI fonts missing from the package");
     }
@@ -445,6 +447,11 @@ void App::logic() {
             }
         }
         joystick = ownPad;
+    }
+    if (!clockChecked && t >= CLOCK_CHECK_AT) {
+        // on the console the UI clock must follow the process time (wall clock), not the CPU clock
+        clockChecked = true;
+        LOG_I("clock", "after %.0f s: %s", CLOCK_CHECK_AT, clockx::clockReport().c_str());
     }
     input.update(joystick, t);
     for (const auto &e: input.events()) {

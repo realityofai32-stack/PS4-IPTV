@@ -13,8 +13,13 @@ namespace clockx {
 
     int64_t unixNow();
 
-    // seconds since an arbitrary start, monotonic enough for UI timing
+    // wall-clock seconds since the app started (key repeat, scrolling, toasts, timeouts). On PS4 this is the
+    // FreeBSD kernel's CLOCK_MONOTONIC, never std::chrono::steady_clock (see clock.cpp).
     double monotonic();
+
+    // one log line comparing the UI clock with the console's process time and CPU clock: on hardware the first
+    // two advance together, the CPU clock much more slowly
+    std::string clockReport();
 
     std::string localTime();         // "21:45"
 

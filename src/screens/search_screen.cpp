@@ -313,7 +313,9 @@ namespace {
                     // right edge of the keyboard: on to the results
                     if (keyboard.focusCol() + 1 == (int) keyboard.rows()[(size_t) keyboard.focusRow()].size()
                         && !shown.empty()) {
-                        setZone(1);
+                        if (!e.repeat) {
+                            setZone(1);
+                        }
                         return;
                     }
                     keyboard.move(1, 0);
@@ -358,7 +360,9 @@ namespace {
                     list->moveSelection(1);
                     break;
                 case PadButton::Left:
-                    setZone(0);
+                    if (!e.repeat) {
+                        setZone(0);   // a held direction scrolls, it never switches zones
+                    }
                     return;
                 case PadButton::L2:
                     list->moveSelection(-list->pageSize());

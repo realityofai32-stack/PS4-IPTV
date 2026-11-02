@@ -1,8 +1,11 @@
 #include <SDL2/SDL.h>
 
 #include "input.h"
+#include "log.h"
 
 namespace {
+    const double HOLD_LOG_MIN = 1.0;   // seconds: shorter holds are not logged
+
     // SDL button indices of PacBrew's SDL2 PS4 joystick driver
     // (src/joystick/ps4/SDL_sysjoystick.c @ bf797a5, verified for the playback test):
     // 0 cross, 1 circle, 2 square, 3 triangle, 4 options, 6 touchpad, 9 L1, 10 R1,
@@ -74,7 +77,13 @@ void InputManager::update(void *joystick, double now) {
 
     for (int i = 0; i < (int) PadButton::Count; i++) {
         auto b = (PadButton) i;
+        double heldFor = keys[i].heldFor(now);
+        int steps = keys[i].repeatCount();
         input::KeyEvent e = keys[i].update(state[i], now, isRepeatable(b), speed[i]);
+        if (!state[i] && heldFor >= HOLD_LOG_MIN) {
+            // one line per long hold: proves on the console that repeat starts and accelerates
+            LOG_I("input", "hold %s %.1f s: %d repeat step(s)", buttonName(b), heldFor, steps);
+        }
         if (e == input::KeyEvent::Press) {
             pending.push_back({b, false, 0});
         } else if (e == input::KeyEvent::Repeat) {

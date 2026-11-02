@@ -280,7 +280,9 @@ namespace {
                 }
                 case PadButton::Left:
                     if (focus == 1 && !grid->navigate(-1, 0)) {
-                        setFocus(0);   // first column: back to the categories
+                        if (!e.repeat) {
+                            setFocus(0);   // first column: back to the categories (a held Left stays in the grid)
+                        }
                     } else if (focus == 1) {
                         moved(e.repeat);
                     }

@@ -193,6 +193,7 @@ private:
     InputManager input;
     void *ownPad = nullptr;          // pad opened by us when libcross2d had none at startup
     double nextPadProbe = 0;
+    bool clockChecked = false;
 
     c2d::RectangleShape *screenLayer = nullptr;
     c2d::RectangleShape *toastBox = nullptr;

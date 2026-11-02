@@ -3,7 +3,9 @@
 #include <ctime>
 
 #ifdef __PS4__
+#include <time.h>
 #include <orbis/SystemService.h>
+#include <orbis/libkernel.h>
 #endif
 
 #include "clock.h"
@@ -14,6 +16,46 @@ namespace clockx {
 
     namespace {
         int g_offsetMinutes = 0;
+
+#ifdef __PS4__
+        // The PS4 kernel is FreeBSD's: CLOCK_MONOTONIC is clock id 4 there. The toolchain's libc++ was built
+        // against musl headers that carry the Linux value (1), so std::chrono::steady_clock asks the kernel for
+        // clock 1 = FreeBSD's CLOCK_VIRTUAL, the process's user CPU time. That clock hardly moves while the UI
+        // idles (the main loop sleeps between frames), which stretched the 0.30 s hold-to-scroll delay to many
+        // seconds on the console. UI timing must never come from steady_clock on PS4.
+        const clockid_t FREEBSD_CLOCK_MONOTONIC = (clockid_t) 4;
+        const clockid_t FREEBSD_CLOCK_VIRTUAL = (clockid_t) 1;
+
+        bool readClock(clockid_t id, double &seconds) {
+            struct timespec ts = {};
+            if (clock_gettime(id, &ts) != 0) {
+                return false;
+            }
+            seconds = (double) ts.tv_sec + (double) ts.tv_nsec * 1e-9;
+            return true;
+        }
+
+        // wall-clock seconds from an arbitrary origin: the kernel's monotonic clock, or the process time
+        // (microseconds since the process started) if that clock were ever refused
+        double rawSeconds() {
+            static const bool kernelMonotonic = [] {
+                double probe = 0;
+                return readClock(FREEBSD_CLOCK_MONOTONIC, probe);
+            }();
+            double s = 0;
+            if (kernelMonotonic && readClock(FREEBSD_CLOCK_MONOTONIC, s)) {
+                return s;
+            }
+            return (double) sceKernelGetProcessTime() * 1e-6;
+        }
+#else
+        double rawSeconds() {
+            using namespace std::chrono;
+            return duration<double>(steady_clock::now().time_since_epoch()).count();
+        }
+#endif
+
+        double g_start = rawSeconds();
 
         std::tm toTm(int64_t t) {
             time_t tt = (time_t) t;
@@ -50,9 +92,20 @@ namespace clockx {
     }
 
     double monotonic() {
-        using namespace std::chrono;
-        static const auto start = steady_clock::now();
-        return duration<double>(steady_clock::now() - start).count();
+        return rawSeconds() - g_start;
+    }
+
+    std::string clockReport() {
+        char buf[160];
+#ifdef __PS4__
+        double cpu = 0;
+        bool hasCpu = readClock(FREEBSD_CLOCK_VIRTUAL, cpu);
+        snprintf(buf, sizeof(buf), "ui clock %.2f s, process time %.2f s, cpu clock %s%.2f s", monotonic(),
+                 (double) sceKernelGetProcessTime() * 1e-6, hasCpu ? "" : "n/a ", cpu);
+#else
+        snprintf(buf, sizeof(buf), "ui clock %.2f s (steady_clock)", monotonic());
+#endif
+        return buf;
     }
 
     int utcOffsetMinutes() {

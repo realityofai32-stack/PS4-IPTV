@@ -126,12 +126,12 @@ namespace {
                     list->moveSelection(list->pageSize());
                     break;
                 case PadButton::Left:
-                    if (focus == 1) {
+                    if (focus == 1 && !e.repeat) {
                         setFocus(0);
                     }
                     return;
                 case PadButton::Right:
-                    if (focus == 0 && !visible.empty()) {
+                    if (focus == 0 && !visible.empty() && !e.repeat) {
                         setFocus(1);
                     }
                     return;

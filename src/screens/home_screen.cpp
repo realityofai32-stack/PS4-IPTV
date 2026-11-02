@@ -245,6 +245,9 @@ namespace {
                     moveFocus(1);
                     break;
                 case PadButton::Down:
+                    if (e.repeat) {
+                        return;   // rails are a few zones: one press each (a hold never runs into the navigation)
+                    }
                     for (int z = zone + 1; z < RAIL + (int) rails.size(); z++) {
                         if (zoneSize(z) > 0) {
                             zone = z;
@@ -253,6 +256,9 @@ namespace {
                     }
                     break;
                 case PadButton::Up:
+                    if (e.repeat) {
+                        return;
+                    }
                     for (int z = zone - 1; z >= NAV; z--) {
                         if (zoneSize(z) > 0) {
                             zone = z;

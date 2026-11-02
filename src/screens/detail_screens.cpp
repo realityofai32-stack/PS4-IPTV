@@ -722,6 +722,8 @@ namespace {
                 case PadButton::Up:
                     if (focus == 2 && episodes->selected() > 0) {
                         episodes->moveSelection(-1);
+                    } else if (e.repeat) {
+                        return;   // a held direction scrolls the episodes, it never leaves the list
                     } else if (focus == 2) {
                         setFocus(hasSeasons() ? 1 : 0);
                     } else if (focus == 1) {
@@ -729,12 +731,14 @@ namespace {
                     }
                     break;
                 case PadButton::Down:
-                    if (focus == 0) {
+                    if (focus == 2) {
+                        episodes->moveSelection(1);
+                    } else if (e.repeat) {
+                        return;
+                    } else if (focus == 0) {
                         setFocus(hasSeasons() ? 1 : focus);
                     } else if (focus == 1 && count() > 0) {
                         setFocus(2);
-                    } else if (focus == 2) {
-                        episodes->moveSelection(1);
                     }
                     break;
                 case PadButton::Left:
