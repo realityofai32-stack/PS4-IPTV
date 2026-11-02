@@ -1,4 +1,6 @@
-// Live TV: categories | channels | details.
+// Live TV: categories | channels | the focused channel. The channel list dominates: rows are separators on the
+// background (only the focused row gets a surface), the categories stay quiet, the channel card is compact.
+// Geometry: ui/layout.h (layout::live), docs/v7-ui-v2-layouts.md. No programme guide: the provider data has none.
 //
 // Lists are virtualized (ui::ListView: only the rows on screen exist and are re-bound when scrolling).
 // Channel logos come from ImageLoader: the selected channel, the visible rows and - once scrolling pauses
@@ -11,6 +13,7 @@
 #include <unordered_map>
 
 #include "common.h"
+#include "../core/format.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
 
@@ -23,29 +26,7 @@ namespace {
     const int ALL_ROW = 1;
     const int FIRST_CATEGORY_ROW = 2;
 
-    // layout (1920x1080)
-    const float TOP = 200;
-    const float LIST_H = 760;
-    const float CAT_X = theme::SAFE_X;
-    const float CAT_W = 400;
-    const float CH_X = CAT_X + CAT_W + 36;
-    const float CH_W = 820;
-    const float PANE_X = CH_X + CH_W + 36;
-    const float PANE_W = theme::SCREEN_W - theme::SAFE_X - PANE_X;
-    const float CAT_ROW_H = 62;
-    const float CH_ROW_H = 76;
-    const float ROW_GAP = 8;
-
-    // channel row: number | logo tile | name | star
-    const float NUM_W = 64;
-    const float LOGO_X = 80;
-    const float LOGO_W = 104;
-    const float LOGO_H = 60;
-    const float NAME_X = LOGO_X + LOGO_W + 20;
-
-    // details logo tile
-    const float DETAIL_LOGO_W = 380;
-    const float DETAIL_LOGO_H = 220;
+    namespace L = layout::live;
 
     const int PREFETCH_ROWS = 8;         // above and below the visible rows, once scrolling pauses
     const double PREFETCH_PAUSE = 0.30;  // seconds without movement before prefetching
@@ -55,28 +36,22 @@ namespace {
         LiveScreen(App &a, bool startOnFavorites) : Screen(a), categoriesAdapter(this), channelsAdapter(this) {
             ui::background(this);
             playlist = app.session().profile.isPlaylist();
-            screens::header(this, tr("home.live_tv"));
-            notice = ui::label(this, "", theme::LABEL, theme::SAFE_X, theme::SAFE_Y + 62, ui::Weight::Regular,
-                               theme::textSecondary());
-            notice->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
+            ui::Label *title = screens::header(this, tr("home.live_tv"));
+            context = new screens::HeaderContext(this, title);
+            notice = screens::headerStatus(this);
             generation = app.session().liveGeneration;
             updateNotice();
-
-            ui::label(this, tr("live.categories_caption"), theme::CAPTION, CAT_X + 20, TOP - 40, ui::Weight::SemiBold,
-                      theme::textMuted());
-            channelCaption = ui::label(this, "", theme::CAPTION, CH_X + 20, TOP - 40, ui::Weight::SemiBold,
-                                       theme::textMuted());
-            channelCaption->setMaxWidth(ui::ListView::rowWidth(CH_W) - 40);
-
-            categoryList = new ui::ListView(FloatRect(CAT_X, TOP, CAT_W, LIST_H), CAT_ROW_H, 6, &categoriesAdapter);
+            categoryList = new ui::ListView(FloatRect(layout::RAIL_X, L::LIST_Y, layout::RAIL_W, L::LIST_H),
+                                            layout::RAIL_ROW_H, layout::RAIL_ROW_GAP, &categoriesAdapter);
             add(categoryList);
-            channelList = new ui::ListView(FloatRect(CH_X, TOP, CH_W, LIST_H), CH_ROW_H, ROW_GAP, &channelsAdapter);
+            channelList = new ui::ListView(FloatRect(L::CH_X, L::LIST_Y, L::CH_W, L::LIST_H), L::CH_ROW_H, L::CH_ROW_GAP,
+                                           &channelsAdapter);
             add(channelList);
-            empty = ui::label(this, "", theme::BODY, CH_X, TOP + 300, ui::Weight::Regular, theme::textMuted());
-            empty->setAlign(ui::Align::Center, ui::ListView::rowWidth(CH_W));
-            empty->setMaxWidth(ui::ListView::rowWidth(CH_W) - 80);
+            const float cw = ui::ListView::rowWidth(L::CH_W);
+            empty = ui::label(this, "", theme::BODY, L::CH_X, L::LIST_Y + 280, ui::Weight::Regular, theme::textMuted());
+            empty->setAlign(ui::Align::Center, cw);
+            empty->setMaxWidth(cw - 80);
             empty->setMaxLines(3);
-
             buildDetails();
             hints = screens::hintBar(this, {});
             categoryList->setSelected(startOnFavorites ? FAVORITES_ROW : ALL_ROW);
@@ -234,13 +209,11 @@ namespace {
 
             C2DObject *createRow(float w, float h) override {
                 Row r;
-                r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::none(), theme::RADIUS_SMALL);
-                r.marker = ui::box(r.bg, FloatRect(0, 16, 4, h - 32), theme::accent(), 2);
-                r.name = ui::label(r.bg, "", theme::BODY, 22, ui::Label::centerOffset(theme::BODY, h));
-                r.name->setMaxWidth(w - 22 - 84);
-                r.count = ui::label(r.bg, "", theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, h),
+                r.bg = new ui::RowFrame(w, h, -1);
+                r.name = ui::label(r.bg, "", theme::LABEL, layout::ROW_PAD, ui::Label::centerOffset(theme::LABEL, h));
+                r.count = ui::label(r.bg, "", theme::CAPTION, 0, ui::Label::centerOffset(theme::CAPTION, h),
                                     ui::Weight::Regular, theme::textMuted());
-                r.count->setAlign(ui::Align::Right, w - 20);
+                r.count->setAlign(ui::Align::Right, w - 14);
                 rows.push_back(r);
                 return r.bg;
             }
@@ -264,22 +237,22 @@ namespace {
                         name = live.categoryName(c.id);   // Uncategorized in the current UI language
                         n = live.countInCategory(c.id);
                     }
-                    r.name->setText(name);
                     r.count->setText(std::to_string(n));
-                    r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surface() : theme::none());
-                    r.bg->setOutlineColor(theme::accent());
-                    r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
-                    // the open category keeps an accent marker while the channel list has focus
-                    r.marker->setVisibility(selected && !focused ? Visibility::Visible : Visibility::Hidden);
+                    r.name->setMaxWidth(r.bg->getSize().x - layout::ROW_PAD - r.count->width() - 26);
+                    r.name->setText(name);
+                    // the open category keeps its accent edge while the channel list has focus; the others step
+                    // back then
+                    bool railFocused = screen->focus == 0;
+                    r.bg->setState(focused, selected);
                     r.name->setWeight(selected ? ui::Weight::SemiBold : ui::Weight::Regular);
-                    r.name->setColor(focused ? theme::textStrong() : selected ? theme::textPrimary() : theme::textSecondary());
-                    r.count->setColor(focused ? theme::textPrimary() : theme::textMuted());
+                    r.name->setColor(focused ? theme::textStrong() : selected ? theme::textPrimary()
+                                     : railFocused ? theme::textSecondary() : theme::textMuted());
+                    r.count->setColor(focused ? theme::textSecondary() : theme::textMuted());
                 }
             }
 
             struct Row {
-                RectangleShape *bg;
-                RectangleShape *marker;
+                ui::RowFrame *bg;
                 ui::Label *name;
                 ui::Label *count;
             };
@@ -294,14 +267,15 @@ namespace {
 
             C2DObject *createRow(float w, float h) override {
                 Row r;
-                r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::surface(), theme::RADIUS_SMALL);
-                r.num = ui::label(r.bg, "", theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, h),
+                r.bg = new ui::RowFrame(w, h, L::LOGO_X);
+                r.num = ui::label(r.bg, "", theme::CAPTION, 0, ui::Label::centerOffset(theme::CAPTION, h),
                                   ui::Weight::Regular, theme::textMuted());
-                r.num->setAlign(ui::Align::Right, NUM_W);
-                r.logo = new ui::LogoView(FloatRect(LOGO_X, (h - LOGO_H) / 2, LOGO_W, LOGO_H), 22, 4, 1.25f);
+                r.num->setAlign(ui::Align::Right, L::NUM_W);
+                r.logo = new ui::LogoView(FloatRect(L::LOGO_X, (h - L::LOGO_H) / 2, L::LOGO_W, L::LOGO_H), 22, 4, 1.25f);
+                r.logo->setCornersRadius(theme::RADIUS_SMALL);
                 r.bg->add(r.logo);
-                r.name = ui::label(r.bg, "", theme::BODY, NAME_X, ui::Label::centerOffset(theme::BODY, h));
-                r.name->setMaxWidth(w - NAME_X - 64);
+                r.name = ui::label(r.bg, "", theme::BODY, L::NAME_X, ui::Label::centerOffset(theme::BODY, h));
+                r.name->setMaxWidth(w - L::NAME_X - 64);
                 r.fav = ui::label(r.bg, "", theme::BODY, 0, ui::Label::centerOffset(theme::BODY, h),
                                   ui::Weight::SemiBold, theme::warning());
                 r.fav->setAlign(ui::Align::Right, w - 22);
@@ -324,16 +298,13 @@ namespace {
                     r.name->setColor(focused ? theme::textStrong() : theme::textPrimary());
                     r.num->setColor(focused ? theme::textPrimary() : theme::textMuted());
                     r.fav->setText(screen->app.library().isFavorite(ContentType::Live, c.id) ? "\xE2\x98\x85" : "");
-                    // selected while the categories have focus: show where the channel cursor is
-                    r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surfaceElevated()
-                                                                              : theme::surface());
-                    r.bg->setOutlineColor(theme::accent());
-                    r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
+                    // selected while the categories have focus: the accent edge shows where the channel cursor is
+                    r.bg->setState(focused, selected);
                 }
             }
 
             struct Row {
-                RectangleShape *bg;
+                ui::RowFrame *bg;
                 ui::Label *num;
                 ui::LogoView *logo;
                 ui::Label *name;
@@ -345,31 +316,33 @@ namespace {
 
         // ------------------------------------------------------------------ details panel
         void buildDetails() {
-            pane = ui::box(this, FloatRect(PANE_X, TOP, PANE_W, LIST_H), theme::card(), theme::RADIUS);
-            detailLogo = new ui::LogoView(FloatRect((PANE_W - DETAIL_LOGO_W) / 2, 28, DETAIL_LOGO_W, DETAIL_LOGO_H),
-                                          72, 16, 1.6f);
+            const float pad = L::PANEL_PAD;
+            const float iw = L::PANEL_W - 2 * pad;
+            pane = ui::box(this, FloatRect(L::PANEL_X, L::LIST_Y, L::PANEL_W, L::PANEL_H), theme::surface(),
+                           theme::RADIUS_LARGE);
+            detailLogo = new ui::LogoView(FloatRect(pad, pad, iw, L::PANEL_LOGO_H), 72, 16, 1.6f);
+            detailLogo->setCornersRadius(theme::RADIUS);
             pane->add(detailLogo);
-            detailName = ui::label(pane, "", theme::HEADING, 28, 0, ui::Weight::SemiBold);
-            detailName->setMaxWidth(PANE_W - 56);
+            detailName = ui::label(pane, "", theme::HEADING, pad, 0, ui::Weight::SemiBold);
+            detailName->setMaxWidth(iw);
             detailName->setMaxLines(2);
-            detailCategory = ui::label(pane, "", theme::LABEL, 28, 0, ui::Weight::Regular, theme::textSecondary());
-            detailCategory->setMaxWidth(PANE_W - 56);
+            detailCategory = ui::label(pane, "", theme::LABEL, pad, 0, ui::Weight::Regular, theme::textSecondary());
+            detailCategory->setMaxWidth(iw);
             detailCategory->setMaxLines(2);
-            detailNumber = ui::label(pane, "", theme::LABEL, 28, 0, ui::Weight::Regular, theme::textMuted());
-            detailFav = ui::label(pane, "", theme::LABEL, 28, 0, ui::Weight::SemiBold, theme::warning());
-
-            const float bw = PANE_W - 56;
-            watch = ui::box(pane, FloatRect(28, LIST_H - 28 - 72, bw, 72), theme::surfaceElevated(), 36);
-            auto *wl = ui::label(watch, tr("live.watch"), theme::BODY, 0, ui::Label::centerOffset(theme::BODY, 72),
+            detailNumber = ui::label(pane, "", theme::LABEL, pad, 0, ui::Weight::Regular, theme::textMuted());
+            detailFav = ui::label(pane, "", theme::LABEL, pad, 0, ui::Weight::SemiBold, theme::warning());
+            const float wh = L::WATCH_H;
+            watch = ui::box(pane, FloatRect(pad, L::PANEL_H - pad - wh, iw, wh), theme::surfaceElevated(), wh / 2);
+            auto *wl = ui::label(watch, tr("live.watch"), theme::BODY, 0, ui::Label::centerOffset(theme::BODY, wh),
                                  ui::Weight::SemiBold);
             watchLabel = wl;
             float textW = wl->width();
-            const float glyph = 36;
-            float groupX = (bw - (glyph + 14 + textW)) / 2;
+            const float glyph = 34;
+            float groupX = (iw - (glyph + 14 + textW)) / 2;
             auto *g = new ui::ButtonGlyph(ui::Glyph::Cross, glyph);
-            g->setPosition(std::round(groupX), 18);
+            g->setPosition(std::round(groupX), std::round((wh - glyph) / 2));
             watch->add(g);
-            wl->setPosition(std::round(groupX + glyph + 14), ui::Label::centerOffset(theme::BODY, 72));
+            wl->setPosition(std::round(groupX + glyph + 14), ui::Label::centerOffset(theme::BODY, wh));
         }
 
         void refreshDetails() {
@@ -386,22 +359,23 @@ namespace {
             std::shared_ptr<ImageSet> img = app.images().get(c->icon);
             detailLogo->set(c->name, img ? img->at(1).texture : nullptr, img ? img->at(1).size : Vector2i());
             detailName->setText(c->name);
-            float y = 28 + DETAIL_LOGO_H + 30;
-            detailName->setPosition(28, y);
-            y += detailName->height() + 12;
+            const float pad = L::PANEL_PAD;
+            float y = pad + L::PANEL_LOGO_H + 26;
+            detailName->setPosition(pad, y);
+            y += detailName->height() + 10;
             detailCategory->setText(categoryName(c->categoryId));
-            detailCategory->setPosition(28, y);
+            detailCategory->setPosition(pad, y);
             if (!detailCategory->getText().empty()) {
-                y += detailCategory->height() + 6;
+                y += detailCategory->height() + 4;
             }
             detailNumber->setText(c->num > 0 ? tr("live.channel_number", {std::to_string(c->num)}) : "");
-            detailNumber->setPosition(28, y);
+            detailNumber->setPosition(pad, y);
             if (c->num > 0) {
-                y += detailNumber->height() + 6;
+                y += detailNumber->height() + 4;
             }
             detailFav->setText(app.library().isFavorite(ContentType::Live, c->id)
                                ? "\xE2\x98\x85  " + tr("favorites.in_favorites") : "");
-            detailFav->setPosition(28, y + 8);
+            detailFav->setPosition(pad, y + 8);
             // the primary action while a channel is focused: accent fill, caption in the accent's text colour
             watch->setFillColor(focus == 1 ? theme::accent() : theme::surfaceElevated());
             watchLabel->setColor(focus == 1 ? theme::onAccent() : theme::textPrimary());
@@ -416,6 +390,7 @@ namespace {
         void updateNotice() {
             const Session &s = app.session();
             notice->setText(playlist && s.playlistRefreshing ? tr("m3u.refreshing") : s.liveNotice);
+            notice->setColor(theme::textSecondary());
         }
 
         void playlistMenu() {
@@ -488,7 +463,8 @@ namespace {
             }
             openCategoryId = row >= FIRST_CATEGORY_ROW ? live.categories()[(size_t) (row - FIRST_CATEGORY_ROW)].id
                                                        : std::string();
-            channelCaption->setText(visible.empty() ? caption : caption + "  \xC2\xB7  " + std::to_string(visible.size()));
+            // the open category and its size on the header line
+            context->set(caption, visible.empty() ? "" : fmt::number((long long) visible.size()));
             int index = 0;
             if (!keep.empty()) {
                 for (size_t i = 0; i < visible.size(); i++) {
@@ -598,7 +574,7 @@ namespace {
         ChannelsAdapter channelsAdapter;
         ui::ListView *categoryList;
         ui::ListView *channelList;
-        ui::Label *channelCaption;
+        screens::HeaderContext *context;
         ui::Label *empty;
         RectangleShape *pane = nullptr;
         ui::Label *watchLabel = nullptr;
