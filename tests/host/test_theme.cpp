@@ -1,5 +1,6 @@
-// The near-black theme: text contrast on every surface (WCAG 2.x ratios, TV viewing distance), surfaces that
-// stay dark, and no colour literals in screens / widgets / app code (everything goes through ui/theme.h).
+// The V7 IPTV dark theme: text contrast on every surface (WCAG 2.x ratios, TV viewing distance) for every accent
+// preset, surfaces that stay dark, and no colour literals in screens / widgets / app code (everything goes
+// through ui/theme.h).
 
 #include <cstdio>
 #include <cstdlib>
@@ -29,7 +30,6 @@ namespace {
                 {"card", CARD},
                 {"surfaceElevated", SURFACE_ELEVATED},
                 {"cardHover", CARD_HOVER},
-                {"focus", FOCUS},
                 {"logoTile", LOGO_TILE},
                 {"panel", over(PANEL, BACKGROUND)},
                 {"overlay over video", over(OVERLAY, VIDEO_BACKGROUND)},
@@ -54,17 +54,12 @@ TEST(theme_text_contrast_on_every_surface) {
         expectContrast("textSecondary", TEXT_SECONDARY, bg, 4.5);
         expectContrast("textMuted", TEXT_MUTED, bg, 3.0);       // metadata, never body text
     }
-    // state colours are used as text on panels and rows
-    for (const Named &bg: {Named{"surface", SURFACE}, Named{"card", CARD}, Named{"focus", FOCUS},
-                           Named{"background", BACKGROUND}}) {
+    // state colours are used as text on panels and rows (never accent-coloured)
+    for (const Named &bg: {Named{"surface", SURFACE}, Named{"card", CARD}, Named{"background", BACKGROUND}}) {
         expectContrast("success", SUCCESS, bg, 4.5);
         expectContrast("warning", WARNING, bg, 4.5);
         expectContrast("danger", DANGER, bg, 4.5);
-        expectContrast("accent text", ACCENT_TEXT, bg, 4.5);
     }
-    // filled controls: focused button (accent), primary button / selected chip, toasts
-    expectContrast("textStrong", TEXT_STRONG, {"accent", ACCENT}, 3.0);   // large semibold captions only
-    expectContrast("textPrimary", TEXT_PRIMARY, {"accentMuted", ACCENT_MUTED}, 7.0);
     expectContrast("textPrimary", TEXT_PRIMARY, {"successSurface", SUCCESS_SURFACE}, 4.5);
     expectContrast("textPrimary", TEXT_PRIMARY, {"dangerSurface", DANGER_SURFACE}, 4.5);
     expectContrast("textStrong", TEXT_STRONG, {"monogram", MONOGRAM[0]}, 4.5);
@@ -73,20 +68,54 @@ TEST(theme_text_contrast_on_every_surface) {
     }
 }
 
-TEST(theme_focus_is_visible_and_surfaces_stay_dark) {
-    // focus border (non-text UI component): >= 3:1 against everything it surrounds
-    for (const Named &bg: surfaces()) {
-        if (std::string(bg.name).find("bright") == std::string::npos) {
-            expectContrast("accent border", ACCENT, bg, 3.0);
+// every accent preset, on every surface it appears with
+TEST(theme_every_accent_preset_is_readable) {
+    CHECK(ACCENT_COUNT >= 8);
+    CHECK_EQ(DEFAULT_ACCENT, 0);
+    CHECK_EQ(std::string(ACCENTS[DEFAULT_ACCENT].key), std::string("blue"));
+    for (int i = 0; i < ACCENT_COUNT; i++) {
+        const Accent &a = ACCENTS[i];
+        // focused row fill: text stays readable, and it differs from the rows around it
+        expectContrast("textPrimary", TEXT_PRIMARY, {a.key, a.focus}, 7.0);
+        expectContrast("textSecondary", TEXT_SECONDARY, {a.key, a.focus}, 4.5);
+        CHECK(contrast(a.focus, SURFACE) >= 1.15);
+        // selected chip / tab at rest
+        expectContrast("textPrimary", TEXT_PRIMARY, {a.key, a.muted}, 7.0);
+        // captions on an accent fill: large semibold text only (primary button, focused chip)
+        expectContrast("onAccent", a.onAccent, {a.key, a.accent}, 3.0);
+        // the accent as text (eyebrows, links, brand) on the dark surfaces
+        for (const Named &bg: {Named{"surface", SURFACE}, Named{"card", CARD}, Named{"background", BACKGROUND},
+                               Named{"focus", a.focus}}) {
+            expectContrast("accent text", a.text, bg, 4.5);
+        }
+        // focus border / progress (non-text UI component): >= 3:1 against everything it surrounds
+        for (const Named &bg: surfaces()) {
+            if (std::string(bg.name).find("bright") == std::string::npos) {
+                expectContrast("accent border", a.accent, bg, 3.0);
+            }
+        }
+        expectContrast("accent border", a.accent, {"focus", a.focus}, 3.0);
+        // the accent tints stay dark: no large bright surfaces
+        CHECK(luminance(a.focus) < 0.06);
+        CHECK(luminance(a.muted) < 0.06);
+        // presets are distinct and addressable by their settings key
+        CHECK_EQ(accentIndex(a.key), i);
+        for (int j = 0; j < i; j++) {
+            CHECK(std::string(ACCENTS[j].key) != a.key);
         }
     }
+    CHECK_EQ(accentIndex("no-such-colour"), -1);
+    CHECK_EQ(accentIndex(""), -1);
+    CHECK_EQ(accentIndex(nullptr), -1);
+}
+
+TEST(theme_focus_is_visible_and_surfaces_stay_dark) {
     // focused fills differ from what is around them (the border carries most of it)
-    CHECK(contrast(FOCUS, SURFACE) >= 1.2);
     CHECK(contrast(CARD_HOVER, CARD) >= 1.3);
     CHECK(contrast(SURFACE, BACKGROUND) >= 1.1);
     // near-black / charcoal: no large bright surfaces (the accent only fills small things)
-    for (const Rgba &s: {BACKGROUND, BACKGROUND_SECONDARY, SURFACE, CARD, SURFACE_ELEVATED, CARD_HOVER, FOCUS,
-                         LOGO_TILE, ACCENT_MUTED}) {
+    for (const Rgba &s: {BACKGROUND, BACKGROUND_SECONDARY, SURFACE, CARD, SURFACE_ELEVATED, CARD_HOVER,
+                         LOGO_TILE}) {
         CHECK(luminance(s) < 0.06);
     }
     // the hierarchy gets lighter step by step

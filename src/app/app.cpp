@@ -73,6 +73,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     // the UI language is Settings > Language (English unless the user chose otherwise), before any screen exists
     i18n::setLanguage(i18n::fromCode(settingsStore.get().language));
     LOG_I("app", "UI language: %s", i18n::code(i18n::language()));
+    applyAccent(false);   // before any screen exists: every shape is built with the saved accent
     LOG_I("storage", "%d profile(s), active '%s'", (int) profileStore.profiles().size(),
           profileStore.activeId().c_str());
     warning.clear();
@@ -312,6 +313,15 @@ void App::applyLanguage(bool rebuildScreens) {
         // every screen builds its labels when it is created: start over at the root, back in Settings
         replaceAll(currentSession.connected || currentSession.offline ? screens::makeHome(*this) : firstScreen());
         push(screens::makeSettings(*this));
+    }
+}
+
+void App::applyAccent(bool rebuildScreens) {
+    theme::setAccent(palette::accentIndex(settingsStore.get().accentColor.c_str()));
+    LOG_I("app", "accent color: %s", theme::accentPreset().key);
+    if (rebuildScreens) {
+        replaceAll(currentSession.connected || currentSession.offline ? screens::makeHome(*this) : firstScreen());
+        push(screens::makeSettings(*this, screens::SettingsPage::Appearance));
     }
 }
 

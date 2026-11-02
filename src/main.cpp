@@ -1,4 +1,4 @@
-// PS4 IPTV - entry point.
+// V7 IPTV (title IPTV00002) - entry point.
 // Start/exit sequence follows pPlay's main(): network module, renderer, loop, sceSystemServiceLoadExec("exit").
 
 #include <SDL2/SDL.h>
@@ -22,7 +22,7 @@ int main() {
     diag::setVerbose(true);
 #endif
     diag::FileStatus fs = diag::fileStatus();
-    LOG_I("app", "PS4 IPTV v%s starting (title %s, build %s, git %s, %s)", APP_VERSION, APP_TITLE_ID, BUILD_DATE,
+    LOG_I("app", "V7 IPTV v%s starting (title %s, build %s, git %s, %s)", APP_VERSION, APP_TITLE_ID, BUILD_DATE,
           BUILD_GIT_HASH, BUILD_TYPE);
     if (!fs.ok) {
         LOG_E("storage", "log file %s not writable: %s", fs.path.c_str(), fs.detail.c_str());

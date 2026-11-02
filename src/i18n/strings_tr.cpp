@@ -29,8 +29,8 @@ namespace i18n {
             {"duration.left", "{0} kaldı"},
 
             // ---------------------------------------------------------------- genel
-            {"app.name", "PS4 IPTV"},
-            {"app.exit_title", "PS4 IPTV kapatılsın mı?"},
+            {"app.name", "V7 IPTV"},
+            {"app.exit_title", "V7 IPTV kapatılsın mı?"},
             {"common.add", "Ekle"},
             {"common.back", "Geri"},
             {"common.cancel", "İptal"},
@@ -108,7 +108,7 @@ namespace i18n {
             {"connect.offline_mode", "Çevrimdışı"},
 
             // ---------------------------------------------------------------- karşılama / profiller
-            {"onboarding.welcome", "PS4 IPTV'ye hoş geldiniz"},
+            {"onboarding.welcome", "V7 IPTV'ye hoş geldiniz"},
             {"onboarding.text", "Başlamak için kaynağınızı ekleyin."},
             {"profiles.title", "Kaynaklar"},
             {"profiles.subtitle", "İzlemek istediğiniz kaynağı seçin veya yenisini ekleyin."},
@@ -714,7 +714,7 @@ namespace i18n {
             {"settings.storage.desc", "İndirmelerin kullandığı alan, boş alan ve indirmelerle önbelleklerin "
                                       "silinmesi."},
             {"settings.diagnostics.desc", "Metin görüntüleme testi ve sürüm bilgisi."},
-            {"settings.about.desc", "Sürüm, derleme ve PS4 IPTV'nin üzerine kurulduğu açık kaynak projeler."},
+            {"settings.about.desc", "Sürüm, derleme ve V7 IPTV'nin üzerine kurulduğu açık kaynak projeler."},
             {"storage.downloaded", "İndirilen içerik"},
             {"storage.downloaded.desc", "Çevrimdışı oynatma için kaydedilen {0}. Yönetmek için seçin."},
             {"storage.items.one", "{0} öğe"},
@@ -804,12 +804,12 @@ namespace i18n {
             {"dldiag.rcvbuf", "Soket alma arabelleği"},
             {"dldiag.rcvbuf_value", "sistem {0}, kullanılan {1}"},
             {"dldiag.curlbuf", "Aktarım arabelleği"},
-            {"about.title", "PS4 IPTV Hakkında"},
+            {"about.title", "V7 IPTV Hakkında"},
             {"about.version", "Sürüm {0}  •  derleme {1}  •  {2}"},
-            {"about.license", "PS4 IPTV özgür bir yazılımdır: Free Software Foundation tarafından yayımlanan GNU Genel "
+            {"about.license", "V7 IPTV özgür bir yazılımdır: Free Software Foundation tarafından yayımlanan GNU Genel "
                               "Kamu Lisansı'nın 3. veya daha sonraki bir sürümünün koşulları altında yeniden dağıtabilir "
                               "ve/veya değiştirebilirsiniz. HİÇBİR GARANTİ OLMADAN dağıtılır. Bkz. LICENSE (GPL-3.0)."},
-            {"about.no_content", "PS4 IPTV hiçbir kanal, film, dizi veya hesap sağlamaz. Yalnızca erişim hakkınız olan "
+            {"about.no_content", "V7 IPTV hiçbir kanal, film, dizi veya hesap sağlamaz. Yalnızca erişim hakkınız olan "
                                  "hizmetlerle kullanın ve yalnızca hizmetin içerik saklamaya izin verdiği durumlarda "
                                  "indirin."},
             {"about.built_on", "Üzerine kurulduğu projeler - teşekkürler:"},
@@ -897,6 +897,40 @@ namespace i18n {
             {"m3u.no_saved_copy", "Çalma listesinin kayıtlı kopyası yok."},
             {"settings.smooth_scrolling", "Yumuşak kaydırma"},
             {"settings.smooth_scrolling.desc", "Listeler ve afiş ızgaraları siz gezinirken yeni konumlarına akarak geçer. Kayma efekti olmadan satır satır geçmek için kapatın."},
+            // ---------------------------------------------------------------- V7 IPTV refresh: brand, appearance
+            {"app.tagline", "Kendi kaynaklarınızdan canlı TV, film ve diziler"},
+            {"appearance.title", "Görünüm"},
+            {"appearance.accent", "Vurgu rengi"},
+            {"appearance.accent.desc", "Odak çerçevelerinin, ana düğmelerin, seçili sekmelerin ve ilerleme çubuklarının rengi. Arka planlar, görseller ve video kendi renklerini korur."},
+            {"appearance.accent.current", "Geçerli vurgu: {0}. Bir rengi uygulamak için X'e basın; hemen kaydedilir."},
+            {"appearance.accent.applied", "Vurgu rengi: {0}"},
+            {"appearance.accent.blue", "V7 Mavisi"},
+            {"appearance.accent.cyan", "Camgöbeği"},
+            {"appearance.accent.teal", "Turkuaz"},
+            {"appearance.accent.green", "Yeşil"},
+            {"appearance.accent.purple", "Mor"},
+            {"appearance.accent.magenta", "Fuşya"},
+            {"appearance.accent.red", "Kırmızı"},
+            {"appearance.accent.orange", "Turuncu"},
+            {"appearance.accent.white", "Beyaz"},
+            {"appearance.preview", "Önizleme"},
+            {"appearance.preview_button", "Ana düğme"},
+            {"appearance.preview_chip", "Seçili"},
+
+            // ---------------------------------------------------------------- V7 IPTV refresh: navigation, Home
+            {"nav.home", "Ana Sayfa"},
+            {"home.hero_resume", "Devam et"},
+            {"home.hero_resume_at", "Devam et {0}"},
+            {"home.hero_details", "Ayrıntılar"},
+            {"home.hero_left", "{0} kaldı"},
+            {"home.hero_start_title", "Ne izlemek istersiniz?"},
+            {"home.hero_start_text", "Canlı TV, Filmler veya Diziler'e göz atın ya da hepsinde birden arayın."},
+            {"home.hero_start_text_playlist", "Çalma listenizdeki kanallara göz atın veya onlarda arayın."},
+            {"home.favorites_empty", "Kanalları, filmleri ve dizileri Favorilere ekleyin; burada görünürler."},
+            {"home.favorites_more", "Filmler ve diziler, bölümleri bir kez açıldığında burada görünür."},
+            {"home.see_all", "Tümünü gör"},
+            {"home.see_all_detail", "Tüm favoriler"},
+            {"home.source", "Kaynak: {0}"},
     };
 
     extern const size_t STRINGS_TR_COUNT = sizeof(STRINGS_TR) / sizeof(STRINGS_TR[0]);

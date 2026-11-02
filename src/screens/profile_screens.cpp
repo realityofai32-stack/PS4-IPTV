@@ -18,12 +18,18 @@ namespace {
     public:
         explicit OnboardingScreen(App &a) : Screen(a) {
             ui::background(this);
+            auto *glow = new ui::Backdrop(FloatRect(theme::SCREEN_W / 2, 0, theme::SCREEN_W / 2, theme::SCREEN_H), 0, 0);
+            add(glow);
             float cx = theme::SCREEN_W / 2;
-            auto *logo = ui::label(this, tr("app.name"), theme::DISPLAY, 0, 300, ui::Weight::SemiBold, theme::accentText());
-            logo->setAlign(ui::Align::Center, theme::SCREEN_W);
-            auto *t = ui::label(this, tr("onboarding.welcome"), theme::TITLE, 0, 400, ui::Weight::SemiBold);
+            // the full lockup: [V7 symbol] V7 IPTV, then the tagline
+            auto *brand = new ui::Brand(tr("app.name"), 96, theme::DISPLAY);
+            brand->setPosition(std::round(cx - brand->getSize().x / 2), 210);
+            add(brand);
+            auto *tag = ui::label(this, tr("app.tagline"), theme::LABEL, 0, 330, ui::Weight::Regular, theme::textMuted());
+            tag->setAlign(ui::Align::Center, theme::SCREEN_W);
+            auto *t = ui::label(this, tr("onboarding.welcome"), theme::TITLE, 0, 420, ui::Weight::SemiBold);
             t->setAlign(ui::Align::Center, theme::SCREEN_W);
-            auto *s = ui::label(this, tr("onboarding.text"), theme::BODY, 0, 470,
+            auto *s = ui::label(this, tr("onboarding.text"), theme::BODY, 0, 490,
                                 ui::Weight::Regular, theme::textSecondary());
             s->setMaxWidth(980);
             s->setMaxLines(3);
@@ -32,9 +38,9 @@ namespace {
             hasDownloads = !app.downloads().items().empty();
             float bw = 460;
             float bx = hasDownloads ? cx - bw - 12 : cx - bw / 2;
-            button = new ui::Button(tr("onboarding.add_source"), FloatRect(bx, 620, bw, 88), true);
+            button = new ui::Button(tr("onboarding.add_source"), FloatRect(bx, 640, bw, 88), true);
             add(button);
-            downloadsButton = new ui::Button(tr("home.downloads"), FloatRect(cx + 12, 620, bw, 88));
+            downloadsButton = new ui::Button(tr("home.downloads"), FloatRect(cx + 12, 640, bw, 88));
             downloadsButton->setVisibility(hasDownloads ? Visibility::Visible : Visibility::Hidden);
             add(downloadsButton);
             screens::hintBar(this, {{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("common.exit")}});

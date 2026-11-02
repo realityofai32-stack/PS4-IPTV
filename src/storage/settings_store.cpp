@@ -1,6 +1,7 @@
 #include "settings_store.h"
 #include "../core/json.h"
 #include "../platform/fs.h"
+#include "../ui/palette.h"
 
 namespace {
     const int FORMAT_VERSION = 2;   // 2: language choice, display mode / zoom, downloads
@@ -99,6 +100,8 @@ std::string SettingsStore::serialize() const {
     root.set("retryDownloads", json::Value::makeBool(settings.retryDownloads));
     root.set("resumeDownloadsOnStart", json::Value::makeBool(settings.resumeDownloadsOnStart));
     root.set("language", json::Value::makeString(settings.language == "tr" ? "tr" : "en"));
+    int accent = palette::accentIndex(settings.accentColor.c_str());
+    root.set("accentColor", json::Value::makeString(palette::ACCENTS[accent < 0 ? palette::DEFAULT_ACCENT : accent].key));
     json::Value orders = json::Value::makeObject();
     for (const auto &o: settings.sortOrders) {
         orders.set(o.first, json::Value::makeString(o.second));
@@ -147,6 +150,9 @@ bool SettingsStore::deserialize(const std::string &text, std::string *error) {
     // the language is only honoured from files written since the Language setting exists (version 2)
     std::string lang = root["version"].asInt(1) >= 2 ? root["language"].asString("en") : "en";
     s.language = lang == "tr" ? "tr" : "en";
+    // optional (added with V7 IPTV): missing or unknown -> the default accent
+    int accent = palette::accentIndex(root["accentColor"].asString("").c_str());
+    s.accentColor = palette::ACCENTS[accent < 0 ? palette::DEFAULT_ACCENT : accent].key;
     for (const auto &o: root["sortOrders"].members()) {
         std::string key = o.second.asString();
         if (o.first.size() <= 80 && iptv::sortModeFromKey(key) != iptv::SortMode::Provider) {

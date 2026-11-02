@@ -1,4 +1,4 @@
-# PS4 IPTV - production application (title IPTV00002).
+# V7 IPTV (formerly PS4 IPTV) - production application (title IPTV00002).
 #
 # Playback foundation (Milestone B+): the pPlay stack proven on hardware in Phase 2 - libmpv 0.34.1,
 # FFmpeg 5.0, SDL2 2.0.18 PS4 port, libcross2d - found and linked exactly like upstream pPlay.
@@ -14,7 +14,9 @@ endif ()
 
 set(APP_VERSION "0.2.0")
 set(APP_TITLE_ID "IPTV00002")      # unique: not PPLA00001 (pPlay), IPTV00001 (old experiment), IPTT00001 (test)
-set(APP_PKG_TITLE "PS4 IPTV")
+# shown on the PS4 home screen. Only the display name changed with the V7 IPTV brand: the Title ID, content ID and
+# /data/PS4IPTV/ stay, so the PKG installs over v0.2.0 and keeps profiles, settings, history and downloads.
+set(APP_PKG_TITLE "V7 IPTV")
 set(APP_PKG_VERSION "00.20")       # PS4 APP_VER format XX.YY for 0.2.0
 
 set(PLATFORM_PS4 ON CACHE BOOL "Sony PS4 target platform" FORCE)

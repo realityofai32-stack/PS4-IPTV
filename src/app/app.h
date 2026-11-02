@@ -146,6 +146,10 @@ public:
     // applies Settings > Language and rebuilds the screens, so every label is in the new language
     void applyLanguage(bool rebuildScreens);
 
+    // applies Settings > Appearance > Accent color; rebuildScreens: every screen is built again (colours are read
+    // when shapes are created), back in Settings > Appearance
+    void applyAccent(bool rebuildScreens);
+
     // persists favorites/history; logs and toasts on failure
     void saveLibrary();
 

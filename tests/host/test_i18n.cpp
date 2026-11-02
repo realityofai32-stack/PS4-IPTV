@@ -3,9 +3,9 @@
 //     valid UTF-8; plural keys come in .one / .other pairs
 //   - every key the source code refers to exists (string literals of the key namespaces, i18n::count keys and
 //     the few keys built at run time)
-//   - screens do not bypass the tables: string literals in src/screens/*.cpp, app.cpp and widgets.cpp must be
-//     localization keys, technical tokens, or sit in a block marked i18n-exempt (fixed specimen text, proper
-//     names). PS4IPTV_SOURCE_DIR points at src/ (scripts/run-host-tests.ps1).
+//   - screens do not bypass the tables: string literals in src/screens/*.cpp, app.cpp, widgets.cpp and
+//     components.cpp must be localization keys, technical tokens, or sit in a block marked i18n-exempt (fixed
+//     specimen text, proper names). PS4IPTV_SOURCE_DIR points at src/ (scripts/run-host-tests.ps1).
 
 #include <cstdlib>
 #include <filesystem>
@@ -330,6 +330,7 @@ TEST(i18n_screens_do_not_hardcode_text) {
     }
     files.push_back(std::filesystem::path(src) / "app" / "app.cpp");
     files.push_back(std::filesystem::path(src) / "ui" / "widgets.cpp");
+    files.push_back(std::filesystem::path(src) / "ui" / "components.cpp");
     const std::regex letters("[A-Za-z]{2,}");
     int hits = 0;
     for (const auto &path: files) {

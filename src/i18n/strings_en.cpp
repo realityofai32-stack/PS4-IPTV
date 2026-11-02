@@ -29,8 +29,8 @@ namespace i18n {
             {"duration.left", "{0} left"},
 
             // ---------------------------------------------------------------- common
-            {"app.name", "PS4 IPTV"},
-            {"app.exit_title", "Exit PS4 IPTV?"},
+            {"app.name", "V7 IPTV"},
+            {"app.exit_title", "Exit V7 IPTV?"},
             {"common.add", "Add"},
             {"common.back", "Back"},
             {"common.cancel", "Cancel"},
@@ -108,7 +108,7 @@ namespace i18n {
             {"connect.offline_mode", "Offline"},
 
             // ---------------------------------------------------------------- onboarding / profiles
-            {"onboarding.welcome", "Welcome to PS4 IPTV"},
+            {"onboarding.welcome", "Welcome to V7 IPTV"},
             {"onboarding.text", "Add your source to get started."},
             {"profiles.title", "Sources"},
             {"profiles.subtitle", "Choose a source to watch, or add a new one."},
@@ -710,7 +710,7 @@ namespace i18n {
                                                "Downloads. Downloads always pause while a video is playing."},
             {"settings.storage.desc", "Space used by downloads, free space, and deleting downloads and caches."},
             {"settings.diagnostics.desc", "Text rendering test and build information."},
-            {"settings.about.desc", "Version, build and the open-source projects PS4 IPTV is built on."},
+            {"settings.about.desc", "Version, build and the open-source projects V7 IPTV is built on."},
             {"storage.downloaded", "Downloaded content"},
             {"storage.downloaded.desc", "{0} saved for offline playback. Select to manage them."},
             {"storage.items.one", "{0} item"},
@@ -799,12 +799,12 @@ namespace i18n {
             {"dldiag.rcvbuf", "Socket receive buffer"},
             {"dldiag.rcvbuf_value", "system {0}, in use {1}"},
             {"dldiag.curlbuf", "Transfer buffer"},
-            {"about.title", "About PS4 IPTV"},
+            {"about.title", "About V7 IPTV"},
             {"about.version", "Version {0}  •  build {1}  •  {2}"},
-            {"about.license", "PS4 IPTV is free software: you can redistribute it and/or modify it under the terms of "
+            {"about.license", "V7 IPTV is free software: you can redistribute it and/or modify it under the terms of "
                               "the GNU General Public License as published by the Free Software Foundation, version 3 or "
                               "later. It is distributed WITHOUT ANY WARRANTY. See LICENSE (GPL-3.0)."},
-            {"about.no_content", "PS4 IPTV does not provide any channels, movies, series or accounts. Use it only with "
+            {"about.no_content", "V7 IPTV does not provide any channels, movies, series or accounts. Use it only with "
                                  "services you are entitled to access, and download only where the service allows "
                                  "storing content."},
             {"about.built_on", "Built on these projects - thank you:"},
@@ -892,6 +892,40 @@ namespace i18n {
             {"m3u.no_saved_copy", "No saved copy of the playlist."},
             {"settings.smooth_scrolling", "Smooth scrolling"},
             {"settings.smooth_scrolling.desc", "Lists and poster grids glide to their new position while you move. Turn it off to move row by row without the glide."},
+            // ---------------------------------------------------------------- V7 IPTV refresh: brand, appearance
+            {"app.tagline", "Live TV, movies and series from your own sources"},
+            {"appearance.title", "Appearance"},
+            {"appearance.accent", "Accent color"},
+            {"appearance.accent.desc", "The color of focus outlines, the main buttons, selected tabs and progress bars. Backgrounds, artwork and video keep their own colors."},
+            {"appearance.accent.current", "Current accent: {0}. Press X to apply a color; it is saved at once."},
+            {"appearance.accent.applied", "Accent color: {0}"},
+            {"appearance.accent.blue", "V7 Blue"},
+            {"appearance.accent.cyan", "Cyan"},
+            {"appearance.accent.teal", "Teal"},
+            {"appearance.accent.green", "Green"},
+            {"appearance.accent.purple", "Purple"},
+            {"appearance.accent.magenta", "Magenta"},
+            {"appearance.accent.red", "Red"},
+            {"appearance.accent.orange", "Orange"},
+            {"appearance.accent.white", "White"},
+            {"appearance.preview", "Preview"},
+            {"appearance.preview_button", "Primary button"},
+            {"appearance.preview_chip", "Selected"},
+
+            // ---------------------------------------------------------------- V7 IPTV refresh: navigation, Home
+            {"nav.home", "Home"},
+            {"home.hero_resume", "Resume"},
+            {"home.hero_resume_at", "Resume {0}"},
+            {"home.hero_details", "Details"},
+            {"home.hero_left", "{0} left"},
+            {"home.hero_start_title", "What would you like to watch?"},
+            {"home.hero_start_text", "Browse Live TV, Movies or Series, or search everything at once."},
+            {"home.hero_start_text_playlist", "Browse the channels of your playlist, or search them."},
+            {"home.favorites_empty", "Add channels, movies and series to Favorites and they appear here."},
+            {"home.favorites_more", "Movies and series appear here once their section has been opened."},
+            {"home.see_all", "See all"},
+            {"home.see_all_detail", "Every favorite"},
+            {"home.source", "Source: {0}"},
     };
 
     extern const size_t STRINGS_EN_COUNT = sizeof(STRINGS_EN) / sizeof(STRINGS_EN[0]);

@@ -8,11 +8,18 @@ using namespace c2d;
 namespace screens {
 
     void header(C2DObject *parent, const std::string &title, const std::string &subtitle) {
-        ui::label(parent, title, theme::TITLE, theme::SAFE_X, theme::SAFE_Y, ui::Weight::SemiBold);
+        // the V7 symbol in front of every screen title: one brand, one place
+        const float mark = 32;
+        auto *m = new ui::BrandMark(mark);
+        m->setPosition(theme::SAFE_X, theme::SAFE_Y + std::round((ui::Label::centerOffset(theme::TITLE, 56) + 4)));
+        parent->add(m);
+        const float x = theme::SAFE_X + m->getSize().x + theme::SPACE_M;
+        auto *t = ui::label(parent, title, theme::TITLE, x, theme::SAFE_Y, ui::Weight::SemiBold);
+        t->setMaxWidth(theme::SCREEN_W - theme::SAFE_X - x);
         if (!subtitle.empty()) {
-            auto *s = ui::label(parent, subtitle, theme::LABEL, theme::SAFE_X, theme::SAFE_Y + 62, ui::Weight::Regular,
+            auto *s = ui::label(parent, subtitle, theme::LABEL, x, theme::SAFE_Y + 62, ui::Weight::Regular,
                                 theme::textSecondary());
-            s->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
+            s->setMaxWidth(theme::SCREEN_W - theme::SAFE_X - x);
         }
     }
 

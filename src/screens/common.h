@@ -10,6 +10,7 @@
 #include "../app/app.h"
 #include "../app/screens.h"
 #include "../i18n/i18n.h"
+#include "../ui/components.h"
 #include "../ui/text.h"
 #include "../ui/theme.h"
 #include "../ui/widgets.h"
@@ -21,7 +22,7 @@ namespace screens {
 
     using Hints = std::vector<std::pair<ui::Glyph, std::string>>;
 
-    // page title (+ optional subtitle) at the top-left of a full screen
+    // page title (+ optional subtitle) at the top-left of a full screen, after the V7 symbol
     void header(c2d::C2DObject *parent, const std::string &title, const std::string &subtitle = "");
 
     ui::HintBar *hintBar(c2d::C2DObject *parent, const Hints &hints);

@@ -142,6 +142,10 @@ namespace ui {
                 auto *g = new ButtonGlyph(h.first, 36);
                 g->setPosition(x, 2);
                 add(g);
+                if (h.second.empty()) {
+                    x += g->getSize().x + 6;   // paired with the next glyph: [L1][R1] Category
+                    continue;
+                }
                 x += g->getSize().x + 10;
                 auto *l = label(this, h.second, layout.size, x, Label::centerOffset(layout.size, 40), Weight::Regular,
                                 theme::textSecondary());
@@ -159,6 +163,12 @@ namespace ui {
             : RectangleShape(rect), primary(isPrimary) {
         setCornersRadius(rect.height / 2.0f);
         setCornerPointCount(10);
+        // focus ring: outside the button with a dark gap, so it reads on an accent fill too
+        const float gap = 6;
+        ring = box(this, FloatRect(-gap, -gap, rect.width + 2 * gap, rect.height + 2 * gap), theme::none(),
+                   rect.height / 2.0f + gap);
+        ring->setCornerPointCount(10);
+        ring->setOutlineThickness(theme::ROW_FOCUS_BORDER);
         caption = new Label(text, theme::BODY, Weight::SemiBold, theme::textPrimary());
         caption->setAlign(Align::Center, rect.width);
         add(caption);
@@ -199,19 +209,27 @@ namespace ui {
         }
     }
 
+    void Button::setPrimary(bool p) {
+        if (p != primary) {
+            primary = p;
+            refresh();
+        }
+    }
+
     void Button::refresh() {
+        setOutlineThickness(0);
+        ring->setOutlineColor(theme::accent());
+        ring->setVisibility(enabled && focused ? Visibility::Visible : Visibility::Hidden);
         if (!enabled) {
             setFillColor(theme::surface());
-            setOutlineThickness(0);
             caption->setColor(theme::textMuted());
-        } else if (focused) {
-            setFillColor(theme::accent());   // the accent fill alone marks it: no outline
-            setOutlineThickness(0);
-            caption->setColor(theme::textStrong());
+        } else if (primary) {
+            // the screen's main action stays visually dominant, focused or not
+            setFillColor(theme::accent());
+            caption->setColor(theme::onAccent());
         } else {
-            setFillColor(primary ? theme::accentMuted() : theme::surfaceElevated());
-            setOutlineThickness(0);
-            caption->setColor(theme::textPrimary());
+            setFillColor(focused ? theme::cardHover() : theme::surfaceElevated());
+            caption->setColor(focused ? theme::textStrong() : theme::textPrimary());
         }
     }
 

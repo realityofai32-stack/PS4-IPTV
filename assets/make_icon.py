@@ -1,6 +1,8 @@
-"""Generates the PS4 IPTV icon0.png (512x512 RGB) - standard library only, 4x supersampled.
+"""Generates the V7 IPTV icon0.png (512x512 RGB) - standard library only, 4x supersampled.
 
-Deep blue gradient, white rounded TV frame with a small stand, blue play triangle inside.
+The V7 symbol (the same three polygons as ui::BrandMark, src/ui/components.cpp, on its 100 x 80 grid) centred on a
+deep-navy gradient: the V's left arm in light blue, its right arm - the stem of the 7 - and the 7's top bar in
+V7 Blue, both with a soft top-to-bottom shading. No text, no third-party artwork.
 Usage: python -I assets/make_icon.py assets/icon0.png
 """
 import struct
@@ -10,44 +12,55 @@ import zlib
 W = H = 512
 SS = 4  # supersampling factor
 
+BG_TOP, BG_BOTTOM = (9, 14, 26), (16, 34, 70)
+ARM_TOP, ARM_BOTTOM = (150, 198, 255), (104, 166, 250)      # left arm (the accent's light tone)
+STEM_TOP, STEM_BOTTOM = (62, 152, 255), (28, 108, 236)      # right arm + bar (V7 Blue)
+
+# the symbol on its 100 x 80 grid
+LEFT = [(0, 0), (22, 0), (58, 80), (36, 80)]
+RIGHT = [(36, 80), (58, 80), (100, 0), (78, 0)]
+BAR = [(46, 0), (100, 0), (91.5, 16), (46, 16)]
+
+MARK_W = 300                     # drawn width in icon pixels (height = MARK_W * 0.8)
+SCALE = MARK_W / 100.0
+OX = (W - MARK_W) / 2
+OY = (H - MARK_W * 0.8) / 2 + 6  # optically centred (the bar makes the top look heavier)
+
 
 def lerp(a, b, t):
-    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+    t = min(max(t, 0.0), 1.0)
+    return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
 
 
-TOP, BOTTOM = (16, 28, 52), (24, 70, 150)
-WHITE, ACCENT = (240, 244, 250), (72, 149, 255)
-
-
-def rounded_rect(x, y, x0, y0, x1, y1, r):
-    if x < x0 or x > x1 or y < y0 or y > y1:
-        return False
-    cx = min(max(x, x0 + r), x1 - r)
-    cy = min(max(y, y0 + r), y1 - r)
-    return (x - cx) ** 2 + (y - cy) ** 2 <= r * r
-
-
-def in_triangle(x, y, a, b, c):
-    def side(p, q, r):
-        return (p[0] - r[0]) * (q[1] - r[1]) - (q[0] - r[0]) * (p[1] - r[1])
-    d1, d2, d3 = side((x, y), a, b), side((x, y), b, c), side((x, y), c, a)
-    neg = d1 < 0 or d2 < 0 or d3 < 0
-    pos = d1 > 0 or d2 > 0 or d3 > 0
-    return not (neg and pos)
+def inside(poly, x, y):
+    # convex polygon, either winding
+    sign = 0
+    n = len(poly)
+    for i in range(n):
+        x0, y0 = poly[i]
+        x1, y1 = poly[(i + 1) % n]
+        cross = (x1 - x0) * (y - y0) - (y1 - y0) * (x - x0)
+        if cross != 0:
+            s = 1 if cross > 0 else -1
+            if sign == 0:
+                sign = s
+            elif s != sign:
+                return False
+    return True
 
 
 def sample(x, y):
-    bg = lerp(TOP, BOTTOM, y / H)
-    outer = rounded_rect(x, y, 86, 118, 426, 352, 34)
-    inner = rounded_rect(x, y, 106, 138, 406, 332, 20)
-    if outer and not inner:
-        return WHITE
-    if inner:
-        if in_triangle(x, y, (226, 178), (226, 292), (318, 235)):
-            return ACCENT
-        return lerp((10, 18, 34), (14, 30, 62), (y - 138) / 194)
-    if rounded_rect(x, y, 236, 352, 276, 386, 0) or rounded_rect(x, y, 186, 382, 326, 398, 8):
-        return WHITE
+    # background: vertical gradient with a slight lift towards the centre
+    dx, dy = (x - W / 2) / W, (y - H / 2) / H
+    glow = max(0.0, 1.0 - (dx * dx + dy * dy) * 3.2) * 0.35
+    bg = lerp(BG_TOP, BG_BOTTOM, y / H)
+    bg = tuple(c + (40 - c) * glow * 0.4 for c in bg)
+    gx, gy = (x - OX) / SCALE, (y - OY) / SCALE
+    t = gy / 80.0
+    if inside(RIGHT, gx, gy) or inside(BAR, gx, gy):
+        return lerp(STEM_TOP, STEM_BOTTOM, t)
+    if inside(LEFT, gx, gy):
+        return lerp(ARM_TOP, ARM_BOTTOM, t)
     return bg
 
 
@@ -56,14 +69,14 @@ def main(path):
     for y in range(H):
         raw.append(0)
         for x in range(W):
-            acc = [0, 0, 0]
+            acc = [0.0, 0.0, 0.0]
             for sy in range(SS):
                 for sx in range(SS):
                     c = sample(x + (sx + 0.5) / SS, y + (sy + 0.5) / SS)
                     acc[0] += c[0]
                     acc[1] += c[1]
                     acc[2] += c[2]
-            raw.extend(bytes(v // (SS * SS) for v in acc))
+            raw.extend(bytes(int(round(v / (SS * SS))) for v in acc))
 
     def chunk(kind, data):
         c = struct.pack('>I', len(data)) + kind + data

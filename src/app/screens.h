@@ -88,7 +88,8 @@ namespace screens {
     enum class SettingsPage {
         Main,
         Storage,        // Storage & downloads: sizes, free space, deleting downloads and caches
-        Diagnostics     // text rendering test, download diagnostics, build information
+        Diagnostics,    // text rendering test, download diagnostics, build information
+        Appearance      // accent color (opened again after an accent change rebuilt the screens)
     };
 
     Screen *makeSettings(App &app, SettingsPage page = SettingsPage::Main);

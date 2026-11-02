@@ -46,6 +46,9 @@ struct Settings {
     // application UI language: "en" (default for every installation) or "tr". Never derived from the account,
     // provider or region. Files written before format version 2 had no language choice: they get English.
     std::string language = "en";
+    // Settings > Appearance > Accent color: a palette::ACCENTS key. Files without it (written before V7 IPTV)
+    // and unknown values get the default, V7 Blue; nothing else in the file changes meaning.
+    std::string accentColor = "blue";
     // Movies / Series grid order, per profile: "<profileId>/movies" -> sort key ("az", "added_desc"...)
     std::map<std::string, std::string> sortOrders;
 

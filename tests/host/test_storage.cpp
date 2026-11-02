@@ -5,6 +5,7 @@
 #include "../../src/storage/profile_store.h"
 #include "../../src/storage/settings_store.h"
 #include "../../src/ui/keyboard_model.h"
+#include "../../src/ui/palette.h"
 
 static std::string tempDir(const char *name) {
     const char *base = std::getenv("PS4IPTV_TEST_TMP");
@@ -105,6 +106,70 @@ TEST(settings_roundtrip_and_defaults) {
     SettingsStore u(dir);
     CHECK(u.deserialize("{\"version\":1,\"unknownKey\":5}", nullptr));
     CHECK(u.get().streamFormat == StreamFormat::Auto);
+}
+
+// Settings > Appearance > Accent color: persisted, migrated from older files, invalid values fall back
+TEST(settings_accent_color_persistence_and_migration) {
+    std::string dir = tempDir("settings-accent");
+    SettingsStore s(dir);
+    CHECK(s.load());
+    CHECK_EQ(s.get().accentColor, std::string("blue"));   // fresh install: V7 Blue
+    s.get().accentColor = "teal";
+    s.get().language = "tr";
+    s.get().subtitleSize = 2;
+    CHECK(s.save());
+    CHECK(s.serialize().find("\"accentColor\": \"teal\"") != std::string::npos);
+    SettingsStore t(dir);
+    CHECK(t.load());
+    CHECK_EQ(t.get().accentColor, std::string("teal"));
+    CHECK_EQ(t.get().language, std::string("tr"));
+    CHECK_EQ(t.get().subtitleSize, 2);
+    // every preset survives a round trip
+    for (int i = 0; i < palette::ACCENT_COUNT; i++) {
+        SettingsStore r(dir);
+        r.get().accentColor = palette::ACCENTS[i].key;
+        SettingsStore back(dir);
+        CHECK(back.deserialize(r.serialize(), nullptr));
+        CHECK_EQ(back.get().accentColor, std::string(palette::ACCENTS[i].key));
+    }
+
+    // a v0.2.0 settings file (no accentColor): everything kept, the accent defaults to V7 Blue
+    const char *v020 = "{\"version\":2,\"streamFormat\":\"hls\",\"playbackStability\":\"max\",\"retryOnStall\":false,"
+                       "\"audioLanguage\":\"tur\",\"subtitleMode\":\"always\",\"subtitleSize\":\"large\","
+                       "\"resumeVod\":true,\"smoothScrolling\":false,\"videoAspect\":\"16:9\",\"zoom\":110,"
+                       "\"language\":\"tr\",\"sortOrders\":{\"p1/movies\":\"az\"}}";
+    SettingsStore old(dir);
+    CHECK(old.deserialize(v020, nullptr));
+    CHECK_EQ(old.get().accentColor, std::string("blue"));
+    CHECK(old.get().streamFormat == StreamFormat::Hls);
+    CHECK(old.get().stability == StabilityPreset::MaxStability);
+    CHECK(!old.get().retryOnStall);
+    CHECK_EQ(old.get().audioLanguage, std::string("tur"));
+    CHECK(old.get().subtitleMode == tracks::SubtitleMode::Always);
+    CHECK_EQ(old.get().subtitleSize, 2);
+    CHECK(!old.get().smoothScrolling);
+    CHECK_EQ(old.get().zoomPercent, 110);
+    CHECK_EQ(old.get().language, std::string("tr"));
+    CHECK_EQ(old.get().sortOrders.size(), (size_t) 1);
+    // ... and the next save adds the field without changing anything else
+    SettingsStore again(dir);
+    CHECK(again.deserialize(old.serialize(), nullptr));
+    CHECK_EQ(again.get().accentColor, std::string("blue"));
+    CHECK_EQ(again.get().zoomPercent, 110);
+    CHECK_EQ(again.get().language, std::string("tr"));
+
+    // invalid values: unknown key, wrong type, empty -> V7 Blue (never a crash, never an unreadable accent)
+    for (const char *bad: {"{\"version\":2,\"accentColor\":\"chartreuse\"}", "{\"version\":2,\"accentColor\":7}",
+                           "{\"version\":2,\"accentColor\":\"\"}", "{\"version\":2,\"accentColor\":null}",
+                           "{\"version\":2,\"accentColor\":\"BLUE\"}"}) {
+        SettingsStore b(dir);
+        CHECK(b.deserialize(bad, nullptr));
+        CHECK_EQ(b.get().accentColor, std::string("blue"));
+    }
+    // a value set in memory that is not a preset is written as the default
+    SettingsStore m(dir);
+    m.get().accentColor = "nonsense";
+    CHECK(m.serialize().find("\"accentColor\": \"blue\"") != std::string::npos);
 }
 
 TEST(atomic_write_replaces_content) {

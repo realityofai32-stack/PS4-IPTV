@@ -53,7 +53,8 @@ namespace ui {
         ButtonGlyph(Glyph glyph, float size);
     };
 
-    // bottom controller hints: [glyph] text  [glyph] text ...
+    // bottom controller hints: [glyph] text  [glyph] text ... A glyph with an empty text is paired with the next
+    // one ([L1][R1] Category). Keep it to the actions that matter on the screen (about five).
     class HintBar : public c2d::RectangleShape {
     public:
         HintBar();
@@ -64,6 +65,9 @@ namespace ui {
         std::vector<std::pair<Glyph, std::string>> current;
     };
 
+    // Pill button. Primary (the main action of a screen: Play, Resume, Save...) is accent-filled; secondary is a
+    // quiet elevated pill. Focus = an accent ring drawn a few pixels outside the button (visible on any fill and
+    // with every accent) plus, for secondary buttons, a lighter fill.
     class Button : public c2d::RectangleShape {
     public:
         Button(const std::string &text, const c2d::FloatRect &rect, bool primary = false);
@@ -76,12 +80,15 @@ namespace ui {
 
         void setText(const std::string &text);
 
+        void setPrimary(bool primary);
+
     private:
         void refresh();
 
         void fit();
 
         Label *caption;
+        c2d::RectangleShape *ring;
         bool focused = false;
         bool enabled = true;
         bool primary;
