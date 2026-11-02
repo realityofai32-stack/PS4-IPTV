@@ -873,32 +873,22 @@ namespace {
         }
 
         // every episode of every season, in order: the player's "next episode" queue
-        std::vector<VodItem> queue(int &position, int season, int episode) const {
-            std::vector<VodItem> q;
-            position = 0;
-            for (size_t s = 0; s < info->seasons.size(); s++) {
-                for (size_t e = 0; e < info->seasons[s].episodes.size(); e++) {
-                    const Episode &ep = info->seasons[s].episodes[e];
-                    if ((int) s == season && (int) e == episode) {
-                        position = (int) q.size();
-                    }
-                    VodItem it;
-                    it.type = ContentType::Series;
-                    it.id = ep.id;
-                    it.extension = ep.extension.empty() ? "mkv" : ep.extension;
-                    it.title = ep.title;
-                    it.image = series.cover;
-                    it.year = series.year;
-                    it.seriesId = series.seriesId;
-                    it.seriesName = series.title;
-                    it.season = ep.season;
-                    it.episode = ep.number;
-                    it.durationHint = ep.durationSeconds;
-                    offline::preferLocal(app.downloads(), it, app.session().profile.id);   // downloaded episodes
-                    q.push_back(it);
-                }
-            }
-            return q;
+        // the chosen episode; its neighbours come from screens::seriesEpisodeQueue (the shared episode setup)
+        VodItem episodeVodItem(const Episode &ep) const {
+            VodItem it;
+            it.type = ContentType::Series;
+            it.id = ep.id;
+            it.extension = ep.extension.empty() ? "mkv" : ep.extension;
+            it.title = ep.title;
+            it.image = series.cover;
+            it.year = series.year;
+            it.seriesId = series.seriesId;
+            it.seriesName = series.title;
+            it.season = ep.season;
+            it.episode = ep.number;
+            it.durationHint = ep.durationSeconds;
+            offline::preferLocal(app.downloads(), it, app.session().profile.id);   // a downloaded episode
+            return it;
         }
 
         dl::Item episodeItem(const Episode &ep) const {
@@ -1040,10 +1030,13 @@ namespace {
         }
 
         void playEpisode(int season, int episode, bool resume) {
-            int position = 0;
-            std::vector<VodItem> q = queue(position, season, episode);
+            if (!info || season < 0 || season >= (int) info->seasons.size() || episode < 0
+                || episode >= (int) info->seasons[(size_t) season].episodes.size()) {
+                return;
+            }
+            VodItem it = episodeVodItem(info->seasons[(size_t) season].episodes[(size_t) episode]);
             std::weak_ptr<bool> alive = aliveToken;
-            app.push(screens::makeVodPlayer(app, q, position, resume, [this, alive](const std::string &id) {
+            app.push(screens::playSeriesEpisode(app, it, resume, [this, alive](const std::string &id) {
                 if (alive.lock()) {
                     returnEpisode = id;
                 }

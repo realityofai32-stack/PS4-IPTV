@@ -50,6 +50,21 @@ namespace screens {
     // scrolling pages: content slides under an eased fade and a solid band behind the controller hints
     void bottomFade(c2d::C2DObject *parent);
 
+    // ---- series episode playback: the one setup every entry point uses (Series Detail, Continue Watching / the
+    // Home hero, Downloads), so the player always has the same episode context (app/auto_next.h episodeQueue)
+
+    // the series' catalog in memory (VodLibrary::seriesInfo), when it may describe this episode: it belongs to the
+    // signed-in profile (a download of another profile has its own provider). nullptr otherwise.
+    std::shared_ptr<const iptv::SeriesInfo> episodeCatalog(App &app, const VodItem &episode);
+
+    // the player's queue for a series episode: the catalog order when the catalog is in memory (downloaded copies
+    // play from the disk), else the series' downloads, else the episode alone. position: the episode's index.
+    std::vector<VodItem> seriesEpisodeQueue(App &app, const VodItem &episode, int &position);
+
+    // plays a series episode (resume: from its saved position) with that queue
+    Screen *playSeriesEpisode(App &app, const VodItem &episode, bool resume,
+                              std::function<void(const std::string &)> onExit = nullptr);
+
     // Hero / detail artwork: the provider's real landscape backdrop (backdropUrl, ImageKind::Backdrop) when it is
     // loaded; otherwise the large portrait poster as Poster art (ratio kept, at the right edge); otherwise nothing
     // (a faint glow). The small grid poster is never blown up to backdrop size.

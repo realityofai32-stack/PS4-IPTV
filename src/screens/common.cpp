@@ -1,4 +1,6 @@
 #include "common.h"
+#include "../app/auto_next.h"
+#include "../app/offline.h"
 #include "../core/utf8.h"
 #include "../iptv/m3u.h"
 #include "../platform/clock.h"
@@ -75,6 +77,39 @@ namespace screens {
         ui::fade(parent, FloatRect(0, layout::BOTTOM_FADE_Y, theme::SCREEN_W, solidY - layout::BOTTOM_FADE_Y),
                  theme::backgroundSecondary(), ui::Edge::Bottom);
         ui::box(parent, FloatRect(0, solidY, theme::SCREEN_W, theme::SCREEN_H - solidY), theme::backgroundSecondary(), 0);
+    }
+
+    std::shared_ptr<const iptv::SeriesInfo> episodeCatalog(App &app, const VodItem &episode) {
+        if (episode.type != iptv::ContentType::Series || episode.seriesId.empty()) {
+            return nullptr;
+        }
+        if (!episode.profileId.empty() && episode.profileId != app.session().profile.id) {
+            return nullptr;   // another profile's download: the signed-in provider's ids mean something else
+        }
+        return app.vod().seriesInfo(episode.seriesId);
+    }
+
+    std::vector<VodItem> seriesEpisodeQueue(App &app, const VodItem &episode, int &position) {
+        const std::string owner = episode.profileId.empty() ? app.session().profile.id : episode.profileId;
+        std::vector<VodItem> downloaded;
+        for (const dl::Item &d: offline::seriesEpisodes(app.downloads(), owner, episode.seriesId)) {
+            downloaded.push_back(offline::itemFor(app.downloads(), d));
+        }
+        std::shared_ptr<const iptv::SeriesInfo> info = episodeCatalog(app, episode);
+        std::vector<VodItem> q = autonext::episodeQueue(episode, info.get(), downloaded, app.session().offline, position);
+        for (size_t i = 0; i < q.size(); i++) {
+            if ((int) i != position && q[i].localPath.empty()) {
+                offline::preferLocal(app.downloads(), q[i], owner);   // a downloaded copy plays from the disk
+            }
+        }
+        return q;
+    }
+
+    Screen *playSeriesEpisode(App &app, const VodItem &episode, bool resume,
+                              std::function<void(const std::string &)> onExit) {
+        int position = 0;
+        std::vector<VodItem> q = seriesEpisodeQueue(app, episode, position);
+        return makeVodPlayer(app, q, position, resume, std::move(onExit));
     }
 
     void bindBackdrop(App &app, ui::Backdrop *backdrop, const std::string &posterUrl, const std::string &backdropUrl) {

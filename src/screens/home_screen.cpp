@@ -986,60 +986,17 @@ namespace {
             return it;
         }
 
-        // Continue Watching: play at once. Episodes get the series' next episodes when its details are cached.
+        // Continue Watching / the hero's Resume: play at once from the saved position. An episode gets the same
+        // context as one started in Series Detail (screens::playSeriesEpisode: the series' episodes, a downloaded
+        // copy from the disk, offline the downloaded episodes; the player completes it when the catalog arrives).
         void resume(const HistoryEntry &h) {
-            std::vector<VodItem> queue = {itemOf(h)};
-            int position = 0;
-            const std::string &profileId = app.session().profile.id;
-            std::vector<dl::Item> local = h.type == ContentType::Series
-                                          ? offline::seriesEpisodes(app.downloads(), profileId, h.seriesId)
-                                          : std::vector<dl::Item>();
-            if (h.type == ContentType::Series && app.session().offline && !local.empty()) {
-                // offline: the downloaded episodes are the queue (next episode works without the provider)
-                queue.clear();
-                for (const dl::Item &d: local) {
-                    if (d.contentId == h.id) {
-                        position = (int) queue.size();
-                    }
-                    queue.push_back(offline::itemFor(app.downloads(), d));
-                }
-                bool found = false;
-                for (const VodItem &it: queue) {
-                    found |= it.id == h.id;
-                }
-                if (!found) {
-                    queue.insert(queue.begin(), itemOf(h));
-                    position = 0;
-                }
-            } else if (h.type == ContentType::Series) {
-                if (std::shared_ptr<const SeriesInfo> info = app.vod().seriesInfo(h.seriesId)) {
-                    queue.clear();
-                    for (const auto &s: info->seasons) {
-                        for (const auto &ep: s.episodes) {
-                            VodItem it = itemOf(h);
-                            it.id = ep.id;
-                            it.extension = ep.extension.empty() ? "mkv" : ep.extension;
-                            it.title = ep.title;
-                            it.season = ep.season;
-                            it.episode = ep.number;
-                            it.durationHint = ep.durationSeconds;
-                            if (ep.id == h.id) {
-                                position = (int) queue.size();
-                            }
-                            queue.push_back(it);
-                        }
-                    }
-                    if (queue.empty()) {
-                        queue.push_back(itemOf(h));
-                    }
-                } else {
-                    app.vod().requestSeriesInfo(app.session().profile, h.seriesId);   // for the next time
-                }
+            VodItem it = itemOf(h);
+            offline::preferLocal(app.downloads(), it, app.session().profile.id);   // a downloaded copy plays from the disk
+            if (h.type == ContentType::Series) {
+                app.push(screens::playSeriesEpisode(app, it, true));
+                return;
             }
-            for (VodItem &it: queue) {
-                offline::preferLocal(app.downloads(), it, profileId);   // a downloaded copy plays from the disk
-            }
-            app.push(screens::makeVodPlayer(app, queue, position, true));
+            app.push(screens::makeVodPlayer(app, {it}, 0, true));
         }
 
         // hides the card at once (the next card moves into its place); progress, history and downloads stay

@@ -16,6 +16,53 @@ namespace autonext {
         }
     }
 
+    std::vector<screens::VodItem> episodeQueue(const screens::VodItem &current, const iptv::SeriesInfo *info,
+                                               const std::vector<screens::VodItem> &downloaded, bool offline,
+                                               int &position) {
+        position = 0;
+        int s = 0, e = 0;
+        if (!offline && info != nullptr && current.type == iptv::ContentType::Series
+            && seriesplan::locate(*info, current.id, s, e)) {
+            std::vector<screens::VodItem> q;
+            for (const iptv::Season &season: info->seasons) {
+                for (const iptv::Episode &ep: season.episodes) {
+                    if (ep.id == current.id) {
+                        position = (int) q.size();
+                        q.push_back(current);   // exactly as given: resume, local copy, owner profile
+                        continue;
+                    }
+                    screens::VodItem it;
+                    it.type = iptv::ContentType::Series;
+                    it.id = ep.id;
+                    it.extension = ep.extension.empty() ? "mkv" : ep.extension;
+                    it.title = ep.title;
+                    it.image = current.image;
+                    it.year = current.year;
+                    it.seriesId = current.seriesId;
+                    it.seriesName = current.seriesName;
+                    it.season = ep.season;
+                    it.episode = ep.number;
+                    it.durationHint = ep.durationSeconds;
+                    q.push_back(it);
+                }
+            }
+            return q;
+        }
+        for (size_t i = 0; i < downloaded.size(); i++) {
+            if (downloaded[i].id == current.id && downloaded[i].type == current.type) {
+                std::vector<screens::VodItem> q = downloaded;
+                q[i] = current;
+                if (q[i].localPath.empty()) {
+                    q[i].localPath = downloaded[i].localPath;   // the downloaded copy plays from the disk
+                    q[i].profileId = downloaded[i].profileId;
+                }
+                position = (int) i;
+                return q;
+            }
+        }
+        return {current};
+    }
+
     int nextIndex(const std::vector<screens::VodItem> &queue, int index, const iptv::SeriesInfo *info, bool offline) {
         if (index < 0 || index >= (int) queue.size()) {
             return -1;
@@ -74,7 +121,7 @@ namespace autonext {
             shownFraction = 0;
             return false;
         }
-        if (f.remaining <= START_AT) {
+        if (f.remaining <= END_TOLERANCE) {
             state = Phase::Transitioning;
             shownSeconds = 0;
             shownFraction = 0;

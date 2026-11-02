@@ -700,9 +700,9 @@ namespace i18n {
                                      "Off: they always start from the beginning; progress is still remembered. Never "
                                      "applies to Live TV."},
             {"settings.autoplay", "Auto-play next episode"},
-            {"settings.autoplay.desc", "On: in the last 5 seconds of an episode a countdown starts the next one (X: play "
-                                       "now, Circle: cancel). Off: the next episode is offered when the episode ends "
-                                       "and starts when you press X."},
+            {"settings.autoplay.desc", "On: in the last 15 seconds of an episode a countdown shows the next one, which "
+                                       "starts when the episode ends (X: play now, Circle: cancel). Off: the next "
+                                       "episode is offered when the episode ends and starts when you press X."},
             {"settings.retry_downloads", "Retry downloads automatically"},
             {"settings.retry_downloads.desc", "On: when the connection drops, downloads wait and continue by themselves "
                                               "from where they stopped, trying again less and less often. Off: an "

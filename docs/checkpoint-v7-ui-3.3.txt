@@ -1,0 +1,74 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UI-3.3: NEXT EPISODE FROM EVERY ENTRY POINT, 15 S COUNTDOWN
+=============================================================================================
+Branch feature/v7-ui-v3-polish (local only), one commit on top of v7-ui-3.2 (4110d7d).
+Version 0.2.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: build/checkpoint-v7-ui-3.3/BUILD.txt and SHA256SUMS.txt.
+The V3.1 UI is unchanged.
+
+What changed since 3.2
+- Continue Watching and the Home hero's Resume now give the player the same episode context as Series Detail.
+  They all use the same setup, and so does Downloads.
+- Continue Watching in 3.2: when the series' details were not in memory (right after starting the app), the
+  player got that one episode alone. So there was no countdown, and the end screen said "You finished the last
+  episode".
+- Now, when the details are missing, the player asks for them once (online). It completes its episode list when
+  they arrive, usually within a second.
+- The countdown starts 15 s before the end and shows 15 .. 1. The episode plays to its real end before the next
+  one starts; nothing is cut from the end any more.
+
+Install OVER the existing V7 IPTV (same title ID). Copy /data/PS4IPTV/logs/log.txt afterwards (FTP):
+  [player] series details not in memory: requesting them once for the next episode    (Continue Watching, cold)
+  [player] series details arrived: N episodes in the queue
+  [player] next episode: <id> (S02E03, catalog)                  or "next episode: none (...)"
+  [player] next episode countdown: 15.0 s left
+  [player] next episode (end of file|play now|countdown): <id> -> <id>     exactly one per transition
+
+-----------------------------------------------------------------------------------------------------
+THE MAIN TEST: CONTINUE WATCHING -> SERIES EPISODE -> FINAL 15 SECONDS
+-----------------------------------------------------------------------------------------------------
+ 1. Close the app completely and start it again (the series' details are then NOT in memory).
+    On Home, pick a series episode in Continue Watching that has another episode after it.
+    It resumes at its saved position (as before).
+ 2. Seek to about 0:40 before the end (R2 / Right) and let it play.
+    At 15 s left the panel appears bottom right: Next episode / S..E.. · title / Playing in 15...
+    [SHOT with the HUD hidden]
+ 3. It counts 15 -> 14 -> ... -> 2 -> 1 and the bar shrinks; no "0" is shown.
+ 4. The episode plays to its very end (its last frames / credits are not cut). Then the next episode starts
+    exactly once. Its title is in the HUD, and it starts from its saved position or the beginning.
+ 5. Home: Continue Watching now shows the new episode; the finished one is Watched in Series Detail.
+ 6. The hero's Resume button on Home (same episode type): steps 2-4 work the same.
+
+-----------------------------------------------------------------------------------------------------
+CONTROLS AND SEEKING
+-----------------------------------------------------------------------------------------------------
+ 7. Repeat 1-2. Press Cross early in the window (at ~12): the next episode starts at once.
+ 8. Repeat 1-2. Press Circle: the panel closes and the episode plays to its end. Then the normal "Up next" screen
+    appears (X plays the next one, Circle leaves). Seek back 30 s before the end: no countdown again in this
+    playback.
+ 9. Repeat 1-2. While the panel shows, press Left (10 s back, now > 16 s left): it disappears and Cross pauses
+    again. Let it reach the last 15 s again: the countdown reappears.
+
+-----------------------------------------------------------------------------------------------------
+OTHER CASES
+-----------------------------------------------------------------------------------------------------
+10. Continue Watching with the last episode of a season (another season exists): the countdown shows the first
+    episode of the next season, and it starts.
+11. Continue Watching with the final episode of the final season: no panel; the "You finished the last episode"
+    end screen.
+12. Settings > Playback > Auto-play next episode OFF: no panel from Continue Watching or Series Detail. At the end
+    the normal "Up next" screen appears. Turn it back ON.
+13. Series Detail -> an episode: steps 2-4 work the same.
+14. Recently Watched -> a series: opens Series Detail (as before) -> play an episode: steps 2-4 work the same.
+15. Offline (if possible), Continue Watching with a downloaded episode:
+    - the next episode is downloaded: countdown, then it plays from the disk;
+    - the next one is not downloaded: no countdown, the normal end screen, no network attempt.
+16. Subtitles on (Bottom and Raised): the panel does not badly cover them for the 15 s. [SHOT]
+17. A movie to its end and a Live TV channel: nothing new.
+
+QUICK REGRESSION
+18. Normal playback before the last 15 s: Cross pauses, Circle leaves, seeking, L1 / R1, Options, HUD auto-hide -
+    all as in v3.1.
+19. Home (v3.1 hero), Continue Watching resume positions, Movies / Series, Live TV, Search, Settings, Downloads:
+    unchanged.
+
+REPORT: screenshots (steps 2, 16) + log.txt + any step that looks wrong (step number + what you see).

@@ -703,9 +703,9 @@ namespace i18n {
                                      "Devam Et). Kapalı: her zaman baştan başlar; ilerleme yine de hatırlanır. Canlı "
                                      "TV için geçerli değildir."},
             {"settings.autoplay", "Sonraki bölümü otomatik oynat"},
-            {"settings.autoplay.desc", "Açık: bölümün son 5 saniyesinde bir geri sayım sonraki bölümü başlatır (X: şimdi "
-                                       "oynat, Daire: iptal). Kapalı: bölüm bitince sonraki bölüm önerilir ve X'e "
-                                       "bastığınızda başlar."},
+            {"settings.autoplay.desc", "Açık: bölümün son 15 saniyesinde bir geri sayım sonraki bölümü gösterir; bölüm "
+                                       "bitince başlar (X: şimdi oynat, Daire: iptal). Kapalı: bölüm bitince sonraki "
+                                       "bölüm önerilir ve X'e bastığınızda başlar."},
             {"settings.retry_downloads", "İndirmeleri otomatik yeniden dene"},
             {"settings.retry_downloads.desc", "Açık: bağlantı koptuğunda indirmeler bekler ve giderek daha seyrek "
                                               "deneyerek kaldıkları yerden kendiliğinden devam eder. Kapalı: kesilen "

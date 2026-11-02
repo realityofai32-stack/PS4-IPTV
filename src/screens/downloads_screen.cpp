@@ -543,25 +543,17 @@ namespace {
                 app.toast(tr("download.problem.file_missing"), ToastKind::Error);
                 return;
             }
-            std::vector<VodItem> queue;
-            int position = 0;
-            if (d.kind == dl::Kind::Episode) {
-                for (const dl::Item &e: offline::seriesEpisodes(app.downloads(), d.profileId, d.seriesId)) {
-                    if (e.key == d.key) {
-                        position = (int) queue.size();
-                    }
-                    queue.push_back(offline::itemFor(app.downloads(), e));
-                }
-            }
-            if (queue.empty()) {
-                queue.push_back(offline::itemFor(app.downloads(), d));
-            }
             if (!resume && d.profileId == app.library().profileId()) {
                 // start over: like Start over in the movie details (the position is forgotten, the history kept)
                 app.library().resetProgress(d.kind == dl::Kind::Episode ? ContentType::Series : ContentType::Movie,
                                             d.contentId);
             }
-            app.push(screens::makeVodPlayer(app, queue, position, resume));
+            VodItem it = offline::itemFor(app.downloads(), d);
+            if (d.kind == dl::Kind::Episode) {
+                app.push(screens::playSeriesEpisode(app, it, resume));   // the same episode setup as everywhere
+                return;
+            }
+            app.push(screens::makeVodPlayer(app, {it}, 0, resume));
         }
 
         screens::HeaderContext *storage;

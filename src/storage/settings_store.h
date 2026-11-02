@@ -23,7 +23,7 @@ struct Settings {
     StabilityPreset stability = StabilityPreset::Balanced;
     bool retryOnStall = true;
     bool resumeVod = true;
-    // Settings > Playback > Auto-play next episode: the 5 s countdown at the end of an episode (app/auto_next.h).
+    // Settings > Playback > Auto-play next episode: the 15 s countdown at the end of an episode (app/auto_next.h).
     // Stored as "autoPlayNext"; files without it get ON - including v0.2.0 files, whose "autoPlayNextEpisode"
     // (a different, opt-in feature that defaulted to off) is only written for older builds and never read.
     bool autoPlayNextEpisode = true;

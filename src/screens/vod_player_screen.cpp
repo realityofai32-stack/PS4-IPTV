@@ -9,11 +9,13 @@
 //     episode and app exit the position is queried from mpv right before stopping and written at once
 //   - overlay: hides 4 s after the last input while playing (player/hud_logic.h)
 //   - episodes: L1/R1 previous/next, an "Up next" panel at the end. Next-episode countdown (app/auto_next.h,
-//     Settings > Playback > Auto-play next episode, on by default): in the last 5 s of an episode with a known next
-//     episode a small panel bottom right counts 5..1 and then starts it; Cross plays it at once, Circle cancels it
-//     for this playback. Only while it is shown do Cross / Circle mean Play now / Cancel. A normal end of file
-//     starts the next episode as well (fallback), exactly once; playback errors never do. Every transition is
-//     startItem(), the same path as L1 / R1 and the episode chosen in Series Detail.
+//     Settings > Playback > Auto-play next episode, on by default): in the last 15 s of an episode with a known
+//     next episode a small panel bottom right counts 15..1; the episode plays to its real end, then the next one
+//     starts. Cross plays it at once, Circle cancels it for this playback. Only while it is shown do Cross / Circle
+//     mean Play now / Cancel. The end of file is the transition (also for files whose position never reaches the
+//     duration), exactly once; playback errors never are. Every transition is startItem(), the same path as L1 / R1.
+//     Every entry point builds the queue with screens::playSeriesEpisode; when the series' catalog was not in
+//     memory (Continue Watching right after start), the player asks for it once and completes its queue then.
 //   - video geometry (player/display): Aspect Ratio, Crop / Fill, Zoom and Position in the Options panel's Video
 //     menu, mpv properties set at runtime (no reload: position, pause state and tracks stay). The Settings
 //     defaults apply when the player opens; a change in the panel lasts for this playback only, unless the
@@ -172,6 +174,7 @@ namespace {
                 subtitleWarningShown = true;
                 app.toast(tr("player.subtitles_unsupported"), ToastKind::Error);
             }
+            completeQueue();
             if (!finished && updateCountdown()) {
                 advance("countdown");   // log reason i18n-exempt
                 return;
@@ -515,8 +518,21 @@ namespace {
             if (!isEpisode()) {
                 return;
             }
-            std::shared_ptr<const SeriesInfo> info = app.vod().seriesInfo(item().seriesId);
+            std::shared_ptr<const SeriesInfo> info = screens::episodeCatalog(app, item());
             nextIdx = autonext::nextIndex(queue, index, info.get(), app.session().offline);
+            // no catalog in memory (e.g. Continue Watching right after start): ask once, online only; the queue is
+            // completed when it arrives (completeQueue). Another profile's download keeps its own queue.
+            catalogWanted = false;
+            const VodItem &cur = item();
+            if (!info && !app.session().offline && (cur.profileId.empty() || cur.profileId == app.session().profile.id)) {
+                catalogWanted = true;
+                vodGen = app.vod().generation();
+                if (catalogRequested != cur.seriesId) {
+                    catalogRequested = cur.seriesId;
+                    LOG_I("player", "series details not in memory: requesting them once for the next episode");
+                    app.vod().requestSeriesInfo(app.session().profile, cur.seriesId);
+                }
+            }
             if (nextIdx >= 0) {
                 const VodItem &n = queue[(size_t) nextIdx];
                 nextText->setText(fmt::episodeCode(n.season, n.episode) + "  \xC2\xB7  " + episodeTitle(n));
@@ -526,6 +542,28 @@ namespace {
                 LOG_I("player", "next episode: none (%s)", info ? "catalog" : "no catalog in memory");
             }
             nextShownSeconds = -1;
+        }
+
+        // the series' catalog arrived while this episode plays: the same queue the other entry points build
+        void completeQueue() {
+            if (!catalogWanted || finished || app.vod().generation() == vodGen) {
+                return;
+            }
+            vodGen = app.vod().generation();
+            if (!screens::episodeCatalog(app, item())) {
+                return;   // not (yet) there; a failed request is not repeated
+            }
+            int position = 0;
+            std::vector<VodItem> q = screens::seriesEpisodeQueue(app, item(), position);
+            catalogWanted = false;
+            if (position < 0 || position >= (int) q.size() || q[(size_t) position].id != item().id) {
+                return;
+            }
+            queue = std::move(q);
+            index = position;   // the current item is unchanged (the tracker keeps its own copy)
+            LOG_I("player", "series details arrived: %d episodes in the queue", (int) queue.size());
+            resolveNext();
+            refresh(app.now());
         }
 
         // a next episode exists and Auto-play next episode is on
@@ -1379,6 +1417,9 @@ namespace {
         bool finished = false;
         autonext::Countdown countdown;
         int nextIdx = -1;                  // queue index of the next episode (-1: none / not an episode)
+        bool catalogWanted = false;        // waiting for the series' catalog to complete the queue
+        unsigned vodGen = 0;
+        std::string catalogRequested;      // asked once per series while the player is open
         int nextShownSeconds = -1;
         RectangleShape *nextPanel = nullptr;
         ui::Label *nextText = nullptr;

@@ -1,6 +1,8 @@
-// Next-episode countdown / auto-play (app/auto_next.h): which episode is next (catalog order, season boundaries,
-// the last episode, movies / live, offline downloads), the countdown state machine (5..1, Play now, Cancel, seeking
-// back, end-of-file fallback, exactly one transition, errors) and the Auto-play next episode setting's migration.
+// Series episode context and next-episode countdown / auto-play (app/auto_next.h): the queue every entry point
+// builds (Series Detail, Continue Watching, Downloads; catalog, downloads, the episode alone, the late catalog),
+// which episode is next (catalog order, season boundaries, the last episode, movies / live, offline downloads),
+// the countdown state machine (15..1, Play now, Cancel, seeking back, end of file, exactly one transition, errors,
+// nothing cut from the end) and the Auto-play next episode setting's migration.
 
 #include <cmath>
 #include <vector>
@@ -8,6 +10,8 @@
 #include "check.h"
 #include "../../src/app/auto_next.h"
 #include "../../src/app/series_plan.h"
+#include "../../src/app/vod_progress.h"
+#include "../../src/storage/library_store.h"
 #include "../../src/storage/settings_store.h"
 
 using namespace iptv;
@@ -174,28 +178,56 @@ TEST(autonext_offline_needs_the_downloaded_next_episode) {
     CHECK_EQ(autonext::nextIndex(dl, 0, nullptr, true), -1);    // and without the catalog the gap is not crossed
 }
 
-TEST(autonext_countdown_5_4_3_2_1_then_one_transition) {
-    // 6. counts 5 4 3 2 1 (never 0), then starts the next episode exactly once
+namespace {
+    const std::vector<int> FIFTEEN = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+}
+
+TEST(autonext_countdown_15_to_1_then_one_transition_at_the_end) {
+    // 2 / 3 / 16. appears when 15 s are left, counts 15 .. 1 (never 0); the episode plays to its real end
     Countdown c;
     std::vector<int> shown;
-    CHECK(!c.update(frame(30)) && !c.visible() && c.phase() == Phase::Idle);
-    int starts = playOut(c, 7.0, shown);
+    CHECK(!c.update(frame(30)) && !c.update(frame(15.01)) && !c.visible() && c.phase() == Phase::Idle);
+    CHECK(!c.update(frame(15.0)) && c.visible() && c.seconds() == 15);
+    c.reset();
+    int starts = playOut(c, 20.0, shown);
     CHECK_EQ(starts, 1);
-    CHECK(shown == std::vector<int>({5, 4, 3, 2, 1}));
+    CHECK(shown == FIFTEEN);
     CHECK(c.phase() == Phase::Transitioning && !c.visible());
-    // the bar shrinks with the time left
+    // 20. nothing is cut: a quarter second (or a millisecond and a half) before the end it still shows 1
+    Countdown cut;
+    CHECK(!cut.update(frame(0.25)) && cut.visible() && cut.seconds() == 1);
+    CHECK(!cut.update(frame(0.0015)) && cut.visible());
+    CHECK(cut.update(frame(0)));                      // the position reached the duration
+    // the bar shrinks over the whole 15 s window
     Countdown d;
-    d.update(frame(5.0));
+    d.update(frame(15.0));
     float full = d.fraction();
-    d.update(frame(2.5));
-    CHECK(std::fabs(full - 1.0f) < 1e-4f && std::fabs(d.fraction() - 0.5f) < 1e-4f && d.seconds() == 3);
-    // 12. after the transition nothing triggers again: not the timer, not EOF, not Cross
+    d.update(frame(7.5));
+    CHECK(std::fabs(full - 1.0f) < 1e-4f && std::fabs(d.fraction() - 0.5f) < 1e-4f && d.seconds() == 8);
+    // 12 / 23. after the transition nothing triggers again: not the end, not EOF, not Cross
     CHECK(!c.update(frame(0)) && !c.endOfFile(true) && !c.playNow() && !c.cancel());
     // reset() for the next item: counts again
     c.reset();
     shown.clear();
-    CHECK_EQ(playOut(c, 6.0, shown), 1);
-    CHECK(shown.front() == 5 && shown.back() == 1);
+    CHECK_EQ(playOut(c, 16.0, shown), 1);
+    CHECK(shown.front() == 15 && shown.back() == 1);
+}
+
+TEST(autonext_position_short_of_the_duration_advances_by_end_of_file) {
+    // 22. the last reported position stays 40 ms before the duration: the countdown shows 1 until mpv's end of
+    // file, which is the one transition (21)
+    Countdown c;
+    std::vector<int> shown;
+    CHECK_EQ(playOut(c, 18.0, shown, 0.04), 0);
+    CHECK(shown == FIFTEEN && c.visible() && c.seconds() == 1);
+    CHECK(c.endOfFile(true));
+    CHECK(!c.endOfFile(true) && !c.update(frame(0)) && !c.playNow());
+    // 24. Cross plays it now at any point of the window: the first second, the middle, the last
+    for (double at: {15.0, 7.3, 0.5}) {
+        Countdown n;
+        n.update(frame(at));
+        CHECK(n.visible() && n.playNow() && !n.endOfFile(true));
+    }
 }
 
 TEST(autonext_play_now_and_cancel) {
@@ -225,17 +257,20 @@ TEST(autonext_play_now_and_cancel) {
 }
 
 TEST(autonext_seek_back_resets_the_countdown) {
-    // 9. seeking back out of the range hides it; reaching the end again shows it again
+    // 17 / 18. seeking back out of the window hides it; reaching the last 15 s again shows it again
     Countdown c;
-    c.update(frame(4.0));
+    c.update(frame(12.0));
     CHECK(c.visible());
-    c.update(frame(5.6));                             // jitter / a small step back: stays (hysteresis)
-    CHECK(c.visible() && c.seconds() == 5);
-    c.update(frame(14.0));                            // Left: 10 s back
+    c.update(frame(15.8));                            // jitter / a small step back: stays (hysteresis up to 16 s)
+    CHECK(c.visible() && c.seconds() == 15);
+    c.update(frame(16.2));                            // beyond 16 s: reset
     CHECK(!c.visible() && c.phase() == Phase::Idle && c.seconds() == 0);
+    c.update(frame(9.0));
+    c.update(frame(19.0));                            // Left: 10 s back
+    CHECK(!c.visible() && c.phase() == Phase::Idle);
     std::vector<int> shown;
-    CHECK_EQ(playOut(c, 14.0, shown), 1);
-    CHECK(shown == std::vector<int>({5, 4, 3, 2, 1}));
+    CHECK_EQ(playOut(c, 19.0, shown), 1);
+    CHECK(shown == FIFTEEN);
     // a seek forward into the range enters it at the right number
     Countdown f;
     f.update(frame(2.4));
@@ -260,8 +295,8 @@ TEST(autonext_end_of_file_fallback_and_errors) {
     CHECK(!e.update(frame(3.0, true, false)) && !e.visible());
     CHECK(!e.update(frame(0.1, true, false)) && !e.update(frame(0, true, false)));
     CHECK(e.phase() == Phase::Idle);
-    // when it recovers near the end the countdown may continue
-    CHECK(e.update(frame(0.2)));
+    // when it recovers near the end the countdown continues
+    CHECK(!e.update(frame(0.2)) && e.visible() && e.update(frame(0)));
     // NaN / infinite times are unknown, never a trigger
     Countdown n;
     CHECK(!n.update(frame(std::nan(""))) && !n.update(frame(INFINITY)) && !n.visible());
@@ -271,7 +306,7 @@ TEST(autonext_setting_off_and_migration) {
     // 17. Auto-play next episode off: no countdown, EOF ends normally
     Countdown c;
     std::vector<int> shown;
-    for (double r = 6; r >= 0; r -= 0.1) {
+    for (double r = 20; r >= 0; r -= 0.1) {
         CHECK(!c.update(frame(r, false)));
     }
     CHECK(!c.visible() && !c.endOfFile(false));
@@ -301,3 +336,141 @@ TEST(autonext_setting_off_and_migration) {
     SettingsStore on("unused");
     CHECK(on.deserialize(off.serialize(), nullptr) && on.get().autoPlayNextEpisode);
 }
+
+namespace {
+    // what Home builds from a Continue Watching entry (HomeScreen::itemOf): ids, names, numbers, no neighbours
+    VodItem continueWatching(const std::string &id, int season, int episode) {
+        VodItem it;
+        it.type = ContentType::Series;
+        it.id = id;
+        it.seriesId = "77";
+        it.seriesName = "The Series";
+        it.title = "Title " + id;
+        it.image = "https://img.example/cover.jpg";
+        it.extension = "mp4";
+        it.season = season;
+        it.episode = episode;
+        it.durationHint = 3420;
+        return it;
+    }
+
+    VodItem downloadOf(const VodItem &it) {
+        VodItem d = it;
+        d.localPath = "/data/PS4IPTV/downloads/" + it.id + ".mkv";
+        d.profileId = "p1";
+        return d;
+    }
+}
+
+TEST(autonext_continue_watching_gets_the_series_detail_context) {
+    SeriesInfo info = catalog();
+    std::vector<VodItem> seriesDetail = queueOf(info);
+    // 1. a middle episode resumed from Continue Watching: the whole series in catalog order, like Series Detail
+    VodItem cw = continueWatching("202", 2, 2);
+    int pos = -1;
+    std::vector<VodItem> q = autonext::episodeQueue(cw, &info, {}, false, pos);
+    CHECK_EQ(q.size(), seriesDetail.size());
+    for (size_t i = 0; i < q.size(); i++) {
+        CHECK(q[i].id == seriesDetail[i].id && q[i].season == seriesDetail[i].season);
+        CHECK(q[i].seriesId == "77" && q[i].seriesName == "The Series" && q[i].type == ContentType::Series);
+    }
+    CHECK(pos == at(q, "202"));
+    // the current episode exactly as given (its container, duration, image)
+    CHECK(q[(size_t) pos].extension == "mp4" && q[(size_t) pos].title == "Title 202" && q[(size_t) pos].durationHint == 3420);
+    CHECK_EQ(q[(size_t) autonext::nextIndex(q, pos, &info, false)].id, std::string("205"));
+    // 8 / 9. the end screen's "Up next" (auto-play off / cancelled) has the next episode too
+    CHECK(pos + 1 < (int) q.size() && q[(size_t) pos + 1].id == "205");
+    // 6. season boundary: the last S02 episode -> S03's first one
+    std::vector<VodItem> q2 = autonext::episodeQueue(continueWatching("205", 2, 5), &info, {}, false, pos);
+    CHECK_EQ(q2[(size_t) autonext::nextIndex(q2, pos, &info, false)].id, std::string("302"));
+    // 7. the final episode of the final season: none
+    std::vector<VodItem> q3 = autonext::episodeQueue(continueWatching("303", 3, 3), &info, {}, false, pos);
+    CHECK_EQ(autonext::nextIndex(q3, pos, &info, false), -1);
+    CHECK(pos == (int) q3.size() - 1);
+    // the v3.2 bug: without the catalog the queue was this episode alone - no countdown, "last episode" at the end
+    std::vector<VodItem> alone = autonext::episodeQueue(cw, nullptr, {}, false, pos);
+    CHECK(alone.size() == 1 && pos == 0 && autonext::nextIndex(alone, 0, nullptr, false) == -1);
+    // ... the player asks for the catalog once and rebuilds the same queue around the playing episode
+    std::vector<VodItem> late = autonext::episodeQueue(alone[0], &info, {}, false, pos);
+    CHECK(late.size() == seriesDetail.size() && late[(size_t) pos].id == "202");
+    CHECK_EQ(late[(size_t) autonext::nextIndex(late, pos, &info, false)].id, std::string("205"));
+    // an episode the catalog no longer lists: played alone, no next (no guessing)
+    std::vector<VodItem> gone = autonext::episodeQueue(continueWatching("999", 2, 9), &info, {}, false, pos);
+    CHECK(gone.size() == 1 && autonext::nextIndex(gone, pos, &info, false) == -1);
+    // 12. Series Detail builds the same queue for the same episode
+    VodItem fromDetail = seriesDetail[(size_t) at(seriesDetail, "201")];
+    std::vector<VodItem> qd = autonext::episodeQueue(fromDetail, &info, {}, false, pos);
+    CHECK(qd.size() == seriesDetail.size() && qd[(size_t) autonext::nextIndex(qd, pos, &info, false)].id == "202");
+}
+
+TEST(autonext_continue_watching_keeps_the_resume_position) {
+    // 5. the episode's saved position is found by its id in the shared queue: the resume start is unchanged
+    LibraryStore lib("unused");
+    VodItem cw = continueWatching("202", 2, 2);
+    {
+        VodProgress p(lib);
+        double t = 1000;
+        p.begin(cw, false, t);
+        for (double pos = 0; pos < 1500; pos += 0.25) {
+            t += 0.25;
+            p.observe(pos, 3420, true, t);
+            if (p.due(t) != VodProgress::Due::None) {
+                p.record(t);
+            }
+        }
+        p.record(t + 0.1, 1500.5);
+    }
+    SeriesInfo info = catalog();
+    int pos = -1;
+    std::vector<VodItem> q = autonext::episodeQueue(cw, &info, {}, false, pos);
+    VodProgress resume(lib);
+    CHECK(std::fabs(resume.begin(q[(size_t) pos], true, 5000) - 1500.5) < 0.01);
+    // the neighbours start from the beginning (nothing saved for them)
+    VodProgress fresh(lib);
+    CHECK(fresh.begin(q[(size_t) pos + 1], true, 5000) == 0);
+}
+
+TEST(autonext_continue_watching_offline_uses_the_downloads) {
+    SeriesInfo info = catalog();
+    std::vector<VodItem> all = queueOf(info);
+    VodItem e201 = downloadOf(all[(size_t) at(all, "201")]);
+    VodItem e202 = downloadOf(all[(size_t) at(all, "202")]);
+    VodItem e205 = downloadOf(all[(size_t) at(all, "205")]);
+    VodItem cw = downloadOf(continueWatching("201", 2, 1));   // Home: the downloaded copy preferred
+    int pos = -1;
+    // 10. offline, the next episode is downloaded: the downloads are the queue, the countdown is allowed
+    std::vector<VodItem> q = autonext::episodeQueue(cw, &info, {e201, e202, e205}, true, pos);
+    CHECK(q.size() == 3 && q[(size_t) pos].id == "201" && q[(size_t) pos].extension == "mp4");
+    int n = autonext::nextIndex(q, pos, &info, true);
+    CHECK(n >= 0 && q[(size_t) n].id == "202" && !q[(size_t) n].localPath.empty());
+    // 11. offline, the next episode (202) is not downloaded: no countdown (205 is not the next one)
+    std::vector<VodItem> gap = autonext::episodeQueue(cw, &info, {e201, e205}, true, pos);
+    CHECK_EQ(autonext::nextIndex(gap, pos, &info, true), -1);
+    CHECK_EQ(autonext::nextIndex(gap, pos, nullptr, true), -1);
+    // offline the catalog never makes the queue (no stream offline), even when it is in memory
+    CHECK_EQ(autonext::episodeQueue(cw, &info, {}, true, pos).size(), 1u);
+    // the Continue Watching item without its local path still plays the downloaded copy
+    VodItem plain = continueWatching("201", 2, 1);
+    std::vector<VodItem> q2 = autonext::episodeQueue(plain, nullptr, {e201, e202}, true, pos);
+    CHECK(!q2[(size_t) pos].localPath.empty() && q2[(size_t) pos].profileId == "p1");
+    // online with the catalog: downloaded copies are kept for the current episode
+    std::vector<VodItem> on = autonext::episodeQueue(cw, &info, {e201, e202}, false, pos);
+    CHECK(on.size() == all.size() && on[(size_t) pos].localPath == cw.localPath);
+}
+
+TEST(autonext_movies_and_live_get_no_episode_context) {
+    // 14 / 15. a movie or a channel: no series queue, no next episode
+    SeriesInfo info = catalog();
+    VodItem movie;
+    movie.type = ContentType::Movie;
+    movie.id = "202";                                  // even with an id the catalog happens to contain
+    int pos = -1;
+    std::vector<VodItem> q = autonext::episodeQueue(movie, &info, {}, false, pos);
+    CHECK(q.size() == 1 && pos == 0 && autonext::nextIndex(q, 0, &info, false) == -1);
+    VodItem channel;
+    channel.type = ContentType::Live;
+    channel.id = "201";
+    std::vector<VodItem> l = autonext::episodeQueue(channel, &info, {}, false, pos);
+    CHECK(l.size() == 1 && autonext::nextIndex(l, 0, &info, false) == -1);
+}
+
