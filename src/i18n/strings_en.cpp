@@ -396,7 +396,6 @@ namespace i18n {
             {"player.up_next", "Up next"},
             {"player.last_episode", "You finished the last episode"},
             {"player.the_end", "The end"},
-            {"player.end_hint_play_now", "X  Play now          Circle  Back"},
             {"player.end_hint_play_next", "X  Play next          Circle  Back"},
             {"player.end_hint_again", "X  Watch again          Circle  Back"},
             {"player.chip_audio", "Audio: {0}"},
@@ -408,6 +407,8 @@ namespace i18n {
             {"player.options", "Options"},
             {"player.info", "Info"},
             {"player.next_episode", "Next episode"},
+            {"player.next_countdown", "Playing in {0}…"},
+            {"player.next_play_now", "Play now"},
             {"player.attempt_of", "{0} of {1}"},
             {"player.attempt", "Attempt {0}"},
             {"player.resuming_at", "Resuming at {0}…"},
@@ -699,8 +700,9 @@ namespace i18n {
                                      "Off: they always start from the beginning; progress is still remembered. Never "
                                      "applies to Live TV."},
             {"settings.autoplay", "Auto-play next episode"},
-            {"settings.autoplay.desc", "On: when an episode ends, the next one starts after a 10 second countdown. Off: "
-                                       "the next episode is offered and starts when you press X."},
+            {"settings.autoplay.desc", "On: in the last 5 seconds of an episode a countdown starts the next one (X: play "
+                                       "now, Circle: cancel). Off: the next episode is offered when the episode ends "
+                                       "and starts when you press X."},
             {"settings.retry_downloads", "Retry downloads automatically"},
             {"settings.retry_downloads.desc", "On: when the connection drops, downloads wait and continue by themselves "
                                               "from where they stopped, trying again less and less often. Off: an "

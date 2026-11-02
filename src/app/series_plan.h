@@ -35,6 +35,15 @@ namespace seriesplan {
     // "Play S01E01", "Resume S01E03 · 24:16", "Next S01E04"
     std::string label(const Action &action, const iptv::SeriesInfo &info);
 
+    // The episode after seasons[season].episodes[episode] in the provider's catalog order: the next one of its
+    // season, else the first episode of the next season that has any (numbering is never assumed to be
+    // sequential). false after the series' last episode or for an index outside the catalog. Used by the main
+    // button's "Next" and by the player's next-episode countdown (app/auto_next.h).
+    bool nextEpisode(const iptv::SeriesInfo &info, int season, int episode, int &nextSeason, int &nextEpisode);
+
+    // the season / episode indexes of an episode id in the catalog
+    bool locate(const iptv::SeriesInfo &info, const std::string &episodeId, int &season, int &episode);
+
     enum class EpisodeState {
         Untouched,
         InProgress,   // progress bar + "24:16 / 57:00"

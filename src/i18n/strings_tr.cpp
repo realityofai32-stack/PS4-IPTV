@@ -397,7 +397,6 @@ namespace i18n {
             {"player.up_next", "Sıradaki"},
             {"player.last_episode", "Son bölümü bitirdiniz"},
             {"player.the_end", "Son"},
-            {"player.end_hint_play_now", "X  Şimdi oynat          Daire  Geri"},
             {"player.end_hint_play_next", "X  Sonrakini oynat          Daire  Geri"},
             {"player.end_hint_again", "X  Tekrar izle          Daire  Geri"},
             {"player.chip_audio", "Ses: {0}"},
@@ -409,6 +408,8 @@ namespace i18n {
             {"player.options", "Seçenekler"},
             {"player.info", "Bilgi"},
             {"player.next_episode", "Sonraki bölüm"},
+            {"player.next_countdown", "{0} saniye içinde oynatılacak…"},
+            {"player.next_play_now", "Şimdi oynat"},
             {"player.attempt_of", "{0} / {1}"},
             {"player.attempt", "Deneme {0}"},
             {"player.resuming_at", "{0} konumundan devam ediliyor…"},
@@ -702,8 +703,9 @@ namespace i18n {
                                      "Devam Et). Kapalı: her zaman baştan başlar; ilerleme yine de hatırlanır. Canlı "
                                      "TV için geçerli değildir."},
             {"settings.autoplay", "Sonraki bölümü otomatik oynat"},
-            {"settings.autoplay.desc", "Açık: bir bölüm bitince sonraki 10 saniyelik geri sayımdan sonra başlar. Kapalı: "
-                                       "sonraki bölüm önerilir ve X'e bastığınızda başlar."},
+            {"settings.autoplay.desc", "Açık: bölümün son 5 saniyesinde bir geri sayım sonraki bölümü başlatır (X: şimdi "
+                                       "oynat, Daire: iptal). Kapalı: bölüm bitince sonraki bölüm önerilir ve X'e "
+                                       "bastığınızda başlar."},
             {"settings.retry_downloads", "İndirmeleri otomatik yeniden dene"},
             {"settings.retry_downloads.desc", "Açık: bağlantı koptuğunda indirmeler bekler ve giderek daha seyrek "
                                               "deneyerek kaldıkları yerden kendiliğinden devam eder. Kapalı: kesilen "

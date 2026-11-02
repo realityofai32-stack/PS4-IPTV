@@ -4,21 +4,41 @@
 
 namespace seriesplan {
 
-    namespace {
-        bool locate(const iptv::SeriesInfo &info, const std::string &episodeId, int &season, int &episode) {
-            for (size_t s = 0; s < info.seasons.size(); s++) {
-                const auto &eps = info.seasons[s].episodes;
-                for (size_t e = 0; e < eps.size(); e++) {
-                    if (eps[e].id == episodeId) {
-                        season = (int) s;
-                        episode = (int) e;
-                        return true;
-                    }
+    bool locate(const iptv::SeriesInfo &info, const std::string &episodeId, int &season, int &episode) {
+        for (size_t s = 0; s < info.seasons.size(); s++) {
+            const auto &eps = info.seasons[s].episodes;
+            for (size_t e = 0; e < eps.size(); e++) {
+                if (eps[e].id == episodeId) {
+                    season = (int) s;
+                    episode = (int) e;
+                    return true;
                 }
             }
+        }
+        return false;
+    }
+
+    bool nextEpisode(const iptv::SeriesInfo &info, int season, int episode, int &nextSeason, int &nextEp) {
+        if (season < 0 || season >= (int) info.seasons.size() || episode < 0
+            || episode >= (int) info.seasons[(size_t) season].episodes.size()) {
             return false;
         }
+        if ((size_t) episode + 1 < info.seasons[(size_t) season].episodes.size()) {
+            nextSeason = season;
+            nextEp = episode + 1;
+            return true;
+        }
+        for (size_t ns = (size_t) season + 1; ns < info.seasons.size(); ns++) {
+            if (!info.seasons[ns].episodes.empty()) {
+                nextSeason = (int) ns;
+                nextEp = 0;
+                return true;
+            }
+        }
+        return false;
+    }
 
+    namespace {
         // first episode of the first regular season (specials, season 0, only when nothing else exists)
         bool first(const iptv::SeriesInfo &info, int &season, int &episode) {
             int fallback = -1;
@@ -76,21 +96,12 @@ namespace seriesplan {
                 continue;   // no longer offered by the provider
             }
             if (episodeState(p) == EpisodeState::Watched) {
-                const auto &eps = info.seasons[(size_t) s].episodes;
-                if ((size_t) e + 1 < eps.size()) {
+                if (nextEpisode(info, s, e, a.season, a.episode)) {
                     a.kind = Kind::Next;
-                    a.season = s;
-                    a.episode = e + 1;
                     return a;
                 }
-                for (size_t ns = (size_t) s + 1; ns < info.seasons.size(); ns++) {
-                    if (!info.seasons[ns].episodes.empty()) {
-                        a.kind = Kind::Next;
-                        a.season = (int) ns;
-                        a.episode = 0;
-                        return a;
-                    }
-                }
+                a.season = 0;
+                a.episode = 0;
                 break;   // the last episode was completed: start from the beginning
             }
             a.kind = Kind::Play;

@@ -90,7 +90,8 @@ std::string SettingsStore::serialize() const {
     root.set("subtitlePosition", json::Value::makeString(SUB_POSITIONS[settings.subtitlePosition == 1 ? 1 : 0]));
     root.set("subtitleShadow", json::Value::makeBool(settings.subtitleShadow));
     root.set("resumeVod", json::Value::makeBool(settings.resumeVod));
-    root.set("autoPlayNextEpisode", json::Value::makeBool(settings.autoPlayNextEpisode));
+    root.set("autoPlayNext", json::Value::makeBool(settings.autoPlayNextEpisode));
+    root.set("autoPlayNextEpisode", json::Value::makeBool(settings.autoPlayNextEpisode));   // older builds
     root.set("showTechnicalInfo", json::Value::makeBool(settings.showTechnicalInfo));
     root.set("loadImages", json::Value::makeBool(settings.loadImages));
     root.set("smoothScrolling", json::Value::makeBool(settings.smoothScrolling));
@@ -133,7 +134,7 @@ bool SettingsStore::deserialize(const std::string &text, std::string *error) {
     s.subtitleSize = indexOf(root["subtitleSize"].asString(), SUB_SIZES, 3, 1);
     s.subtitlePosition = indexOf(root["subtitlePosition"].asString(), SUB_POSITIONS, 2, 0);
     s.subtitleShadow = root["subtitleShadow"].asBool(false);
-    s.autoPlayNextEpisode = root["autoPlayNextEpisode"].asBool(s.autoPlayNextEpisode);
+    s.autoPlayNextEpisode = root["autoPlayNext"].asBool(true);
     s.showTechnicalInfo = root["showTechnicalInfo"].asBool(s.showTechnicalInfo);
     s.loadImages = root["loadImages"].asBool(s.loadImages);
     s.smoothScrolling = root["smoothScrolling"].asBool(s.smoothScrolling);

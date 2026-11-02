@@ -259,6 +259,15 @@ namespace layout {
         constexpr float OPTIONS_LIST_W = OPTIONS_W - OPTIONS_PAD - SAFE_X;   // 536: ends at the safe edge
         constexpr float OPTIONS_ROW_H = 80;
         constexpr float OPTIONS_EDGE_W = 80;           // soft fade on the panel's left edge
+        // next-episode countdown (bottom right, independent of the HUD): it ends above the progress bar, so the bar,
+        // time, track chips and hints stay visible when the HUD is shown, and it sits above the bottom subtitle
+        // lines (mpv sub-pos 100: their baseline near y 1045, two lines up to ~ y 925)
+        constexpr float NEXT_W = 440;
+        constexpr float NEXT_H = 230;
+        constexpr float NEXT_X = SAFE_RIGHT - NEXT_W;          // 1384
+        constexpr float NEXT_Y = BAR_Y - 34 - NEXT_H;          // 630 .. 860
+        constexpr float NEXT_PAD = 28;
+        constexpr float NEXT_BAR_H = 4;
     }
 }
 

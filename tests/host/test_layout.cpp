@@ -205,5 +205,17 @@ TEST(layout_downloads_and_player) {
         CHECK(BOTTOM_Y < BAR_Y);
         CHECK(BAR_Y + BAR_H < TIME_Y);
         CHECK(TIME_Y + LINE_28 < HINTS_Y);
+        // next-episode countdown: bottom right inside the safe area, compact, clear of the progress bar / time /
+        // track chips / hints (it may show with or without the HUD), and above the bottom subtitle lines
+        CHECK_EQ(NEXT_X + NEXT_W, SAFE_RIGHT);
+        CHECK(NEXT_Y >= SAFE_Y && NEXT_Y > SUBTITLE_Y + LINE_28);
+        CHECK(NEXT_Y + NEXT_H <= BAR_Y - 30);
+        CHECK(NEXT_X > SCREEN_W / 2 + 300);              // right of the centred subtitle column's middle
+        CHECK(NEXT_W * NEXT_H < 0.06f * SCREEN_W * SCREEN_H);   // the video stays dominant (< 6 % of the screen)
+        // contents: heading 24 + 30, title 60 + 35, countdown 104 + 30, bar 146, hints 170 + 40, bottom padding
+        CHECK(60 + LINE_28 < 104 && 104 + LINE_24 < 146 && 146 + NEXT_BAR_H < 170);
+        CHECK(170 + HINTS_H + 16 <= NEXT_H);
+        // hidden while the Options panel is open; geometrically it would sit under it
+        CHECK(NEXT_X >= OPTIONS_X);
     }
 }

@@ -8,7 +8,12 @@
 //   - progress (app/vod_progress): the store every 5 s, history.json every 15 s; on pause, Circle, next
 //     episode and app exit the position is queried from mpv right before stopping and written at once
 //   - overlay: hides 4 s after the last input while playing (player/hud_logic.h)
-//   - episodes: L1/R1 previous/next, an "Up next" panel at the end (auto-play only when enabled in Settings)
+//   - episodes: L1/R1 previous/next, an "Up next" panel at the end. Next-episode countdown (app/auto_next.h,
+//     Settings > Playback > Auto-play next episode, on by default): in the last 5 s of an episode with a known next
+//     episode a small panel bottom right counts 5..1 and then starts it; Cross plays it at once, Circle cancels it
+//     for this playback. Only while it is shown do Cross / Circle mean Play now / Cancel. A normal end of file
+//     starts the next episode as well (fallback), exactly once; playback errors never do. Every transition is
+//     startItem(), the same path as L1 / R1 and the episode chosen in Series Detail.
 //   - video geometry (player/display): Aspect Ratio, Crop / Fill, Zoom and Position in the Options panel's Video
 //     menu, mpv properties set at runtime (no reload: position, pause state and tracks stay). The Settings
 //     defaults apply when the player opens; a change in the panel lasts for this playback only, unless the
@@ -26,6 +31,7 @@
 #include "../iptv/xtream.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
+#include "../app/auto_next.h"
 #include "../app/vod_progress.h"
 #include "../player/display.h"
 #include "../player/hud_logic.h"
@@ -39,7 +45,6 @@ namespace {
 
     const double SEEK_COMMIT_DELAY = 0.45;    // seconds after the last seek press
     const double END_MARGIN = 30;             // an end of file this close to the duration is the real end
-    const double AUTOPLAY_COUNTDOWN = 10;
 
     const char *SIZE_KEYS[] = {"subtitle.size.small", "subtitle.size.medium", "subtitle.size.large"};
     const char *POSITION_KEYS[] = {"subtitle.position.bottom", "subtitle.position.raised"};
@@ -105,6 +110,7 @@ namespace {
             buildCentre();
             buildPanel();
             buildInfo();
+            buildNextPanel();
         }
 
         ~VodPlayerScreen() override {
@@ -166,9 +172,8 @@ namespace {
                 subtitleWarningShown = true;
                 app.toast(tr("player.subtitles_unsupported"), ToastKind::Error);
             }
-            if (finished && autoplayAt > 0 && now >= autoplayAt) {
-                autoplayAt = 0;
-                playNext();
+            if (!finished && updateCountdown()) {
+                advance("countdown");   // log reason i18n-exempt
                 return;
             }
             bool paused = pb.state() == PlaybackState::Paused;
@@ -204,6 +209,20 @@ namespace {
             Playback &pb = app.playback();
             if (finished) {
                 endInput(e);
+                return;
+            }
+            // the countdown panel has Cross / Circle only while it is shown; everything else works as always
+            if (countdown.visible() && (e.button == PadButton::Cross || e.button == PadButton::Circle)) {
+                if (e.repeat) {
+                    return;
+                }
+                if (e.button == PadButton::Cross && countdown.playNow()) {
+                    advance("play now");   // log reason i18n-exempt
+                } else if (e.button == PadButton::Circle && countdown.cancel()) {
+                    LOG_I("player", "next episode countdown cancelled");
+                    showNextPanel(false);
+                    refresh(app.now());
+                }
                 return;
             }
             switch (e.button) {
@@ -297,7 +316,9 @@ namespace {
                 app.library().setProfile(owner);
             }
             finished = false;
-            autoplayAt = 0;
+            countdown.reset();
+            showNextPanel(false);
+            resolveNext();
             endPanel->setVisibility(Visibility::Hidden);
             pendingSeek = false;
             subtitleWarningShown = false;
@@ -443,14 +464,19 @@ namespace {
             app.saveLibrary();
             LOG_I("player", "%s finished", item().id.c_str());
             pb.stop();
+            // EOF fallback: the countdown's transition (no end panel), unless it was cancelled or is off
+            if (countdown.endOfFile(canAdvance())) {
+                showNextPanel(false);
+                startNext("end of file");   // log reason i18n-exempt
+                return;
+            }
+            showNextPanel(false);
             bool next = isEpisode() && index + 1 < (int) queue.size();
             endTitle->setText(tr(next ? "player.up_next" : isEpisode() ? "player.last_episode" : "player.the_end"));
             if (next) {
                 const VodItem &n = queue[(size_t) index + 1];
                 endText->setText(fmt::episodeCode(n.season, n.episode) + "  " + episodeTitle(n));
-                bool autoplay = app.settings().get().autoPlayNextEpisode;
-                autoplayAt = autoplay ? app.now() + AUTOPLAY_COUNTDOWN : 0;
-                endHint->setText(tr(autoplay ? "player.end_hint_play_now" : "player.end_hint_play_next"));
+                endHint->setText(tr("player.end_hint_play_next"));
             } else {
                 endText->setText(isEpisode() ? item().seriesName : item().title);
                 endHint->setText(tr("player.end_hint_again"));
@@ -480,6 +506,122 @@ namespace {
             if (index + 1 < (int) queue.size()) {
                 startItem(index + 1, true);
             }
+        }
+
+        // ------------------------------------------------------------------ next-episode countdown
+        // once per item: the episode after this one (app/auto_next.h), from the catalog already in memory
+        void resolveNext() {
+            nextIdx = -1;
+            if (!isEpisode()) {
+                return;
+            }
+            std::shared_ptr<const SeriesInfo> info = app.vod().seriesInfo(item().seriesId);
+            nextIdx = autonext::nextIndex(queue, index, info.get(), app.session().offline);
+            if (nextIdx >= 0) {
+                const VodItem &n = queue[(size_t) nextIdx];
+                nextText->setText(fmt::episodeCode(n.season, n.episode) + "  \xC2\xB7  " + episodeTitle(n));
+                LOG_I("player", "next episode: %s (S%02dE%02d%s, %s)", n.id.c_str(), n.season, n.episode,
+                      n.localPath.empty() ? "" : ", downloaded", info ? "catalog" : "queue order");
+            } else {
+                LOG_I("player", "next episode: none (%s)", info ? "catalog" : "no catalog in memory");
+            }
+            nextShownSeconds = -1;
+        }
+
+        // a next episode exists and Auto-play next episode is on
+        bool canAdvance() const {
+            return nextIdx >= 0 && app.settings().get().autoPlayNextEpisode;
+        }
+
+        // the countdown's frame: true = start the next episode now
+        bool updateCountdown() {
+            Playback &pb = app.playback();
+            autonext::Frame f;
+            f.canAdvance = canAdvance();
+            f.running = !panelOpen && pb.started() && recovery.status() == stability::Status::Playing
+                        && (pb.state() == PlaybackState::Playing || pb.state() == PlaybackState::Paused);
+            double duration = tracker.duration() > 0 ? tracker.duration() : pb.duration();
+            double position = pendingSeek ? seekTarget : pb.position();
+            f.remaining = duration > 0 && position >= 0 ? std::max(0.0, duration - position) : -1;
+            bool wasVisible = countdown.visible();
+            if (countdown.update(f)) {
+                return true;
+            }
+            if (countdown.visible()) {
+                if (!wasVisible) {
+                    LOG_I("player", "next episode countdown: %.1f s left", f.remaining);
+                    showNextPanel(true);
+                    refresh(app.now());
+                }
+                if (countdown.seconds() != nextShownSeconds) {
+                    nextShownSeconds = countdown.seconds();   // the text changes once per second, not per frame
+                    nextCount->setText(tr("player.next_countdown", {std::to_string(nextShownSeconds)}));
+                }
+                namespace P = layout::player;
+                float w = std::round((P::NEXT_W - 2 * P::NEXT_PAD) * countdown.fraction());
+                nextFill->setSize(std::max(P::NEXT_BAR_H, w), P::NEXT_BAR_H);
+            } else if (wasVisible) {
+                showNextPanel(false);   // seeked back / stopped running normally: the normal controls are back
+                refresh(app.now());
+            }
+            return false;
+        }
+
+        // the countdown ran out or Cross: the current episode is complete, then the next one starts
+        void advance(const char *why) {
+            if (nextIdx < 0) {
+                return;
+            }
+            finished = true;
+            tracker.record(app.now(), -1, true);   // completed, as at the natural end (leaves Continue Watching)
+            app.saveLibrary();
+            showNextPanel(false);
+            startNext(why);
+        }
+
+        // the one transition: the player's normal item start (also used by L1 / R1 and Series Detail's choice)
+        void startNext(const char *why) {
+            int target = nextIdx;
+            if (target < 0 || target >= (int) queue.size()) {
+                return;
+            }
+            LOG_I("player", "next episode (%s): %s -> %s", why, item().id.c_str(), queue[(size_t) target].id.c_str());
+            if (panelOpen) {
+                closePanel();
+            }
+            startItem(target, true);
+        }
+
+        void showNextPanel(bool shown) {
+            if (!shown) {
+                nextShownSeconds = -1;
+            }
+            nextPanel->setVisibility(shown ? Visibility::Visible : Visibility::Hidden);
+        }
+
+        // bottom right, above the progress bar: Next episode / S02E03 · title / Playing in 5... / bar / hints
+        void buildNextPanel() {
+            namespace P = layout::player;
+            const float inner = P::NEXT_W - 2 * P::NEXT_PAD;
+            nextPanel = ui::box(this, FloatRect(P::NEXT_X, P::NEXT_Y, P::NEXT_W, P::NEXT_H), theme::overlayPanel(),
+                                theme::RADIUS);
+            ui::label(nextPanel, tr("player.next_episode"), theme::LABEL, P::NEXT_PAD, 24, ui::Weight::SemiBold,
+                      theme::textSecondary());
+            nextText = ui::label(nextPanel, "", theme::BODY, P::NEXT_PAD, 60, ui::Weight::SemiBold, theme::textPrimary());
+            nextText->setMaxWidth(inner);
+            nextText->setMaxLines(1);
+            nextCount = ui::label(nextPanel, "", theme::LABEL, P::NEXT_PAD, 104, ui::Weight::SemiBold,
+                                  theme::accentText());
+            nextCount->setMaxWidth(inner);
+            auto *track = ui::box(nextPanel, FloatRect(P::NEXT_PAD, 146, inner, P::NEXT_BAR_H), theme::progressTrack(),
+                                  P::NEXT_BAR_H / 2);
+            nextFill = ui::box(track, FloatRect(0, 0, inner, P::NEXT_BAR_H), theme::accent(), P::NEXT_BAR_H / 2);
+            auto *h = new ui::HintBar();
+            h->setSize(inner, layout::HINTS_H);
+            h->setPosition(P::NEXT_PAD, 170);
+            nextPanel->add(h);
+            h->setHints({{ui::Glyph::Cross, tr("player.next_play_now")}, {ui::Glyph::Circle, tr("common.cancel")}});
+            nextPanel->setVisibility(Visibility::Hidden);
         }
 
         void exit() {
@@ -674,13 +816,16 @@ namespace {
             chips->setText(chipText);
             // the everyday controls only (L2 / R2 still seek a minute)
             // (Triangle still shows the technical info; it is also in Options > Technical info)
+            // while the next-episode countdown is shown, Cross / Circle are its Play now / Cancel
+            const bool counting = countdown.visible();
             std::vector<std::pair<ui::Glyph, std::string>> h = {
-                    {ui::Glyph::Cross, tr(pb.state() == PlaybackState::Paused ? "common.play" : "player.pause")},
+                    {ui::Glyph::Cross, tr(counting ? "player.next_play_now" : pb.state() == PlaybackState::Paused
+                                                                              ? "common.play" : "player.pause")},
                     {ui::Glyph::DPad, tr("player.seek_10")}, {ui::Glyph::Options, tr("player.options")}};
             if (isEpisode()) {
                 h.push_back({ui::Glyph::R1, tr("player.next_episode")});
             }
-            h.push_back({ui::Glyph::Circle, tr("common.back")});
+            h.push_back({ui::Glyph::Circle, tr(counting ? "common.cancel" : "common.back")});
             hints->setHints(h);
 
             stability::Status rs = recovery.status();
@@ -1232,7 +1377,13 @@ namespace {
         double seekTarget = 0;
         double seekCommitAt = 0;
         bool finished = false;
-        double autoplayAt = 0;
+        autonext::Countdown countdown;
+        int nextIdx = -1;                  // queue index of the next episode (-1: none / not an episode)
+        int nextShownSeconds = -1;
+        RectangleShape *nextPanel = nullptr;
+        ui::Label *nextText = nullptr;
+        ui::Label *nextCount = nullptr;
+        RectangleShape *nextFill = nullptr;
         bool overlayVisible = true;
         double lastActivity = 0;
         bool wasPlaying = false;

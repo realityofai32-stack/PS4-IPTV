@@ -1,0 +1,68 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UI-3.2: NEXT EPISODE COUNTDOWN / AUTO-PLAY
+============================================================================
+Branch feature/v7-ui-v3-polish (local only), one commit on top of v7-ui-3.1 (f93852e). Version 0.2.0, title
+IPTV00002 (unchanged). Build ID and PKG SHA-256: build/checkpoint-v7-ui-3.2/BUILD.txt and SHA256SUMS.txt.
+The V3.1 UI is unchanged; this adds one playback feature (src/app/auto_next.h explains the rules).
+
+Install OVER the existing V7 IPTV (same title ID). Settings > Playback > Auto-play next episode is now ON by
+default, also for existing settings files (the old v0.2.0 option of the same name defaulted to off).
+
+What to expect
+- Only for series episodes that have a next episode. Never for movies, Live TV, M3U channels, or the last episode.
+- The next episode comes from the provider's catalog order: the next one in the season, or the first episode
+  of the next season.
+- In the last 5 seconds a small panel appears bottom right, above the progress bar:
+    Next episode
+    S02E03 · <title>
+    Playing in 5... (accent)
+    a thin accent bar
+    [X] Play now  [O] Cancel
+- At the end, the next episode starts once.
+- Only while the panel is shown: Cross = play now, Circle = cancel. Every other button works as always.
+
+Please copy /data/PS4IPTV/logs/log.txt afterwards (FTP). It contains:
+  [player] next episode: <id> (S02E03, catalog)          when an episode starts; or "next episode: none (...)"
+  [player] next episode countdown: 5.0 s left             the panel appeared
+  [player] next episode (countdown|play now|end of file): <id> -> <id>    the one transition
+  [player] next episode countdown cancelled
+
+-----------------------------------------------------------------------------------------------------
+TESTS
+-----------------------------------------------------------------------------------------------------
+ 1. Open a series episode that has another episode after it (Series Detail, mid-season). Seek close to the end
+    (R2 / Right until about 0:20 left), then let it play.
+ 2. At <= 5 s left the panel appears bottom right. The HUD does not have to be visible. [SHOT with HUD hidden]
+    Press Left/Right once so the HUD shows, and wait for the next countdown: no overlap with the bar, time,
+    track chips or hints. [SHOT]
+ 3. The number goes 5 -> 4 -> 3 -> 2 -> 1, the bar shrinks, and no "0" is shown.
+ 4. At the end the next episode starts exactly once: no flash of the "Up next" end screen, no second start,
+    title and episode in the HUD are the new ones. Its audio / subtitle choice and the video geometry follow the
+    usual rules.
+ 5. Back in Series Detail: the finished episode shows Watched, and Continue Watching shows the new one.
+ 6. Repeat 1-2 and press Cross during the countdown: the next episode starts at once.
+ 7. Repeat 1-2 and press Circle: the panel disappears, the episode plays to its end and shows the normal end
+    screen (no auto-next). After cancelling, Circle leaves the player as usual.
+    Seek back 30 s and let it reach the end again: no countdown in this playback.
+ 8. Repeat 1-2 and press Left (seek back) while the panel is shown: it disappears at once; Cross pauses again.
+    Let it reach the end again: the countdown comes back.
+ 9. The last episode of a season, when another season exists: the countdown shows the first episode of the next
+    season (S03E01 or whatever the provider lists first), and it starts.
+10. The final episode of the final season: no panel; the normal "You finished the last episode" end screen.
+11. Settings > Playback > Auto-play next episode OFF: no panel; at the end the normal "Up next" screen (X plays
+    next). Turn it back ON.
+12. Subtitles on (Options > Subtitles), both subtitle positions (Bottom / Raised): the panel does not cover them
+    badly. [SHOT]
+13. A movie to its end: no panel, the normal end screen. Live TV and an M3U channel: nothing new.
+14. Offline (if possible): a downloaded episode whose next episode is downloaded -> countdown and auto-play from
+    the disk. If the next one is not downloaded: no countdown, normal end screen.
+
+-----------------------------------------------------------------------------------------------------
+QUICK REGRESSION
+-----------------------------------------------------------------------------------------------------
+15. During normal playback (not the last 5 s): Cross pauses / resumes, Circle leaves, Left / Right / L2 / R2
+    seek, L1 / R1 change episode, Options opens the panel, the HUD hides after 4 s - all as in v3.1.
+16. Open Options in the last 5 s: the countdown hides while the panel is open. Closing the panel before the end
+    shows the countdown again.
+17. Home (v3.1 hero), Movies / Series, Live TV, Search, Settings, Downloads look and scroll as in v3.1.
+
+REPORT: screenshots (steps 2, 12) + log.txt + any step that looks wrong (step number + what you see).
