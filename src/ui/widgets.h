@@ -82,6 +82,9 @@ namespace ui {
 
         void setPrimary(bool primary);
 
+        // a destructive action (Delete, Cancel download): a dark red pill, never the accent
+        void setDanger(bool danger);
+
         // a new width (the height stays); the caption is fitted again
         void setWidth(float width);
 
@@ -95,6 +98,7 @@ namespace ui {
         bool focused = false;
         bool enabled = true;
         bool primary;
+        bool danger = false;
     };
 
     // initials tile used where a logo/poster is missing or still loading

@@ -20,22 +20,29 @@ using screens::SettingsPage;
 
 namespace {
 
-    const float LIST_X = theme::SAFE_X;
-    const float LIST_Y = 200;
-    const float LIST_W = 1100;
+    // three columns: categories | the category's settings | what the focused setting does
+    const float TOP = 200;
     const float LIST_H = 760;
+    const float CAT_X = theme::SAFE_X;
+    const float CAT_W = 400;
+    const float CAT_ROW_H = 70;
+    const float LIST_X = CAT_X + CAT_W + 32;
+    const float LIST_W = 900;
     const float ROW_H = 88;
     const float ROW_GAP = 12;
-    const float PANEL_X = LIST_X + LIST_W + 40;
+    const float PANEL_X = LIST_X + LIST_W + 32;
     const float PANEL_W = theme::SCREEN_W - theme::SAFE_X - PANEL_X;
     const float VALUE_RIGHT = 32;      // right padding of the value column
+    const float VALUE_W = 320;
     const float SWITCH_W = 76;
     const float SWITCH_H = 40;
+    const float SWATCH_R = 16;
 
     enum class Kind {
         Choice,
         Toggle,
-        Action
+        Action,
+        Swatch      // one accent preset (Appearance): X applies it
     };
 
     struct SettingItem {
@@ -47,8 +54,14 @@ namespace {
         std::function<bool()> toggle;             // Toggle
         std::function<void(bool)> setToggle;
         std::function<std::string()> info;        // Action: short text in the value column
-        std::function<void()> run;                // Action
+        std::function<void()> run;                // Action, Swatch
         std::function<std::string()> describe;    // text for the description panel
+        int swatch = -1;                          // Swatch: palette::ACCENTS index
+    };
+
+    struct Category {
+        std::string name;
+        std::vector<SettingItem> items;
     };
 
     std::string sizeText(int64_t bytes) {
@@ -64,11 +77,16 @@ namespace {
         SettingRow(float w, float h) : RectangleShape(FloatRect(0, 0, w, h)) {
             setCornersRadius(theme::RADIUS_SMALL + 2);
             setCornerPointCount(8);
+            swatch = new CircleShape(SWATCH_R);
+            swatch->setPointCount(24);
+            swatch->setPosition(32, (h - 2 * SWATCH_R) / 2);
+            swatch->setOutlineColor(theme::textStrong());
+            add(swatch);
             caption = ui::label(this, "", theme::BODY, 32, ui::Label::centerOffset(theme::BODY, h));
-            caption->setMaxWidth(w - 32 - 380);
+            caption->setMaxWidth(w - 32 - VALUE_W - 40);
             value = ui::label(this, "", theme::BODY, 0, ui::Label::centerOffset(theme::BODY, h), ui::Weight::SemiBold);
             value->setAlign(ui::Align::Right, w - VALUE_RIGHT);
-            value->setMaxWidth(360);
+            value->setMaxWidth(VALUE_W);
             for (int i = 0; i < 6; i++) {
                 auto *d = new CircleShape(4);
                 d->setPointCount(12);
@@ -94,14 +112,27 @@ namespace {
             caption->setColor(focused ? theme::textStrong() : theme::textPrimary());
             setFillColor(focused ? theme::focus() : theme::surface());
             setOutlineColor(theme::accent());
-            setOutlineThickness(focused ? 3 : 0);
+            setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
 
             bool isToggle = item.kind == Kind::Toggle;
+            bool isSwatch = item.kind == Kind::Swatch;
             track->setVisibility(isToggle ? Visibility::Visible : Visibility::Hidden);
             switchText->setVisibility(isToggle ? Visibility::Visible : Visibility::Hidden);
             value->setVisibility(isToggle ? Visibility::Hidden : Visibility::Visible);
+            swatch->setVisibility(isSwatch ? Visibility::Visible : Visibility::Hidden);
+            caption->setPosition(isSwatch ? 32 + 2 * SWATCH_R + 20 : 32, ui::Label::centerOffset(theme::BODY, h));
             for (auto *d: dots) {
                 d->setVisibility(Visibility::Hidden);
+            }
+            if (isSwatch) {
+                // the preset's own colour, a white ring on the one in use, and a check mark
+                bool current = item.swatch == theme::accentIndex();
+                swatch->setFillColor(theme::swatch(item.swatch));
+                swatch->setOutlineThickness(current ? 3 : 0);
+                value->setText(current ? "\xE2\x9C\x93" : "");
+                value->setColor(theme::accentText());
+                value->setPosition(0, ui::Label::centerOffset(theme::BODY, h));
+                return;
             }
             if (isToggle) {
                 bool on = item.toggle();
@@ -119,7 +150,7 @@ namespace {
                 int n = (int) item.options.size() <= (int) dots.size() ? (int) item.options.size() : 0;
                 value->setText(item.options[(size_t) current]);
                 value->setColor(focused ? theme::textStrong() : theme::textPrimary());
-                value->setPosition(0, ui::Label::centerOffset(theme::BODY, h) - 7);
+                value->setPosition(0, ui::Label::centerOffset(theme::BODY, h) - (n > 0 ? 7 : 0));
                 // option position: small dots under the value, right-aligned with it
                 for (int i = 0; i < n; i++) {
                     CircleShape *d = dots[(size_t) i];
@@ -135,6 +166,7 @@ namespace {
         }
 
     private:
+        CircleShape *swatch;
         ui::Label *caption;
         ui::Label *value;
         std::vector<CircleShape *> dots;
@@ -145,27 +177,48 @@ namespace {
 
     class SettingsScreen : public Screen, public ui::ListView::Adapter {
     public:
-        SettingsScreen(App &a, SettingsPage p) : Screen(a), page(p) {
+        SettingsScreen(App &a, SettingsPage p) : Screen(a), categoriesAdapter(this) {
             ui::background(this);
-            screens::header(this, tr(page == SettingsPage::Storage ? "settings.storage_title"
-                                     : page == SettingsPage::Diagnostics ? "settings.diagnostics_title"
-                                                                         : "settings.title"));
-            buildItems();
-            list = new ui::ListView(FloatRect(LIST_X, LIST_Y, LIST_W, LIST_H), ROW_H, ROW_GAP, this);
+            screens::header(this, tr("settings.title"));
+            buildCategories();
+            switch (p) {
+                case SettingsPage::Storage:
+                    catIndex = CAT_DOWNLOADS;
+                    break;
+                case SettingsPage::Diagnostics:
+                    catIndex = CAT_DIAGNOSTICS;
+                    break;
+                default:
+                    catIndex = CAT_APPEARANCE;
+                    break;
+            }
+            categoryList = new ui::ListView(FloatRect(CAT_X, TOP, CAT_W, LIST_H), CAT_ROW_H, 6, &categoriesAdapter);
+            add(categoryList);
+            categoryTitle = ui::label(this, "", theme::CAPTION, LIST_X + 4, TOP - 40, ui::Weight::SemiBold,
+                                      theme::textMuted());
+            list = new ui::ListView(FloatRect(LIST_X, TOP, LIST_W, LIST_H), ROW_H, ROW_GAP, this);
             add(list);
 
-            auto *panel = ui::box(this, FloatRect(PANEL_X, LIST_Y, PANEL_W, LIST_H), theme::surface(), theme::RADIUS);
-            panelTitle = ui::label(panel, "", theme::HEADING, 36, 36, ui::Weight::SemiBold);
-            panelTitle->setMaxWidth(PANEL_W - 72);
-            panelTitle->setMaxLines(2);
-            panelText = ui::label(panel, "", theme::BODY, 36, 0, ui::Weight::Regular, theme::textSecondary());
-            panelText->setMaxWidth(PANEL_W - 72);
-            panelText->setMaxLines(14);
+            auto *panel = ui::box(this, FloatRect(PANEL_X, TOP, PANEL_W, LIST_H), theme::card(), theme::RADIUS);
+            panelTitle = ui::label(panel, "", theme::HEADING - 2, 32, 32, ui::Weight::SemiBold);
+            panelTitle->setMaxWidth(PANEL_W - 64);
+            panelTitle->setMaxLines(3);
+            panelText = ui::label(panel, "", theme::LABEL, 32, 0, ui::Weight::Regular, theme::textSecondary());
+            panelText->setMaxWidth(PANEL_W - 64);
+            panelText->setMaxLines(18);
 
-            screens::hintBar(this, {{ui::Glyph::DPad, tr("settings.hint_change")}, {ui::Glyph::Cross, tr("common.select")},
-                                    {ui::Glyph::Circle, tr("common.back")}});
+            hints = screens::hintBar(this, {});
+            categoryList->setSelected(catIndex);
+            if (p == SettingsPage::Appearance) {
+                // back after an accent change: on the preset that was just applied
+                list->setSelected(theme::accentIndex());
+                setFocus(1);
+            } else {
+                list->setSelected(0);
+                setFocus(p == SettingsPage::Main ? 0 : 1);
+            }
             refreshStorage();
-            refreshPanel();
+            selectCategory(catIndex, false);
         }
 
         const char *name() const override { return "settings"; }
@@ -181,8 +234,8 @@ namespace {
         }
 
         void tick(double now) override {
-            // Storage page: sizes follow the downloads (at most once per second)
-            if (page == SettingsPage::Storage && app.downloads().generation() != downloadsGen && now - lastStorage > 1) {
+            // Storage: sizes follow the downloads (at most once per second)
+            if (catIndex == CAT_DOWNLOADS && app.downloads().generation() != downloadsGen && now - lastStorage > 1) {
                 lastStorage = now;
                 refreshStorage();
                 list->reload();
@@ -191,18 +244,23 @@ namespace {
             }
         }
 
-        int count() override { return (int) items.size(); }
+        // ------------------------------------------------------------------ settings list (middle column)
+        int count() override { return (int) items().size(); }
 
         C2DObject *createRow(float w, float h) override {
             return new SettingRow(w, h);
         }
 
         void bindRow(C2DObject *obj, int index, bool, bool focused) override {
-            ((SettingRow *) obj)->bind(items[(size_t) index], focused);
+            ((SettingRow *) obj)->bind(items()[(size_t) index], focused);
         }
 
         void handleInput(const InputEvent &e) override {
-            SettingItem &item = items[(size_t) list->selected()];
+            if (focus == 0) {
+                categoryInput(e);
+                return;
+            }
+            SettingItem &item = items()[(size_t) list->selected()];
             switch (e.button) {
                 case PadButton::Up:
                     list->moveSelection(-1);
@@ -214,13 +272,109 @@ namespace {
                     return;
                 case PadButton::Left:
                 case PadButton::Right:
-                    if (!e.repeat) {
+                    if (e.repeat) {
+                        return;
+                    }
+                    // values change with Left / Right; on actions Left goes back to the categories
+                    if (item.kind == Kind::Choice || item.kind == Kind::Toggle) {
                         change(item, e.button == PadButton::Right ? 1 : -1, false);
+                    } else if (e.button == PadButton::Left) {
+                        setFocus(0);
+                    }
+                    return;
+                case PadButton::L1:
+                case PadButton::R1:
+                    if (!e.repeat) {
+                        stepCategory(e.button == PadButton::L1 ? -1 : 1);
                     }
                     return;
                 case PadButton::Cross:
                     if (!e.repeat) {
                         change(item, 1, true);
+                    }
+                    return;
+                case PadButton::Circle:
+                    if (!e.repeat) {
+                        setFocus(0);
+                    }
+                    return;
+                default:
+                    return;
+            }
+        }
+
+    private:
+        enum CategoryId {
+            CAT_APPEARANCE,
+            CAT_PLAYBACK,
+            CAT_AUDIO,
+            CAT_VIDEO,
+            CAT_DOWNLOADS,
+            CAT_SOURCES,
+            CAT_LANGUAGE,
+            CAT_DIAGNOSTICS,
+            CAT_ABOUT
+        };
+
+        // ------------------------------------------------------------------ categories (left column)
+        struct CategoriesAdapter : ui::ListView::Adapter {
+            explicit CategoriesAdapter(SettingsScreen *s) : screen(s) {}
+
+            int count() override { return (int) screen->cats.size(); }
+
+            C2DObject *createRow(float w, float h) override {
+                Row r;
+                r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::none(), theme::RADIUS_SMALL);
+                r.marker = ui::box(r.bg, FloatRect(0, 18, 4, h - 36), theme::accent(), 2);
+                r.name = ui::label(r.bg, "", theme::BODY, 24, ui::Label::centerOffset(theme::BODY, h));
+                r.name->setMaxWidth(w - 48);
+                rows.push_back(r);
+                return r.bg;
+            }
+
+            void bindRow(C2DObject *obj, int index, bool selected, bool focused) override {
+                for (auto &r: rows) {
+                    if (r.bg != obj) {
+                        continue;
+                    }
+                    r.name->setText(screen->cats[(size_t) index].name);
+                    r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surface() : theme::none());
+                    r.bg->setOutlineColor(theme::accent());
+                    r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
+                    // the open category keeps an accent marker while its settings have focus
+                    r.marker->setVisibility(selected && !focused ? Visibility::Visible : Visibility::Hidden);
+                    r.name->setWeight(selected ? ui::Weight::SemiBold : ui::Weight::Regular);
+                    r.name->setColor(focused ? theme::textStrong() : selected ? theme::textPrimary() : theme::textSecondary());
+                }
+            }
+
+            struct Row {
+                RectangleShape *bg;
+                RectangleShape *marker;
+                ui::Label *name;
+            };
+            SettingsScreen *screen;
+            std::vector<Row> rows;
+        };
+
+        void categoryInput(const InputEvent &e) {
+            switch (e.button) {
+                case PadButton::Up:
+                case PadButton::Down:
+                    if (categoryList->moveSelection(e.button == PadButton::Up ? -1 : 1)) {
+                        selectCategory(categoryList->selected(), true);
+                    }
+                    return;
+                case PadButton::L1:
+                case PadButton::R1:
+                    if (!e.repeat) {
+                        stepCategory(e.button == PadButton::L1 ? -1 : 1);
+                    }
+                    return;
+                case PadButton::Right:
+                case PadButton::Cross:
+                    if (!e.repeat && !items().empty()) {
+                        setFocus(1);
                     }
                     return;
                 case PadButton::Circle:
@@ -233,7 +387,43 @@ namespace {
             }
         }
 
-    private:
+        void stepCategory(int d) {
+            int target = std::min(std::max(catIndex + d, 0), (int) cats.size() - 1);
+            if (target != catIndex) {
+                categoryList->setSelected(target);
+                selectCategory(target, true);
+            }
+        }
+
+        void selectCategory(int index, bool resetSelection) {
+            catIndex = index;
+            if (resetSelection) {
+                list->setSelected(0);
+            }
+            list->reload();
+            categoryTitle->setText(cats[(size_t) catIndex].name);
+            refreshPanel();
+        }
+
+        void setFocus(int f) {
+            focus = f;
+            categoryList->setFocused(focus == 0);
+            list->setFocused(focus == 1);
+            if (focus == 0) {
+                hints->setHints({{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""},
+                                 {ui::Glyph::R1, tr("live.category")}, {ui::Glyph::Circle, tr("common.back")}});
+            } else {
+                bool swatches = catIndex == CAT_APPEARANCE;
+                hints->setHints({{ui::Glyph::Cross, tr(swatches ? "settings.hint_apply" : "common.select")},
+                                 {ui::Glyph::DPad, tr("settings.hint_change")},
+                                 {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
+                                 {ui::Glyph::Circle, tr("settings.hint_categories")}});
+            }
+            refreshPanel();
+        }
+
+        std::vector<SettingItem> &items() { return cats[(size_t) catIndex].items; }
+
         void change(SettingItem &item, int delta, bool activate) {
             if (item.kind == Kind::Choice) {
                 int n = (int) item.options.size();
@@ -253,6 +443,7 @@ namespace {
                 item.setToggle(want);
             } else if (activate && item.run) {
                 item.run();
+                return;   // an action may have rebuilt the screens (accent): this screen may be on its way out
             } else {
                 return;
             }
@@ -261,10 +452,15 @@ namespace {
         }
 
         void refreshPanel() {
-            const SettingItem &item = items[(size_t) list->selected()];
-            panelTitle->setText(item.caption);
-            panelText->setText(item.describe ? item.describe() : "");
-            panelText->setPosition(36, 36 + panelTitle->height() + 20);
+            if (items().empty()) {
+                return;
+            }
+            const SettingItem &item = focus == 0 ? items()[0] : items()[(size_t) list->selected()];
+            panelTitle->setText(focus == 0 ? cats[(size_t) catIndex].name : item.caption);
+            std::string text = focus == 0 && catIndex == CAT_APPEARANCE ? tr("settings.cat.appearance.desc")
+                               : item.describe ? item.describe() : "";
+            panelText->setText(text);
+            panelText->setPosition(32, 32 + panelTitle->height() + 20);
         }
 
         void save() {
@@ -317,50 +513,79 @@ namespace {
             }, true));
         }
 
-        void buildItems() {
-            items.clear();
-            switch (page) {
-                case SettingsPage::Storage:
-                    buildStorage();
-                    break;
-                case SettingsPage::Diagnostics:
-                    buildDiagnostics();
-                    break;
-                default:
-                    buildMain();
-                    break;
+        // every category, in CategoryId order; `items` is filled by each builder
+        void buildCategories() {
+            const char *names[] = {"appearance.title", "settings.cat.playback", "settings.cat.audio_subtitles",
+                                   "settings.cat.video", "settings.storage_title", "profiles.title", "settings.language",
+                                   "settings.diagnostics_title", "settings.cat.about"};
+            for (const char *n: names) {
+                cats.push_back({tr(n), {}});
             }
+            buildAppearance(cats[CAT_APPEARANCE].items);
+            buildPlayback(cats[CAT_PLAYBACK].items);
+            buildAudio(cats[CAT_AUDIO].items);
+            buildVideo(cats[CAT_VIDEO].items);
+            buildDownloads(cats[CAT_DOWNLOADS].items);
+            buildStorage(cats[CAT_DOWNLOADS].items);
+            buildSources(cats[CAT_SOURCES].items);
+            buildLanguage(cats[CAT_LANGUAGE].items);
+            buildDiagnostics(cats[CAT_DIAGNOSTICS].items);
+            buildAbout(cats[CAT_ABOUT].items);
         }
 
-        // ------------------------------------------------------------------ main page
-        void buildMain() {
+        // ------------------------------------------------------------------ Appearance
+        void buildAppearance(std::vector<SettingItem> &items) {
             Settings &s = app.settings().get();
+            for (int i = 0; i < palette::ACCENT_COUNT; i++) {
+                SettingItem accent;
+                accent.kind = Kind::Swatch;
+                accent.swatch = i;
+                accent.caption = tr(palette::ACCENTS[i].nameKey);
+                accent.run = [this, &s, i] {
+                    if (i == theme::accentIndex()) {
+                        return;
+                    }
+                    s.accentColor = palette::ACCENTS[i].key;
+                    save();
+                    std::string name = tr(palette::ACCENTS[i].nameKey);
+                    app.applyAccent(true);   // rebuilds every screen with the new accent, back here
+                    app.toast(tr("appearance.accent.applied", {name}), ToastKind::Success);
+                };
+                accent.describe = [] {
+                    return tr("appearance.accent.desc") + "\n\n"
+                           + tr("appearance.accent.current", {tr(theme::accentPreset().nameKey)});
+                };
+                items.push_back(accent);
+            }
 
-            SettingItem language;
-            language.kind = Kind::Choice;
-            language.caption = tr("settings.language");
-            // each language in its own name: whoever picked the wrong one can still find theirs
-            language.options = {i18n::nativeName(i18n::Language::English), i18n::nativeName(i18n::Language::Turkish)};
-            language.choice = [&s] { return s.language == "tr" ? 1 : 0; };
-            language.setChoice = [this, &s](int i) {
-                std::string code = i == 1 ? "tr" : "en";
-                if (code == s.language) {
-                    return;
-                }
-                s.language = code;
+            SettingItem smooth;
+            smooth.kind = Kind::Toggle;
+            smooth.caption = tr("settings.smooth_scrolling");
+            smooth.toggle = [&s] { return s.smoothScrolling; };
+            smooth.setToggle = [this, &s](bool on) {
+                s.smoothScrolling = on;
+                ui::setSmoothScrolling(on);
                 save();
-                app.applyLanguage(true);   // rebuilds every screen in the new language
             };
-            language.describe = [] { return tr("settings.language.desc"); };
-            items.push_back(language);
+            smooth.describe = [] { return tr("settings.smooth_scrolling.desc"); };
+            items.push_back(smooth);
 
-            SettingItem profiles;
-            profiles.caption = tr("profiles.title");
-            profiles.info = [] { return tr("settings.manage"); };
-            profiles.run = [this] { app.push(screens::makeProfiles(app)); };
-            profiles.describe = [] { return tr("settings.profiles.desc"); };
-            items.push_back(profiles);
+            SettingItem images;
+            images.kind = Kind::Toggle;
+            images.caption = tr("settings.images");
+            images.toggle = [&s] { return s.loadImages; };
+            images.setToggle = [this, &s](bool on) {
+                s.loadImages = on;
+                app.images().setEnabled(on);
+                save();
+            };
+            images.describe = [] { return tr("settings.images.desc"); };
+            items.push_back(images);
+        }
 
+        // ------------------------------------------------------------------ Playback
+        void buildPlayback(std::vector<SettingItem> &items) {
+            Settings &s = app.settings().get();
             SettingItem format;
             format.kind = Kind::Choice;
             format.caption = tr("settings.stream_format");
@@ -406,7 +631,43 @@ namespace {
             retry.describe = [&s] { return tr(s.retryOnStall ? "settings.retry_stall.on_desc" : "settings.retry_stall.off_desc"); };
             items.push_back(retry);
 
-            // ---- movies / episodes: languages and subtitles
+            SettingItem resume;
+            resume.kind = Kind::Toggle;
+            resume.caption = tr("settings.resume");
+            resume.toggle = [&s] { return s.resumeVod; };
+            resume.setToggle = [this, &s](bool on) {
+                s.resumeVod = on;
+                save();
+            };
+            resume.describe = [] { return tr("settings.resume.desc"); };
+            items.push_back(resume);
+
+            SettingItem autoNext;
+            autoNext.kind = Kind::Toggle;
+            autoNext.caption = tr("settings.autoplay");
+            autoNext.toggle = [&s] { return s.autoPlayNextEpisode; };
+            autoNext.setToggle = [this, &s](bool on) {
+                s.autoPlayNextEpisode = on;
+                save();
+            };
+            autoNext.describe = [] { return tr("settings.autoplay.desc"); };
+            items.push_back(autoNext);
+
+            SettingItem tech;
+            tech.kind = Kind::Toggle;
+            tech.caption = tr("settings.tech_info");
+            tech.toggle = [&s] { return s.showTechnicalInfo; };
+            tech.setToggle = [this, &s](bool on) {
+                s.showTechnicalInfo = on;
+                save();
+            };
+            tech.describe = [] { return tr("settings.tech_info.desc"); };
+            items.push_back(tech);
+        }
+
+        // ------------------------------------------------------------------ Audio & subtitles (movies / episodes)
+        void buildAudio(std::vector<SettingItem> &items) {
+            Settings &s = app.settings().get();
             std::vector<std::string> codes = languageCodes();
             std::vector<std::string> names;
             for (const auto &c: codes) {
@@ -497,8 +758,11 @@ namespace {
             };
             subShadow.describe = [] { return tr("settings.subtitle_shadow.desc"); };
             items.push_back(subShadow);
+        }
 
-            // ---- video geometry defaults (the Options panel changes only the current playback)
+        // ------------------------------------------------------------------ Video (defaults; the Options panel changes only the current playback)
+        void buildVideo(std::vector<SettingItem> &items) {
+            Settings &s = app.settings().get();
             SettingItem aspect;
             aspect.kind = Kind::Choice;
             aspect.caption = tr("settings.aspect");
@@ -548,65 +812,11 @@ namespace {
             };
             zoom.describe = [] { return tr("settings.zoom.desc"); };
             items.push_back(zoom);
+        }
 
-            SettingItem tech;
-            tech.kind = Kind::Toggle;
-            tech.caption = tr("settings.tech_info");
-            tech.toggle = [&s] { return s.showTechnicalInfo; };
-            tech.setToggle = [this, &s](bool on) {
-                s.showTechnicalInfo = on;
-                save();
-            };
-            tech.describe = [] { return tr("settings.tech_info.desc"); };
-            items.push_back(tech);
-
-            SettingItem images;
-            images.kind = Kind::Toggle;
-            images.caption = tr("settings.images");
-            images.toggle = [&s] { return s.loadImages; };
-            images.setToggle = [this, &s](bool on) {
-                s.loadImages = on;
-                app.images().setEnabled(on);
-                save();
-            };
-            images.describe = [] { return tr("settings.images.desc"); };
-            items.push_back(images);
-
-            SettingItem smooth;
-            smooth.kind = Kind::Toggle;
-            smooth.caption = tr("settings.smooth_scrolling");
-            smooth.toggle = [&s] { return s.smoothScrolling; };
-            smooth.setToggle = [this, &s](bool on) {
-                s.smoothScrolling = on;
-                ui::setSmoothScrolling(on);
-                save();
-            };
-            smooth.describe = [] { return tr("settings.smooth_scrolling.desc"); };
-            items.push_back(smooth);
-
-            SettingItem resume;
-            resume.kind = Kind::Toggle;
-            resume.caption = tr("settings.resume");
-            resume.toggle = [&s] { return s.resumeVod; };
-            resume.setToggle = [this, &s](bool on) {
-                s.resumeVod = on;
-                save();
-            };
-            resume.describe = [] { return tr("settings.resume.desc"); };
-            items.push_back(resume);
-
-            SettingItem autoNext;
-            autoNext.kind = Kind::Toggle;
-            autoNext.caption = tr("settings.autoplay");
-            autoNext.toggle = [&s] { return s.autoPlayNextEpisode; };
-            autoNext.setToggle = [this, &s](bool on) {
-                s.autoPlayNextEpisode = on;
-                save();
-            };
-            autoNext.describe = [] { return tr("settings.autoplay.desc"); };
-            items.push_back(autoNext);
-
-            // ---- downloads
+        // ------------------------------------------------------------------ Downloads & storage
+        void buildDownloads(std::vector<SettingItem> &items) {
+            Settings &s = app.settings().get();
             SettingItem retryDl;
             retryDl.kind = Kind::Toggle;
             retryDl.caption = tr("settings.retry_downloads");
@@ -629,31 +839,9 @@ namespace {
             };
             resumeDl.describe = [] { return tr("settings.resume_downloads.desc"); };
             items.push_back(resumeDl);
-
-            SettingItem storage;
-            storage.caption = tr("settings.storage_title");
-            storage.info = [this] { return sizeText(totals.completedBytes); };
-            storage.run = [this] { app.push(screens::makeSettings(app, SettingsPage::Storage)); };
-            storage.describe = [] { return tr("settings.storage.desc"); };
-            items.push_back(storage);
-
-            SettingItem diagnostics;
-            diagnostics.caption = tr("settings.diagnostics_title");
-            diagnostics.info = [] { return tr("settings.open"); };
-            diagnostics.run = [this] { app.push(screens::makeSettings(app, SettingsPage::Diagnostics)); };
-            diagnostics.describe = [] { return tr("settings.diagnostics.desc"); };
-            items.push_back(diagnostics);
-
-            SettingItem about;
-            about.caption = tr("about.title");
-            about.info = [] { return std::string("v") + APP_VERSION; };
-            about.run = [this] { app.push(screens::makeAbout(app)); };
-            about.describe = [] { return tr("settings.about.desc"); };
-            items.push_back(about);
         }
 
-        // ------------------------------------------------------------------ Storage & downloads
-        void buildStorage() {
+        void buildStorage(std::vector<SettingItem> &items) {
             SettingItem downloaded;
             downloaded.caption = tr("storage.downloaded");
             downloaded.info = [this] { return sizeText(totals.completedBytes); };
@@ -771,8 +959,43 @@ namespace {
             items.push_back(clearHistory);
         }
 
-        // ------------------------------------------------------------------ Diagnostics
-        void buildDiagnostics() {
+        // ------------------------------------------------------------------ Sources
+        void buildSources(std::vector<SettingItem> &items) {
+            SettingItem profiles;
+            profiles.caption = tr("profiles.title");
+            profiles.info = [] { return tr("settings.manage"); };
+            profiles.run = [this] { app.push(screens::makeProfiles(app)); };
+            profiles.describe = [this] {
+                const Session &s = app.session();
+                return tr("settings.profiles.desc")
+                       + (s.profile.name.empty() ? "" : "\n\n" + tr("settings.sources.active", {s.profile.name}));
+            };
+            items.push_back(profiles);
+        }
+
+        // ------------------------------------------------------------------ Language
+        void buildLanguage(std::vector<SettingItem> &items) {
+            Settings &s = app.settings().get();
+            SettingItem language;
+            language.kind = Kind::Choice;
+            language.caption = tr("settings.language");
+            // each language in its own name: whoever picked the wrong one can still find theirs
+            language.options = {i18n::nativeName(i18n::Language::English), i18n::nativeName(i18n::Language::Turkish)};
+            language.choice = [&s] { return s.language == "tr" ? 1 : 0; };
+            language.setChoice = [this, &s](int i) {
+                std::string code = i == 1 ? "tr" : "en";
+                if (code == s.language) {
+                    return;
+                }
+                s.language = code;
+                save();
+                app.applyLanguage(true);   // rebuilds every screen in the new language
+            };
+            language.describe = [] { return tr("settings.language.desc"); };
+            items.push_back(language);
+        }
+
+        void buildDiagnostics(std::vector<SettingItem> &items) {
             SettingItem downloads;
             downloads.caption = tr("diagnostics.downloads");
             downloads.info = [] { return tr("settings.open"); };
@@ -796,11 +1019,26 @@ namespace {
             items.push_back(build);
         }
 
-        SettingsPage page;
-        std::vector<SettingItem> items;
+        // ------------------------------------------------------------------ About
+        void buildAbout(std::vector<SettingItem> &items) {
+            SettingItem about;
+            about.caption = tr("about.title");
+            about.info = [] { return std::string("v") + APP_VERSION; };
+            about.run = [this] { app.push(screens::makeAbout(app)); };
+            about.describe = [] { return tr("settings.about.desc"); };
+            items.push_back(about);
+        }
+
+        CategoriesAdapter categoriesAdapter;
+        std::vector<Category> cats;
+        int catIndex = 0;
+        int focus = 0;
+        ui::ListView *categoryList = nullptr;
         ui::ListView *list = nullptr;
+        ui::Label *categoryTitle = nullptr;
         ui::Label *panelTitle = nullptr;
         ui::Label *panelText = nullptr;
+        ui::HintBar *hints = nullptr;
         dl::Totals totals;
         int64_t freeBytes = -1;
         unsigned downloadsGen = 0;

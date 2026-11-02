@@ -223,6 +223,13 @@ namespace ui {
         fit();
     }
 
+    void Button::setDanger(bool d) {
+        if (d != danger) {
+            danger = d;
+            refresh();
+        }
+    }
+
     void Button::setPrimary(bool p) {
         if (p != primary) {
             primary = p;
@@ -237,6 +244,9 @@ namespace ui {
         if (!enabled) {
             setFillColor(theme::surface());
             caption->setColor(theme::textMuted());
+        } else if (danger) {
+            setFillColor(theme::dangerSurface());
+            caption->setColor(focused ? theme::textStrong() : theme::textPrimary());
         } else if (primary) {
             // the screen's main action stays visually dominant, focused or not
             setFillColor(theme::accent());

@@ -390,18 +390,88 @@ namespace {
     };
 }
 
+namespace {
+
+    // Add Source: two large, self-explaining choices side by side over the dimmed screen
+    class SourceChooserScreen : public Screen {
+    public:
+        explicit SourceChooserScreen(App &a) : Screen(a, true) {
+            const float cardW = 660;
+            const float cardH = 340;
+            const float gap = 48;
+            const float x0 = (theme::SCREEN_W - 2 * cardW - gap) / 2;
+            const float y0 = 360;
+            auto *title = ui::label(this, tr("source.add_title"), theme::TITLE, 0, 220, ui::Weight::SemiBold,
+                                    theme::textStrong());
+            title->setAlign(ui::Align::Center, theme::SCREEN_W);
+            const char *names[2] = {"source.type_xtream", "source.type_m3u"};
+            const char *details[2] = {"source.type_xtream_detail", "source.type_m3u_detail"};
+            const char *provides[2] = {"source.provides_xtream", "source.provides_m3u"};
+            for (int i = 0; i < 2; i++) {
+                Card &c = cards[i];
+                c.bg = ui::box(this, FloatRect(x0 + (float) i * (cardW + gap), y0, cardW, cardH), theme::card(),
+                               theme::RADIUS_LARGE);
+                c.bg->setOutlineColor(theme::accent());
+                c.mark = ui::box(c.bg, FloatRect(48, 52, 48, 6), theme::accent(), 3);
+                c.name = ui::label(c.bg, tr(names[i]), theme::TITLE, 48, 80, ui::Weight::SemiBold);
+                c.name->setMaxWidth(cardW - 96);
+                auto *d = ui::label(c.bg, tr(details[i]), theme::BODY, 48, 150, ui::Weight::Regular, theme::textSecondary());
+                d->setMaxWidth(cardW - 96);
+                d->setMaxLines(3);
+                auto *pv = ui::label(c.bg, tr(provides[i]), theme::LABEL, 48, cardH - 72, ui::Weight::SemiBold,
+                                     theme::accentText());
+                pv->setMaxWidth(cardW - 96);
+            }
+            screens::hintBar(this, {{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("common.back")}});
+            refresh();
+        }
+
+        const char *name() const override { return "source-chooser"; }
+
+        void handleInput(const InputEvent &e) override {
+            if (e.button == PadButton::Left || e.button == PadButton::Right) {
+                focus = e.button == PadButton::Right ? 1 : 0;
+                refresh();
+            } else if (e.button == PadButton::Cross && !e.repeat) {
+                int choice = focus;
+                App &a = app;
+                a.pop();
+                if (choice == 0) {
+                    a.push(screens::makeProfileEdit(a, Profile()));
+                } else {
+                    Profile p;
+                    p.type = SourceType::M3u;
+                    a.push(screens::makePlaylistEdit(a, p));
+                }
+            } else if (e.button == PadButton::Circle && !e.repeat) {
+                app.pop();
+            }
+        }
+
+    private:
+        struct Card {
+            RectangleShape *bg;
+            RectangleShape *mark;
+            ui::Label *name;
+        };
+
+        void refresh() {
+            for (int i = 0; i < 2; i++) {
+                bool f = i == focus;
+                cards[i].bg->setFillColor(f ? theme::cardHover() : theme::card());
+                cards[i].bg->setOutlineThickness(f ? theme::FOCUS_BORDER : 0);
+                cards[i].name->setColor(f ? theme::textStrong() : theme::textPrimary());
+            }
+        }
+
+        Card cards[2];
+        int focus = 0;
+    };
+}
+
 namespace screens {
     Screen *makeSourceChooser(App &app) {
-        return makeMenu(app, tr("source.add_title"), {tr("source.type_xtream"), tr("source.type_m3u")}, -1,
-                        [&app](int choice) {
-                            if (choice == 0) {
-                                app.push(makeProfileEdit(app, Profile()));
-                            } else if (choice == 1) {
-                                Profile p;
-                                p.type = SourceType::M3u;
-                                app.push(makePlaylistEdit(app, p));
-                            }
-                        }, {tr("source.type_xtream_detail"), tr("source.type_m3u_detail")});
+        return new SourceChooserScreen(app);
     }
 
     Screen *makePlaylistEdit(App &app, const Profile &profile) {

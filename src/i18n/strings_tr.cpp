@@ -932,6 +932,23 @@ namespace i18n {
             {"home.see_all", "Tümünü gör"},
             {"home.see_all_detail", "Tüm favoriler"},
             {"home.source", "Kaynak: {0}"},
+            // ---------------------------------------------------------------- V7 IPTV refresh: settings categories
+            {"settings.cat.playback", "Oynatma"},
+            {"settings.cat.audio_subtitles", "Ses ve altyazı"},
+            {"settings.cat.video", "Görüntü"},
+            {"settings.cat.about", "Hakkında"},
+            {"settings.cat.appearance.desc", "Vurgu rengi, kaydırma ve görseller."},
+            {"settings.sources.active", "Etkin kaynak: {0}"},
+            {"settings.hint_categories", "Kategoriler"},
+            {"settings.hint_apply", "Uygula"},
+            // ---------------------------------------------------------------- V7 IPTV refresh: empty states
+            {"empty.downloads_active_title", "İndirilen bir şey yok"},
+            {"empty.downloads_done_title", "Henüz indirme yok"},
+            {"empty.favorites_title", "Henüz favori yok"},
+            {"empty.search_intro_title", "Her şeyde arayın"},
+            {"empty.search_none_hint", "Daha kısa bir kelime veya başka bir filtre deneyin."},
+            {"source.provides_xtream", "Canlı TV  ·  Filmler  ·  Diziler  ·  İndirmeler"},
+            {"source.provides_m3u", "Canlı TV kanalları"},
     };
 
     extern const size_t STRINGS_TR_COUNT = sizeof(STRINGS_TR) / sizeof(STRINGS_TR[0]);

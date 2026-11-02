@@ -30,10 +30,8 @@ namespace {
             grid = new ui::GridView(FloatRect(theme::SAFE_X, TOP, theme::SCREEN_W - 2 * theme::SAFE_X, CONTENT_H),
                                     140, 246, 10, 3, &gridAdapter);
             add(grid);
-            empty = ui::label(this, "", theme::BODY, 0, TOP + 280, ui::Weight::Regular, theme::textMuted());
-            empty->setAlign(ui::Align::Center, theme::SCREEN_W);
-            empty->setMaxWidth(1200);
-            empty->setMaxLines(2);
+            empty = new ui::EmptyState(FloatRect(theme::SAFE_X, TOP, theme::CONTENT_W, 480));
+            add(empty);
             screens::hintBar(this, {{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("favorites.type")},
                                     {ui::Glyph::Square, tr("common.remove")}, {ui::Glyph::Circle, tr("common.back")}});
             app.vod().openMovies(app.session().profile);
@@ -283,12 +281,12 @@ namespace {
             bool loading = tab != 0 && counts[tab] > 0 && vodItems.empty()
                            && (st.status == CatalogStatus::Loading || st.status == CatalogStatus::NotLoaded);
             if (loading) {
-                empty->setText(tr("common.loading"));
+                empty->set(tr("common.loading"), "");
             } else if (count() == 0) {
-                empty->setText(tr(tab == 0 ? "favorites.empty_channels" : tab == 1 ? "favorites.empty_movies"
-                                                                                : "favorites.empty_series"));
+                empty->set(tr("empty.favorites_title"), tr(tab == 0 ? "favorites.empty_channels" : tab == 1 ? "favorites.empty_movies"
+                                                                                                         : "favorites.empty_series"));
             } else {
-                empty->setText("");
+                empty->set("", "");
             }
             requestImages();
         }
@@ -354,7 +352,7 @@ namespace {
         RectangleShape *tabLayer;
         ui::ListView *channels;
         ui::GridView *grid;
-        ui::Label *empty;
+        ui::EmptyState *empty;
         std::vector<ChannelRow> rows;
         std::vector<Cell> cells;
         std::vector<int> liveItems;

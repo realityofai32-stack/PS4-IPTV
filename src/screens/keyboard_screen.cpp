@@ -184,7 +184,7 @@ namespace {
             float msgH = message.empty() ? 0 : msg->height();
             float h = 120 + msgH + 40 + 76 + 56;
             auto *panel = ui::box(this, FloatRect((theme::SCREEN_W - w) / 2, (theme::SCREEN_H - h) / 2, w, h),
-                                  theme::surface(), 24);
+                                  theme::card(), theme::RADIUS_LARGE);
             ui::label(panel, title, theme::HEADING, 60, 48, ui::Weight::SemiBold);
             msg->setPosition(60, 112);
             panel->add(msg);
@@ -192,8 +192,10 @@ namespace {
             float total = (float) buttons.size() * bw + (float) (buttons.size() - 1) * 24;
             float x = w - 60 - total;
             for (size_t i = 0; i < buttons.size(); i++) {
-                auto *b = new ui::Button(buttons[i], FloatRect(x, h - 56 - 76, bw, 76),
-                                         destructive && i == buttons.size() - 1);
+                // the confirming button of a destructive dialog is red, never the accent; focus starts on the
+                // first (safe) button
+                auto *b = new ui::Button(buttons[i], FloatRect(x, h - 56 - 76, bw, 76));
+                b->setDanger(destructive && i == buttons.size() - 1);
                 panel->add(b);
                 btns.push_back(b);
                 x += bw + 24;

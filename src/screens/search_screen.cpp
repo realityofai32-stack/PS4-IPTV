@@ -109,10 +109,8 @@ namespace {
             summary->setMaxWidth(RIGHT_W);
             list = new ui::ListView(FloatRect(RIGHT_X, LIST_Y, RIGHT_W, LIST_H), ROW_H, 8, this);
             add(list);
-            empty = ui::label(this, "", theme::BODY, RIGHT_X, LIST_Y + 200, ui::Weight::Regular, theme::textMuted());
-            empty->setAlign(ui::Align::Center, ui::ListView::rowWidth(RIGHT_W));
-            empty->setMaxWidth(RIGHT_W - 80);
-            empty->setMaxLines(3);
+            empty = new ui::EmptyState(FloatRect(RIGHT_X, LIST_Y + 60, ui::ListView::rowWidth(RIGHT_W), 420));
+            add(empty);
             hints = screens::hintBar(this, {});
             list->setFocused(false);
             refresh();
@@ -590,13 +588,13 @@ namespace {
             bool loading = !playlist && (ms.status == CatalogStatus::Loading || ss.status == CatalogStatus::Loading
                                          || ms.status == CatalogStatus::NotLoaded || ss.status == CatalogStatus::NotLoaded);
             if (!searched) {
-                empty->setText(tr("search.intro"));
+                empty->set(tr("empty.search_intro_title"), tr("search.intro"));
             } else if (shown.empty()) {
-                empty->setText((filter != 0 && totals[0] > 0 ? tr("search.no_results_in", {lastQuery, tr(FILTER_KEYS[filter])})
-                                                             : tr("search.no_results", {lastQuery}))
-                               + (loading ? "\n" + tr("search.still_loading") : ""));
+                empty->set(filter != 0 && totals[0] > 0 ? tr("search.no_results_in", {lastQuery, tr(FILTER_KEYS[filter])})
+                                                        : tr("search.no_results", {lastQuery}),
+                           loading ? tr("search.still_loading") : tr("empty.search_none_hint"));
             } else {
-                empty->setText("");
+                empty->set("", "");
             }
             std::string sep = "   \xC2\xB7   ";
             std::string channels = app.session().liveLoaded
@@ -641,7 +639,7 @@ namespace {
         ui::Label *chipText[4];
         ui::Label *summary;
         ui::ListView *list;
-        ui::Label *empty;
+        ui::EmptyState *empty;
         ui::HintBar *hints;
         std::vector<Row> rows;
     };

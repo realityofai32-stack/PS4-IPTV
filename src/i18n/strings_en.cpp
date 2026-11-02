@@ -927,6 +927,23 @@ namespace i18n {
             {"home.see_all", "See all"},
             {"home.see_all_detail", "Every favorite"},
             {"home.source", "Source: {0}"},
+            // ---------------------------------------------------------------- V7 IPTV refresh: settings categories
+            {"settings.cat.playback", "Playback"},
+            {"settings.cat.audio_subtitles", "Audio & subtitles"},
+            {"settings.cat.video", "Video"},
+            {"settings.cat.about", "About"},
+            {"settings.cat.appearance.desc", "Accent color, scrolling and artwork."},
+            {"settings.sources.active", "Signed in: {0}"},
+            {"settings.hint_categories", "Categories"},
+            {"settings.hint_apply", "Apply"},
+            // ---------------------------------------------------------------- V7 IPTV refresh: empty states
+            {"empty.downloads_active_title", "Nothing is downloading"},
+            {"empty.downloads_done_title", "No downloads yet"},
+            {"empty.favorites_title", "No favorites yet"},
+            {"empty.search_intro_title", "Search everything"},
+            {"empty.search_none_hint", "Try a shorter word, or another filter."},
+            {"source.provides_xtream", "Live TV  ·  Movies  ·  Series  ·  Downloads"},
+            {"source.provides_m3u", "Live TV channels"},
     };
 
     extern const size_t STRINGS_EN_COUNT = sizeof(STRINGS_EN) / sizeof(STRINGS_EN[0]);

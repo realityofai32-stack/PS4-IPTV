@@ -89,7 +89,7 @@ namespace {
             screens::header(this, tr("profiles.title"), tr("profiles.subtitle"));
             list = new ui::ListView(FloatRect(theme::SAFE_X, 220, 900, 720), 112, 16, this);
             add(list);
-            detail = ui::box(this, FloatRect(1060, 220, 764, 720), theme::surface(), theme::RADIUS);
+            detail = ui::box(this, FloatRect(1060, 220, 764, 720), theme::surface(), theme::RADIUS_LARGE);
             detailTitle = ui::label(detail, "", theme::HEADING, 48, 44, ui::Weight::SemiBold);
             detailTitle->setMaxWidth(668);
             detailBody = ui::label(detail, "", theme::BODY, 48, 112, ui::Weight::Regular, theme::textSecondary());
@@ -114,7 +114,7 @@ namespace {
         int count() override { return (int) app.profiles().profiles().size() + 1; }
 
         C2DObject *createRow(float w, float h) override {
-            auto *row = ui::box(nullptr, FloatRect(0, 0, w, h), theme::surface(), theme::RADIUS);
+            auto *row = ui::box(nullptr, FloatRect(0, 0, w, h), theme::card(), theme::RADIUS);
             auto *title = ui::label(row, "", theme::HEADING, 36, 18, ui::Weight::SemiBold);
             title->setMaxWidth(w - 220);
             auto *sub = ui::label(row, "", theme::LABEL, 36, 64, ui::Weight::Regular, theme::textSecondary());
@@ -132,7 +132,7 @@ namespace {
                 }
                 const auto &profiles = app.profiles().profiles();
                 bool add = index >= (int) profiles.size();
-                r.bg->setFillColor(focused ? theme::cardHover() : theme::surface());
+                r.bg->setFillColor(focused ? theme::cardHover() : theme::card());
                 r.bg->setOutlineColor(theme::accent());
                 r.bg->setOutlineThickness(focused ? theme::FOCUS_BORDER : 0);
                 (void) selected;
