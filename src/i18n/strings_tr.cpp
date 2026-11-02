@@ -57,6 +57,7 @@ namespace i18n {
             {"common.no", "Hayır"},
             {"library.save_failed", "Favoriler ve geçmiş kaydedilemedi"},
             {"episode.number", "{0}. Bölüm"},
+            {"episode.short", "E{0}"},
             {"progress.watched", "İzlendi"},
             {"progress.mark_unwatched", "İzlenmedi olarak işaretle"},
             {"progress.marked_unwatched", "İzlenmedi olarak işaretlendi"},

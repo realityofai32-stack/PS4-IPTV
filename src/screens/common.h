@@ -25,6 +25,12 @@ namespace screens {
     // page title (+ optional subtitle) at the top-left of a full screen, after the V7 symbol
     void header(c2d::C2DObject *parent, const std::string &title, const std::string &subtitle = "");
 
+    // detail pages: a small V7 symbol and the section they belong to ("Movies"), above the artwork
+    void breadcrumb(c2d::C2DObject *parent, const std::string &section);
+
+    // poster-derived backdrop: the large poster when it is ready, else the grid poster, else nothing (a glow)
+    void bindBackdrop(App &app, ui::Backdrop *backdrop, const std::string &posterUrl);
+
     ui::HintBar *hintBar(c2d::C2DObject *parent, const Hints &hints);
 
     std::string hostOf(const std::string &server);

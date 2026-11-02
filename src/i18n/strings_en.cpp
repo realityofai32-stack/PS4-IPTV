@@ -57,6 +57,7 @@ namespace i18n {
             {"common.no", "No"},
             {"library.save_failed", "Could not save favorites and history"},
             {"episode.number", "Episode {0}"},
+            {"episode.short", "E{0}"},
             {"progress.watched", "Watched"},
             {"progress.mark_unwatched", "Mark as not watched"},
             {"progress.marked_unwatched", "Marked as not watched"},

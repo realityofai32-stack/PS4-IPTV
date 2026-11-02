@@ -469,7 +469,7 @@ namespace {
                     c.poster->setDownloaded(Traits::downloaded(screen->app, it));
                     c.poster->setFocused(focused);
                     c.title->setText(Traits::title(it));
-                    c.title->setColor(focused ? theme::textStrong() : theme::textSecondary());
+                    c.title->setColor(focused ? theme::textStrong() : theme::textMuted());
                     c.title->setWeight(focused ? ui::Weight::SemiBold : ui::Weight::Regular);
                 }
             }
@@ -828,8 +828,7 @@ namespace {
                                  {ui::Glyph::Circle, tr("common.back")}});
             } else {
                 hints->setHints({{ui::Glyph::Cross, tr("browse.details")}, {ui::Glyph::Square, tr("common.favorite")},
-                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::L1, ""},
-                                 {ui::Glyph::R1, tr("live.category")}, {ui::Glyph::Triangle, tr("home.search")},
+                                 {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
                                  {ui::Glyph::Options, tr("browse.sort")}, {ui::Glyph::Circle, tr("live.categories")}});
             }
             refreshInfo();

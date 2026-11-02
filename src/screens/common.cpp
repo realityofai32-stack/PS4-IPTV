@@ -23,6 +23,21 @@ namespace screens {
         }
     }
 
+    void breadcrumb(C2DObject *parent, const std::string &section) {
+        auto *m = new ui::BrandMark(26);
+        m->setPosition(theme::SAFE_X, theme::SAFE_Y + 4);
+        parent->add(m);
+        ui::label(parent, section, theme::LABEL, theme::SAFE_X + m->getSize().x + theme::SPACE_S, theme::SAFE_Y,
+                  ui::Weight::SemiBold, theme::textSecondary());
+    }
+
+    void bindBackdrop(App &app, ui::Backdrop *backdrop, const std::string &url) {
+        std::shared_ptr<ImageSet> big = app.images().get(ImageKind::PosterLarge, url);
+        std::shared_ptr<ImageSet> small = big ? nullptr : app.images().get(ImageKind::Poster, url);
+        const std::shared_ptr<ImageSet> &img = big ? big : small;
+        backdrop->set(img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
+    }
+
     ui::HintBar *hintBar(C2DObject *parent, const Hints &hints) {
         auto *bar = new ui::HintBar();
         bar->setHints(hints);
