@@ -1,0 +1,132 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UI-3: HARDWARE POLISH (ARTWORK, BLACK THEME, HOLD-TO-SCROLL)
+=============================================================================================
+Branch feature/v7-ui-v3-polish (local only, from v7-ui-2 build 3a56e24). Version 0.2.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: see build/checkpoint-v7-ui-3/BUILD.txt and SHA256SUMS.txt.
+Why this pass: docs/v7-ui-v3-audit.md (what the v7-ui-2 hardware screenshots showed).
+Geometry: docs/v7-ui-v2-layouts.md (v3 rows marked). V2's layouts are kept; only artwork, colours, focus fills and
+hold navigation changed.
+
+Install OVER the existing V7 IPTV (same title ID): sources, favorites, history, positions, downloads and settings
+stay. This PKG contains NO credentials and NO playlists. Playback, downloads, search, parsers and storage formats
+are unchanged (the only parser change: get_series_info's backdrop_path is now read; nothing new is stored).
+
+Take a SHARE screenshot of every step marked [SHOT] and put them in docs/v7-ui-hardware/v3/.
+Please also copy /data/PS4IPTV/logs/log.txt after the SCROLL section (FTP): it now records the clock check and
+every hold of 1 s or more, which proves the hold-to-scroll fix independently of how it feels.
+
+-----------------------------------------------------------------------------------------------------
+HARDWARE UNKNOWNS (what this checkpoint decides)
+-----------------------------------------------------------------------------------------------------
+  H1 UI clock: the app's timing now reads the kernel's real monotonic clock. In the log, ~10 s after start:
+       [clock] after 10 s: ui clock 10.0x s, process time 1x.xx s, cpu clock y.yy s
+     Expected: the ui clock advanced like the wall clock (compare the log's own timestamps); the cpu clock is far
+     smaller. Wrong: "ui clock" much smaller than 10 s, or no such line -> hold-to-scroll is still broken.
+  H2 Hold-to-scroll: each hold >= 1 s logs "[input] hold Down 10.0 s: N repeat step(s)". Expected for 10 s on a
+     long list: N ~ 270-280 (Smooth scrolling on or off). Wrong: N < 50.
+  H3 Real backdrops: the provider used in testing probably sends no backdrop_path (its get_vod_info has none,
+     get_series_info has "[]"). The log says per detail page: "[detail] movie info: provider backdrop none|present".
+     With "none" the poster fallback is what you see everywhere - that is expected, not a failure.
+  H4 Poster fallback backdrop: the large poster (400 x 600) at its own ratio on the right, ~1.47x. Expected: dark,
+     soft-edged art that melts into black on its left, no rectangle. Wrong: a visible poster edge or box, a
+     stretched / squashed face, or the art competing with the title.
+  H5 Black base: the page is #050608 and surfaces are neutral charcoal. On a TV in limited RGB range the darkest
+     steps may merge; surfaces were kept >= 19 for that. Wrong: rows / panels invisible against the page, or
+     any surface still looking blue.
+
+-----------------------------------------------------------------------------------------------------
+ARTWORK - HOME                                                                     (rest view = [SHOT])
+-----------------------------------------------------------------------------------------------------
+ 1. Continue Watching: three larger landscape cards. Each shows the WHOLE poster on its left (about a third of
+    the card), then title (up to 2 lines), episode or "Movie", time left, and a thin accent progress bar on a
+    neutral dark card. [SHOT]
+ 2. Movie poster fits correctly: nothing cropped, not stretched, not blurry.
+ 3. Series poster fits correctly (Daryl Dixon, How I Met Your Mother): the poster's title and faces are complete.
+ 4. No important title / face crops anywhere on Home.
+ 5. Progress card looks intentional: card surface, text column and bar line up; no border at rest.
+ 6. Focus a card (Down): raised neutral surface + accent ring a few px outside the card; the poster brightens; no
+    scaling, nothing overlaps the neighbour or the next heading. [SHOT]
+ 7. Recently Watched: movies / episodes as poster cards; channels show their logo whole and centred in a neutral
+    logo area (never cropped, never stretched into a background). [SHOT]
+ 8. Artwork is sharp enough from the couch and up close (the card poster is drawn 1:1 from its texture).
+ 9. Left / Right through a rail of 10: moves card by card, three visible, no stutter.
+
+-----------------------------------------------------------------------------------------------------
+ARTWORK - HERO AND DETAILS
+-----------------------------------------------------------------------------------------------------
+10. Home hero: no horizontally stretched portrait; no obvious poster rectangle; title area clearly darker. [SHOT]
+11. If the log says "provider backdrop present" for an item: its Home hero / detail page shows a landscape image
+    (cover-cropped, not the poster). [SHOT if any]
+12. Fallback looks intentional: the poster sits at the right edge, darkened, dissolving into black on its left,
+    bottom and top. No hard vertical split (v2 showed a seam at x ~600 and a line at y ~800 - both gone?).
+13. Movie detail: same rules; the poster tile on the left is sharp. [SHOT]
+14. Series detail: same rules; the 180 x 270 cover is sharp. Episode rows: a real 16:9 still fills its tile; a
+    repeated portrait cover is shown whole in the tile instead of a face fragment. [SHOT]
+
+-----------------------------------------------------------------------------------------------------
+ARTWORK - MOVIES / SERIES CATALOG
+-----------------------------------------------------------------------------------------------------
+15. Poster sharpness: small poster text ("ADIM ADIM", credit blocks) visibly crisper than v2. [SHOT]
+16. Focused poster grows slightly (1.04, was 1.06): crisp, no overlap with neighbours or its title.
+17. Layout unchanged: rail, 7 x 2 grid + peek row, header, hints.
+
+-----------------------------------------------------------------------------------------------------
+THEME (do 18-22 with each: V7 Blue, Red, Purple, Orange, White)          [SHOT Home + Live TV + Options]
+-----------------------------------------------------------------------------------------------------
+18. The background stays neutral black; large surfaces (cards, panels, rows, HUD bars) stay neutral charcoal
+    whatever the accent.
+19. The accent is restrained: focus edges / rings, nav underline, primary button, selected chips, progress,
+    toggles, small icons. No large accent-coloured slab anywhere.
+20. Focus stays obvious on every screen (edge / ring + brighter text + raised surface).
+21. Text readable everywhere, incl. grey metadata on cards and rows.
+22. White: white edge / ring and dark captions on white pills; base still black (white never means white surfaces).
+23. Change the accent: applies at once; background and surfaces do not change, only accent elements.
+
+-----------------------------------------------------------------------------------------------------
+SCROLL (hold-to-scroll restored; keep the log)
+-----------------------------------------------------------------------------------------------------
+For each list: tap Down once (exactly one step), then hold Down ~5 s, then release.
+Expected: first step at once, repeat after ~0.3 s, faster after 1 s / 2 s / 3.5 s, viewport follows without a
+one-row stutter, release stops at once (no extra steps), holding Up reverses at once.
+24. Live TV channel list (All channels, 573): hold Down 10 s. [log line]
+25. Live TV categories.
+26. Movies categories.
+27. Movies grid (also hold Right along a row).
+28. Series grid.
+29. Series detail episode list (a season with many episodes). Holding Up at the first episode stays in the list
+    (it no longer jumps into the season chips / buttons); one separate Up press leaves it.
+30. Settings categories and Settings options.
+31. Search results (type "a", Right into the results, hold Down). Holding Left / Right never switches between
+    keyboard and results; a separate press does.
+32. Downloads, Favorites, Sources lists.
+33. Playback Options lists.
+34. Home: Left / Right hold scrolls a rail; Up / Down move one zone per press (holding never runs into the
+    navigation bar).
+35. Repeat 24 with Settings > Appearance > Smooth scrolling OFF and ON: both repeat and accelerate.
+36. Left stick: half push = d-pad speed, full push = faster; release stops at once.
+
+-----------------------------------------------------------------------------------------------------
+LIVE TV
+-----------------------------------------------------------------------------------------------------
+37. Channel logos keep their aspect ratio, whole, centred (row tiles and the channel card).
+38. Hold Down through hundreds of channels: logos keep loading when you stop; no lag, no crash.
+39. Focused channel row: raised neutral surface + accent edge (no tinted slab); the open category keeps its edge
+    while the channel list has focus. [SHOT with Red]
+
+-----------------------------------------------------------------------------------------------------
+PLAYER
+-----------------------------------------------------------------------------------------------------
+40. HUD bars: neutral black over the video (no blue cast). [SHOT]
+41. Progress bar uses the accent; time and track info readable.
+42. Playback Options: the selected row is a raised neutral surface + accent edge, not a red / purple slab.
+    [SHOT with Red]
+43. Hints unchanged (simplified set), neutral colours.
+
+-----------------------------------------------------------------------------------------------------
+STABILITY / PERFORMANCE
+-----------------------------------------------------------------------------------------------------
+44. Movies grid: scroll quickly for 30 s; no stutter worse than v2 (same texture page size as v2).
+45. Home <-> details <-> player round trips x10, incl. items with and without a backdrop: no crash, artwork returns.
+46. Open 10 different detail pages in a row, then play a movie for 5 minutes: no crash, no missing images.
+47. Change the accent 3 times in a row: no crash, no missing images.
+
+REPORT: screenshots + log.txt + which steps look wrong (step number + what you see).
