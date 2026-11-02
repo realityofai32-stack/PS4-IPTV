@@ -1,4 +1,6 @@
-// Movie and Series detail screens.
+// Movie and Series detail screens: one composition over a poster-derived backdrop (a full-bleed layer on the
+// right that dissolves into the page on every inner edge; never a framed picture), the poster on the left and
+// the text column next to it. Geometry: ui/layout.h (layout::detail), docs/v7-ui-v2-layouts.md.
 //
 // Both open at once with what the catalog already has (title, year, rating, poster; for series also plot,
 // cast, genre) and request their detail response lazily (get_vod_info / get_series_info). The large poster
@@ -104,49 +106,53 @@ namespace {
 
     // ------------------------------------------------------------------ movie
 
-    const float M_TOP = 150;
-    const float M_POSTER_W = 360;
-    const float M_POSTER_H = 540;
-    const float M_TEXT_X = theme::SAFE_X + M_POSTER_W + 64;
+    namespace L = layout::detail;
+
+    const float BACKDROP_ANCHOR = 0.24f;
 
     class MovieDetailScreen : public Screen {
     public:
         MovieDetailScreen(App &a, Movie m) : Screen(a), movie(std::move(m)) {
             ui::background(this);
-            // ambient artwork from the poster, faded into the page behind the text column
-            backdrop = new ui::Backdrop(FloatRect(640, 0, theme::SCREEN_W - 640, 820), 640, 380);
+            // ambient artwork from the poster: the right of the page, dissolving behind the text column
+            backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, theme::SCREEN_H),
+                                        L::BACKDROP_FADE_LEFT, L::M_BACKDROP_FADE_BOTTOM, L::BACKDROP_FADE_TOP);
+            backdrop->setAnchor(BACKDROP_ANCHOR);
             add(backdrop);
             screens::breadcrumb(this, tr("home.movies"));
-            poster = new ui::PosterView(FloatRect(theme::SAFE_X, M_TOP, M_POSTER_W, M_POSTER_H), theme::HEADING);
+            poster = new ui::PosterView(FloatRect(L::M_POSTER_X, L::M_POSTER_Y, L::M_POSTER_W, L::M_POSTER_H),
+                                        theme::HEADING);
+            poster->setCornersRadius(theme::RADIUS);
             add(poster);
-            const float w = theme::SCREEN_W - theme::SAFE_X - M_TEXT_X;
+            const float x = L::M_TEXT_X;
+            const float w = L::M_TEXT_W;
             // the title is the largest text on the page; long titles step down to the title size
-            title = ui::label(this, movie.title, theme::DISPLAY, M_TEXT_X, M_TOP - 12, ui::Weight::SemiBold,
+            title = ui::label(this, movie.title, theme::DISPLAY, x, L::M_POSTER_Y - 10, ui::Weight::SemiBold,
                               theme::textStrong());
             if (title->width() > w * 1.6f) {
                 title->setCharSize(theme::TITLE);
             }
             title->setMaxWidth(w);
             title->setMaxLines(2);
-            meta = ui::label(this, "", theme::BODY, M_TEXT_X, 0, ui::Weight::Regular, theme::textSecondary());
+            meta = ui::label(this, "", theme::BODY, x, 0, ui::Weight::Regular, theme::textSecondary());
             meta->setMaxWidth(w);
-            genre = ui::label(this, "", theme::LABEL, M_TEXT_X, 0, ui::Weight::Regular, theme::textSecondary());
+            genre = ui::label(this, "", theme::LABEL, x, 0, ui::Weight::Regular, theme::textMuted());
             genre->setMaxWidth(w);
-            plot = ui::label(this, "", theme::BODY, M_TEXT_X, 0, ui::Weight::Regular, theme::textPrimary());
-            plot->setMaxWidth(std::min(w, 1180.0f));
+            plot = ui::label(this, "", theme::BODY, x, 0, ui::Weight::Regular, theme::textPrimary());
+            plot->setMaxWidth(L::M_PLOT_W);
             plot->setMaxLines(4);
-            progressText = ui::label(this, "", theme::LABEL, M_TEXT_X, 0, ui::Weight::SemiBold, theme::textSecondary());
-            bar = new ui::ProgressBar(FloatRect(M_TEXT_X, 0, 520, theme::PROGRESS_H));
+            progressText = ui::label(this, "", theme::LABEL, x, 0, ui::Weight::SemiBold, theme::textSecondary());
+            bar = new ui::ProgressBar(FloatRect(x, 0, 480, theme::PROGRESS_H));
             add(bar);
             for (int i = 0; i < BUTTONS; i++) {
-                buttons[i] = new ui::Button("", FloatRect(M_TEXT_X, 0, i == 0 ? 400.0f : 290.0f, theme::BUTTON_H), i == 0);
+                buttons[i] = new ui::Button("", FloatRect(x, 0, i == 0 ? 360.0f : 270.0f, theme::BUTTON_H), i == 0);
                 add(buttons[i]);
             }
             // supporting detail under the actions: people, then the technical line (never competing with the title)
-            credits = ui::label(this, "", theme::LABEL, M_TEXT_X, 0, ui::Weight::Regular, theme::textMuted());
-            credits->setMaxWidth(w);
-            credits->setMaxLines(3);
-            tech = ui::label(this, "", theme::CAPTION, M_TEXT_X, 0, ui::Weight::Regular, theme::textMuted());
+            credits = ui::label(this, "", theme::LABEL, x, 0, ui::Weight::Regular, theme::textMuted());
+            credits->setMaxWidth(L::M_PLOT_W);
+            credits->setMaxLines(2);
+            tech = ui::label(this, "", theme::CAPTION, x, 0, ui::Weight::Regular, theme::textMuted());
             tech->setMaxWidth(w);
             screens::hintBar(this, {{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Square, tr("common.favorite")},
                                     {ui::Glyph::Circle, tr("common.back")}});
@@ -420,24 +426,25 @@ namespace {
             }
 
             // the text column, top to bottom: title, facts, genre, plot, progress, actions, people, technical line
-            float y = M_TOP - 12 + title->height() + 14;
-            meta->setPosition(M_TEXT_X, y);
-            y += meta->getText().empty() ? 0 : meta->height() + 8;
-            genre->setPosition(M_TEXT_X, y);
-            y += genre->getText().empty() ? 8 : genre->height() + 24;
-            plot->setPosition(M_TEXT_X, y);
-            y += plot->getText().empty() ? 0 : plot->height() + 28;
+            const float x = L::M_TEXT_X;
+            float y = L::M_POSTER_Y - 10 + title->height() + 12;
+            meta->setPosition(x, y);
+            y += meta->getText().empty() ? 0 : meta->height() + 6;
+            genre->setPosition(x, y);
+            y += genre->getText().empty() ? 8 : genre->height() + 26;
+            plot->setPosition(x, y);
+            y += plot->getText().empty() ? 0 : plot->height() + 30;
             if (!progressText->getText().empty()) {
-                progressText->setPosition(M_TEXT_X, y);
+                progressText->setPosition(x, y);
                 y += progressText->height() + 12;
-                bar->setPosition(M_TEXT_X, y);
-                y += resumable ? theme::PROGRESS_H + 28 : 16;
+                bar->setPosition(x, y);
+                y += resumable ? theme::PROGRESS_H + 30 : 18;
             }
-            buttonsY = std::max(y, M_TOP + 330);
+            buttonsY = std::max(y, L::M_BUTTONS_MIN_Y);
             y = buttonsY + theme::BUTTON_H + 40;
-            credits->setPosition(M_TEXT_X, y);
-            y += credits->getText().empty() ? 0 : credits->height() + 12;
-            tech->setPosition(M_TEXT_X, y);
+            credits->setPosition(x, y);
+            y += credits->getText().empty() ? 0 : credits->height() + 10;
+            tech->setPosition(x, y);
 
             bool fav = app.library().isFavorite(ContentType::Movie, movie.streamId);
             downloadsGen = app.downloads().generation();
@@ -479,7 +486,7 @@ namespace {
 
         void refreshButtons() {
             // the primary action (Play / Resume) first and widest; the others follow on the same line
-            float x = M_TEXT_X;
+            float x = L::M_TEXT_X;
             for (int i = 0; i < BUTTONS; i++) {
                 buttons[i]->setVisibility(i < buttonCount ? Visibility::Visible : Visibility::Hidden);
                 buttons[i]->setPosition(x, buttonsY);
@@ -516,60 +523,54 @@ namespace {
 
     // ------------------------------------------------------------------ series
 
-    const float S_TOP = 120;
-    const float S_COVER_W = 220;
-    const float S_COVER_H = 330;
-    const float S_TEXT_X = theme::SAFE_X + S_COVER_W + 48;
-    const float S_SEASONS_Y = 484;
-    const float S_EPISODES_Y = 560;
-    const float S_EPISODES_H = 416;     // four 98 px rows
-    const float S_ROW_H = 98;
-    const float THUMB_W = 150;          // episode still, 16:9
-    const float THUMB_H = 84;
-    const float CHIP_W = 180;
-    const float CHIP_H = 56;
+    const float CHIP_GAP = 12;
+    const float STILL_ANCHOR = 0.22f;   // a portrait image in the 16:9 still tile keeps its upper part
 
     class SeriesDetailScreen : public Screen, public ui::ListView::Adapter {
     public:
         SeriesDetailScreen(App &a, Series s) : Screen(a), series(std::move(s)) {
             ui::background(this);
-            backdrop = new ui::Backdrop(FloatRect(640, 0, theme::SCREEN_W - 640, 600), 640, 300);
+            // the backdrop ends above the seasons: the episodes sit on the clean page
+            backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, L::S_BACKDROP_H),
+                                        L::BACKDROP_FADE_LEFT, L::S_BACKDROP_FADE_BOTTOM, L::BACKDROP_FADE_TOP);
+            backdrop->setAnchor(BACKDROP_ANCHOR);
             add(backdrop);
             screens::breadcrumb(this, tr("home.series"));
-            cover = new ui::PosterView(FloatRect(theme::SAFE_X, S_TOP, S_COVER_W, S_COVER_H), theme::BODY);
+            cover = new ui::PosterView(FloatRect(L::S_COVER_X, L::S_COVER_Y, L::S_COVER_W, L::S_COVER_H), theme::BODY);
+            cover->setCornersRadius(theme::RADIUS);
             add(cover);
-            const float w = theme::SCREEN_W - theme::SAFE_X - S_TEXT_X;
-            title = ui::label(this, series.title, theme::TITLE, S_TEXT_X, S_TOP - 8, ui::Weight::SemiBold,
+            const float x = L::S_TEXT_X;
+            title = ui::label(this, series.title, theme::TITLE, x, L::S_COVER_Y - 6, ui::Weight::SemiBold,
                               theme::textStrong());
-            title->setMaxWidth(w);
-            meta = ui::label(this, "", theme::BODY, S_TEXT_X, 0, ui::Weight::Regular, theme::textSecondary());
-            meta->setMaxWidth(w);
-            credits = ui::label(this, "", theme::LABEL, S_TEXT_X, 0, ui::Weight::Regular, theme::textMuted());
-            credits->setMaxWidth(w);
-            credits->setMaxLines(2);
-            plot = ui::label(this, "", theme::LABEL, S_TEXT_X, 0, ui::Weight::Regular, theme::textPrimary());
-            plot->setMaxWidth(std::min(w, 1240.0f));
-            plot->setMaxLines(2);   // a short plot: the actions keep their line under the cover
+            if (title->width() > L::S_TEXT_W) {
+                title->setCharSize(theme::HEADING);   // one line: the actions keep their place
+            }
+            title->setMaxWidth(L::S_TEXT_W);
+            meta = ui::label(this, "", theme::BODY, x, 0, ui::Weight::Regular, theme::textSecondary());
+            meta->setMaxWidth(L::S_TEXT_W);
+            plot = ui::label(this, "", theme::LABEL, x, 0, ui::Weight::Regular, theme::textPrimary());
+            plot->setMaxWidth(L::S_PLOT_W);
+            plot->setMaxLines(2);   // a short plot: the actions keep their line, bottom-aligned with the cover
             for (int i = 0; i < 2; i++) {
                 // the main button holds "Resume S01E03 · 1:02:15"
-                buttons[i] = new ui::Button("", FloatRect(S_TEXT_X + (float) i * 520, S_TOP + S_COVER_H - 76,
-                                                          i == 0 ? 500.0f : 400.0f, 76), i == 0);
+                float bw = i == 0 ? L::S_RESUME_W : L::S_FAVORITE_W;
+                buttons[i] = new ui::Button("", FloatRect(x + (float) i * (L::S_RESUME_W + theme::SPACE_M), L::S_BUTTONS_Y,
+                                                          bw, L::S_BUTTON_H), i == 0);
                 add(buttons[i]);
             }
-            seasonLayer = new RectangleShape(FloatRect(theme::SAFE_X, S_SEASONS_Y, theme::SCREEN_W - 2 * theme::SAFE_X,
-                                                       CHIP_H));
+            seasonLayer = new RectangleShape(FloatRect(theme::SAFE_X, L::S_SEASONS_Y, theme::CONTENT_W, L::S_CHIP_H));
             seasonLayer->setFillColor(theme::none());
             add(seasonLayer);
-            episodes = new ui::ListView(FloatRect(theme::SAFE_X, S_EPISODES_Y, theme::SCREEN_W - 2 * theme::SAFE_X,
-                                                  S_EPISODES_H), S_ROW_H, 8, this);
+            episodes = new ui::ListView(FloatRect(theme::SAFE_X, L::S_EPISODES_Y, theme::CONTENT_W, L::S_EPISODES_H),
+                                        L::S_ROW_H, L::S_ROW_GAP, this);
             add(episodes);
-            stateText = ui::label(this, "", theme::BODY, theme::SAFE_X, S_EPISODES_Y + 120, ui::Weight::Regular,
+            stateText = ui::label(this, "", theme::BODY, theme::SAFE_X, L::S_EPISODES_Y + 110, ui::Weight::Regular,
                                   theme::textMuted());
-            stateText->setAlign(ui::Align::Center, theme::SCREEN_W - 2 * theme::SAFE_X);
+            stateText->setAlign(ui::Align::Center, theme::CONTENT_W);
             stateText->setMaxWidth(1400);
             stateText->setMaxLines(2);
             spinner = new ui::Spinner(18);
-            spinner->setPosition((theme::SCREEN_W - 18 * 3.6f) / 2, S_EPISODES_Y + 200);
+            spinner->setPosition((theme::SCREEN_W - 18 * 3.6f) / 2, L::S_EPISODES_Y + 190);
             add(spinner);
             hints = screens::hintBar(this, {});
             app.vod().requestSeriesInfo(app.session().profile, series.seriesId);
@@ -637,16 +638,20 @@ namespace {
 
         C2DObject *createRow(float w, float h) override {
             EpisodeRow r;
-            r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::surface(), theme::RADIUS_SMALL);
-            // the still when the provider has one; otherwise a text tile with the episode number (never a fake image)
-            r.thumb = new ui::PosterView(FloatRect(8, (h - THUMB_H) / 2, THUMB_W, THUMB_H), theme::LABEL);
+            r.bg = new ui::RowFrame(w, h, 0);
+            // the still when the provider has one (portrait covers are cropped to their upper part); otherwise a
+            // text tile with the episode number (never a fake image)
+            const float tx = 16;
+            r.thumb = new ui::PosterView(FloatRect(tx, (h - L::S_THUMB_H) / 2, L::S_THUMB_W, L::S_THUMB_H), theme::LABEL);
+            r.thumb->setCornersRadius(theme::RADIUS_SMALL);
+            r.thumb->setCover(true, STILL_ANCHOR);
             r.bg->add(r.thumb);
-            const float x = 8 + THUMB_W + 24;
-            r.name = ui::label(r.bg, "", theme::BODY, x, 16);
-            r.name->setMaxWidth(w - x - 320);
-            r.code = ui::label(r.bg, "", theme::CAPTION, x, 58, ui::Weight::SemiBold, theme::accentText());
-            r.detail = ui::label(r.bg, "", theme::CAPTION, x, 58, ui::Weight::Regular, theme::textMuted());
-            r.detail->setMaxWidth(w - x - 320 - 120);
+            const float x = tx + L::S_THUMB_W + 28;
+            r.name = ui::label(r.bg, "", theme::BODY, x, 20);
+            r.name->setMaxWidth(w - x - 360);
+            r.code = ui::label(r.bg, "", theme::LABEL, x, 60, ui::Weight::SemiBold, theme::textSecondary());
+            r.detail = ui::label(r.bg, "", theme::LABEL, x, 60, ui::Weight::Regular, theme::textMuted());
+            r.detail->setMaxWidth(w - x - 360 - 120);
             r.state = ui::label(r.bg, "", theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, h), ui::Weight::SemiBold,
                                 theme::success());
             r.state->setAlign(ui::Align::Right, w - 28);
@@ -692,8 +697,8 @@ namespace {
                         st = st.empty() ? ds : ds + "   " + st;
                     }
                 }
-                r.detail->setText(detail.empty() ? "" : "\xC2\xB7   " + detail);
-                r.detail->setPosition(r.code->getPosition().x + r.code->width() + 12, r.code->getPosition().y);
+                r.detail->setText(detail.empty() ? "" : "\xC2\xB7  " + detail);
+                r.detail->setPosition(r.code->getPosition().x + r.code->width() + 10, r.code->getPosition().y);
                 r.state->setText(st);
                 r.state->setColor(hasDl && d.state == dl::State::Failed ? theme::danger() : theme::success());
                 double total = p && p->duration > 0 ? p->duration : ep.durationSeconds;
@@ -703,11 +708,13 @@ namespace {
                 if (partial) {
                     r.bar->setFraction((float) progress::fraction(p->position, total));
                 }
-                r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surfaceElevated() : theme::surface());
-                r.bg->setOutlineColor(theme::accent());
-                r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
+                r.bg->setState(focused, selected && !focused && focusOnEpisodesRow());
+                r.thumb->setDimmed(!focused);
             }
         }
+
+        // the episode cursor is shown (accent edge) while the seasons have the focus: where Down leads
+        bool focusOnEpisodesRow() const { return focus == 1; }
 
         // ------------------------------------------------------------------ input
         void handleInput(const InputEvent &e) override {
@@ -806,7 +813,7 @@ namespace {
         };
 
         struct EpisodeRow {
-            RectangleShape *bg;
+            ui::RowFrame *bg;
             ui::PosterView *thumb;
             ui::Label *code;
             ui::Label *name;
@@ -1089,15 +1096,43 @@ namespace {
                 return;
             }
             int n = (int) info->seasons.size();
-            const int fit = (int) ((seasonLayer->getSize().x + 16) / (CHIP_W + 16));
-            int first = std::max(0, std::min(seasonIndex - fit / 2, n - fit));
-            for (int i = first; i < n && i < first + fit; i++) {
+            // chips fitted to their text (at least S_CHIP_MIN_W); a window around the selected season when they
+            // do not all fit on the line
+            std::vector<ui::Chip *> chips;
+            for (int i = 0; i < n; i++) {
                 const Season &s = info->seasons[(size_t) i];
-                auto *chip = new ui::Chip(s.number > 0 ? tr("detail.season_number", {std::to_string(s.number)})
-                                                       : tr("detail.specials"),
-                                          (float) (i - first) * (CHIP_W + 16), 0, CHIP_W, CHIP_H);
+                std::string text = s.number > 0 ? tr("detail.season_number", {std::to_string(s.number)})
+                                                : tr("detail.specials");
+                auto *chip = new ui::Chip(text, 0, 0, 0, L::S_CHIP_H);
+                if (chip->width() < L::S_CHIP_MIN_W) {
+                    delete chip;
+                    chip = new ui::Chip(text, 0, 0, L::S_CHIP_MIN_W, L::S_CHIP_H);
+                }
                 chip->setState(i == seasonIndex, i == seasonIndex && focus == 1);
+                chips.push_back(chip);
+            }
+            const float room = seasonLayer->getSize().x;
+            auto fits = [&](int from, int to) {   // chips from..to (inclusive) on one line
+                float w = 0;
+                for (int i = from; i <= to; i++) {
+                    w += chips[(size_t) i]->width() + (i > from ? CHIP_GAP : 0);
+                }
+                return w <= room;
+            };
+            int first = 0;
+            while (first < seasonIndex && !fits(first, seasonIndex)) {
+                first++;
+            }
+            float x = 0;
+            for (int i = 0; i < n; i++) {
+                ui::Chip *chip = chips[(size_t) i];
+                if (i < first || x + chip->width() > room) {
+                    delete chip;
+                    continue;
+                }
+                chip->setPosition(x, 0);
                 seasonLayer->add(chip);
+                x += chip->width() + CHIP_GAP;
             }
         }
 
@@ -1134,15 +1169,13 @@ namespace {
                                 series.genre,
                                 series.runtimeMinutes > 0 ? tr("detail.per_episode", {std::to_string(series.runtimeMinutes)}) : "",
                                 hasSeasons() ? i18n::count("detail.seasons", (long long) info->seasons.size()) : ""}));
-            credits->setText(join({series.director.empty() ? "" : tr("detail.director", {series.director}),
-                                   series.cast.empty() ? "" : tr("detail.cast", {series.cast})}));
             plot->setText(series.plot);
-            float y = S_TOP - 8 + title->height() + 12;
-            meta->setPosition(S_TEXT_X, y);
+            // title, facts, short plot; the actions are bottom-aligned with the cover (people are left out:
+            // the top stays compact so four episodes are on screen)
+            float y = L::S_COVER_Y - 6 + title->height() + 10;
+            meta->setPosition(L::S_TEXT_X, y);
             y += meta->height() + 10;
-            credits->setPosition(S_TEXT_X, y);
-            y += credits->getText().empty() ? 0 : credits->height() + 10;
-            plot->setPosition(S_TEXT_X, y);
+            plot->setPosition(L::S_TEXT_X, y);
 
             std::string error = app.vod().detailError("s" + series.seriesId);
             bool loading = !info && error.empty();
@@ -1184,7 +1217,6 @@ namespace {
         ui::PosterView *cover;
         ui::Label *title;
         ui::Label *meta;
-        ui::Label *credits;
         ui::Label *plot;
         ui::Button *buttons[2];
         Action actions[2] = {Action::Resume, Action::Favorite};
