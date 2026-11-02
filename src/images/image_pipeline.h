@@ -41,8 +41,9 @@ namespace images {
         std::string detail;            // failure reason / notes for the log
     };
 
+    // maxDimension: source images larger than this (either side) are refused before decoding (Permanent)
     LoadOutcome loadImage(const std::string &normalizedUrl, DiskCache &disk, const Fetcher &fetch, int64_t now,
-                          const std::vector<Box> &boxes);
+                          const std::vector<Box> &boxes, int maxDimension = MAX_DIMENSION);
 }
 
 #endif // PS4IPTV_IMAGES_IMAGE_PIPELINE_H

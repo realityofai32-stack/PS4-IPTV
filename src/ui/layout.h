@@ -64,7 +64,7 @@ namespace layout {
         // hero: one composition over a full-bleed poster layer
         constexpr float BACKDROP_X = 600;
         constexpr float BACKDROP_H = 800;
-        constexpr float BACKDROP_FADE_LEFT = 640;      // 600..1240: background -> image
+        constexpr float BACKDROP_FADE_LEFT = 720;      // 600..1320: background -> image (darker behind the text)
         constexpr float BACKDROP_FADE_BOTTOM = 300;    // 500..800: image -> background
         constexpr float BACKDROP_FADE_TOP = 240;       // darker under the navigation
         constexpr float TEXT_X = SAFE_X;
@@ -78,19 +78,24 @@ namespace layout {
         constexpr float PROGRESS_W = 480;
         constexpr float PROGRESS_TO_BUTTONS = 44;      // bar top -> buttons top
 
-        // rails of landscape cards: 4 x 408 + 3 x 32 = 1728 = the content width
+        // rails of landscape media cards (v3): 3 x 552 + 2 x 36 = 1728 = the content width. A card keeps the whole
+        // portrait poster on its left (170 x 255 = the Poster texture box, drawn 1:1: never cropped to 16:9, never
+        // upscaled) and puts title, episode, time left and progress on a neutral surface beside it. Channels: their
+        // logo contained in a neutral logo area of the same size.
         constexpr float RAILS_Y = 688;                 // first rail heading
-        constexpr float RAIL_HEADING_H = 56;           // heading line + gap to the artwork
-        constexpr float CARD_W = 408;
-        constexpr float CARD_ART_H = 230;              // 16:9
-        constexpr float CARD_GAP = 32;
-        constexpr float CARD_TITLE_GAP = 16;           // artwork -> title
-        constexpr float CARD_TEXT_H = 62;              // title (30) + gap (4) + meta (28)
-        constexpr float CARD_H = CARD_ART_H + CARD_TITLE_GAP + CARD_TEXT_H;   // 308
-        constexpr float RAIL_GAP = 56;
-        constexpr float RAIL_PITCH = RAIL_HEADING_H + CARD_H + RAIL_GAP;      // 420
-        constexpr int CARDS_VISIBLE = 4;
-        constexpr float CARD_FOCUS_SCALE = 1.04f;
+        constexpr float RAIL_HEADING_H = 56;           // heading line + gap to the cards
+        constexpr float CARD_W = 552;
+        constexpr float CARD_H = 255;
+        constexpr float CARD_ART_W = 170;              // 2:3 poster / logo area: 30.8 % of the card
+        constexpr float CARD_GAP = 36;
+        constexpr float CARD_PAD = 28;                 // text inset inside the card
+        constexpr float CARD_TEXT_X = CARD_ART_W + CARD_PAD;               // 198
+        constexpr float CARD_TEXT_W = CARD_W - CARD_TEXT_X - CARD_PAD;     // 326
+        constexpr float CARD_LOGO_PAD = 22;            // a channel logo's inset in its area
+        constexpr float CARD_RING_GAP = 5;             // focus ring: this far outside the card
+        constexpr float RAIL_GAP = 52;
+        constexpr float RAIL_PITCH = RAIL_HEADING_H + CARD_H + RAIL_GAP;   // 363
+        constexpr int CARDS_VISIBLE = 3;
         constexpr float VIEW_BOTTOM = 958;             // a focused rail's lowest text edge
     }
 
@@ -109,7 +114,9 @@ namespace layout {
         constexpr float CELL_H = POSTER_H + TITLE_GAP + 30 + 2 + 28;   // poster, title, meta = 325
         constexpr float ROW_GAP = 30;
         constexpr float GRID_H = ROWS * CELL_H + (ROWS - 1) * ROW_GAP;   // 680
-        constexpr float POSTER_FOCUS_SCALE = 1.06f;
+        // 166 x 249 x 1.04 = 173 x 259: the 170 x 255 Poster texture is drawn at ~1:1 even when focused (1.06 made it
+        // a visible 1.26x upscale with the v2 140 x 210 texture)
+        constexpr float POSTER_FOCUS_SCALE = 1.04f;
         constexpr float RAIL_H = CONTENT_BOTTOM - CONTENT_TOP - 10;     // 800
     }
 

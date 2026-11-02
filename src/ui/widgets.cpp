@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "components.h"
 #include "scroll_math.h"
 #include "widgets.h"
 #include "../core/utf8.h"
@@ -361,15 +362,15 @@ namespace ui {
             image->setTextureRect(IntRect(0, 0, size.x, size.y));
             shown = texture;   // the previous texture is released only now
         }
-        // fit the image box, aspect ratio kept, centred
-        float boxW = getSize().x - 2 * padding;
-        float boxH = getSize().y - 2 * padding;
-        float scale = std::min(std::min(boxW / (float) size.x, boxH / (float) size.y), maxUpscale);
-        float w = std::round((float) size.x * scale);
-        float h = std::round((float) size.y * scale);
-        image->setSize(w, h);
-        image->setPosition(std::round((getSize().x - w) / 2), std::round((getSize().y - h) / 2));
-        image->setVisibility(Visibility::Visible);
+        // Logo: the whole logo inside the padding, centred, enlarged at most maxUpscale - never cropped
+        fit::Options o;
+        o.padding = padding;
+        o.maxUpscale = maxUpscale;
+        fit::Placement p = fit::place(fit::Mode::Logo, (float) size.x, (float) size.y, getSize().x, getSize().y, o);
+        const fit::Rect d = fit::pixelSnap(p.dst);
+        image->setSize(d.w, d.h);
+        image->setPosition(d.x, d.y);
+        image->setVisibility(p.valid ? Visibility::Visible : Visibility::Hidden);
         initials->setVisibility(Visibility::Hidden);
         setFillColor(theme::logoTile());
     }
@@ -497,34 +498,24 @@ namespace ui {
 
     void PosterView::place(const Vector2i &size) {
         shownSize = size;
-        float tw = getSize().x;
-        float th = getSize().y;
-        float tileAspect = tw / th;
-        float imgAspect = (float) size.x / (float) size.y;
-        if (cover || std::fabs(imgAspect / tileAspect - 1.0f) < 0.15f) {
-            // fill the tile, cropping the longer side (evenly, or at the anchor for a taller image): no distortion
-            IntRect crop(0, 0, size.x, size.y);
-            if (imgAspect > tileAspect) {
-                crop.width = std::max(1, (int) std::round((float) size.y * tileAspect));
-                crop.left = (size.x - crop.width) / 2;
-            } else {
-                crop.height = std::max(1, (int) std::round((float) size.x / tileAspect));
-                crop.top = (int) std::round((float) (size.y - crop.height) * anchor);
-            }
-            image->setTextureRect(crop);
-            image->setSize(tw, th);
-            image->setPosition(0, 0);
-            image->setCornersRadius(getCornersRadius());   // the artwork follows the tile's rounded corners
-            image->setCornerPointCount(8);
-        } else {
-            image->setTextureRect(IntRect(0, 0, size.x, size.y));
-            float scale = std::min(tw / (float) size.x, th / (float) size.y);
-            float w = std::round((float) size.x * scale);
-            float h = std::round((float) size.y * scale);
-            image->setSize(w, h);
-            image->setPosition(std::round((tw - w) / 2), std::round((th - h) / 2));
-            image->setCornersRadius(0);
+        // Poster: a portrait poster fills a tile of (nearly) its shape and is shown whole in any other tile;
+        // Cover: always fill (episode stills in a 16:9 tile)
+        fit::Options o;
+        o.anchorY = anchor;
+        fit::Placement p = fit::place(cover ? fit::Mode::Cover : fit::Mode::Poster, (float) size.x, (float) size.y,
+                                      getSize().x, getSize().y, o);
+        if (!p.valid) {
+            image->setVisibility(Visibility::Hidden);
+            return;
         }
+        const fit::Rect d = fit::pixelSnap(p.dst);
+        image->setTextureRect(texelRect(p.src));
+        image->setSize(d.w, d.h);
+        image->setPosition(d.x, d.y);
+        bool fills = d.w >= getSize().x - 0.5f && d.h >= getSize().y - 0.5f;
+        // artwork that fills the tile follows its rounded corners
+        image->setCornersRadius(fills ? getCornersRadius() : 0);
+        image->setCornerPointCount(8);
     }
 
     void PosterView::setCover(bool c, float anchorY) {

@@ -14,15 +14,27 @@
 #ifndef PS4IPTV_UI_COMPONENTS_H
 #define PS4IPTV_UI_COMPONENTS_H
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "cross2d/c2d.h"
+#include "image_fit.h"
 #include "text.h"
 #include "theme.h"
 
 namespace ui {
+
+    // a fit:: source rectangle as the texture rectangle of a shape: edges rounded to whole texels, never empty
+    inline c2d::IntRect texelRect(const fit::Rect &src) {
+        int x0 = (int) std::lround(src.x);
+        int y0 = (int) std::lround(src.y);
+        int x1 = (int) std::lround(src.x + src.w);
+        int y1 = (int) std::lround(src.y + src.h);
+        return {x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0)};
+    }
 
     // The V7 symbol: a V whose right arm is the stem of a 7, closed by the 7's top bar. Three convex polygons on a
     // 100 x 80 grid (see docs/v7-ui-refresh.md); `height` is the drawn height, the width is height * 1.25.
@@ -188,26 +200,44 @@ namespace ui {
         bool left;
     };
 
-    // Ambient artwork behind a hero or a detail page: one full-bleed layer, never a framed picture. The poster is
-    // cover-cropped to the box (aspect kept, anchored above the centre where faces usually are), dimmed by texture
-    // modulation, shaded, then faded into the background on every edge that is not a screen edge, with eased
-    // gradients (no band where a fade starts or ends). Bilinear upscaling of the poster texture gives a soft,
-    // blur-like wash without any blur pass. Without an image only a faint accent glow is drawn.
+    // Ambient artwork behind a hero or a detail page: one layer that dissolves into the page, never a framed
+    // picture. The artwork is dimmed by texture modulation, shaded, then faded into the background on every edge
+    // that is not a screen edge, with eased gradients (no band where a fade starts or ends). Placement comes from
+    // ui/image_fit.h:
+    //   Landscape  a real backdrop / fanart: cover-cropped to the box (aspect kept, anchored above the centre)
+    //   Poster     no landscape art: the portrait poster keeps its ratio, sits against the right edge (bleeding
+    //              past it, cropped by the box) and dissolves into the page on its left - never stretched
+    // Without an image only a faint neutral glow is drawn.
     class Backdrop : public c2d::RectangleShape {
     public:
+        enum class Art {
+            Landscape,
+            Poster
+        };
+
         // fadeLeft / fadeBottom / fadeTop: width / height of the eased fades into the background colour
         Backdrop(const c2d::FloatRect &rect, float fadeLeft, float fadeBottom, float fadeTop = 0);
 
-        void set(const std::shared_ptr<c2d::Texture> &texture, const c2d::Vector2i &imageSize);
+        void set(const std::shared_ptr<c2d::Texture> &texture, const c2d::Vector2i &imageSize, Art art);
 
         // which part of a taller image is kept: 0 = its top .. 1 = its bottom (default 0.3: above the centre)
         void setAnchor(float anchorY);
 
+        // the area the artwork covers (box coordinates; empty without artwork): for tests and layout checks
+        c2d::FloatRect artRect() const;
+
+        static constexpr float POSTER_HEIGHT = 1.1f;   // the poster's height / the box height
+        static constexpr float POSTER_BLEED = 40;      // px of the poster beyond the box's right edge
+
     private:
+        void hide();
+
         c2d::RectangleShape *image;
         c2d::RectangleShape *shade;
+        c2d::RectangleShape *posterFade;   // dissolves the poster's left edge into the page (Poster art only)
         float anchor = 0.3f;
         bool recrop = false;
+        Art shownArt = Art::Landscape;
         c2d::GradientRectangle *glow;
         std::shared_ptr<c2d::Texture> shown;
     };

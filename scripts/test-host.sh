@@ -48,7 +48,7 @@ build app_tests \
     "$h/test_live.cpp" "$h/test_text.cpp" "$h/test_input.cpp" "$h/test_images.cpp" "$h/test_playback.cpp" \
     "$h/test_vod.cpp" "$h/test_tracks.cpp" "$h/test_search.cpp" "$h/test_progress.cpp" "$h/test_catalog.cpp" \
     "$h/test_downloads.cpp" "$h/test_i18n.cpp" "$h/test_display.cpp" "$h/test_m3u.cpp" "$h/test_theme.cpp" \
-    "$h/test_layout.cpp" "$h/test_clock.cpp" \
+    "$h/test_layout.cpp" "$h/test_image_fit.cpp" "$h/test_clock.cpp" \
     "$h/stb_impl.cpp" \
     "$s/core/utf8.cpp" "$s/core/json.cpp" "$s/core/url.cpp" "$s/iptv/xtream.cpp" "$s/iptv/catalog.cpp" \
     "$s/iptv/m3u.cpp" \
@@ -56,7 +56,7 @@ build app_tests \
     "$s/storage/library_store.cpp" "$s/storage/catalog_cache.cpp" \
     "$s/platform/fs.cpp" "$s/platform/redact.cpp" "$s/platform/log.cpp" "$s/network/jobs.cpp" \
     "$s/storage/profile_store.cpp" "$s/storage/settings_store.cpp" "$s/ui/keyboard_model.cpp" \
-    "$s/platform/input_logic.cpp" "$s/ui/scroll_math.cpp" "$s/platform/clock.cpp" \
+    "$s/platform/input_logic.cpp" "$s/ui/scroll_math.cpp" "$s/ui/image_fit.cpp" "$s/platform/clock.cpp" \
     "$s/player/stability.cpp" \
     "$s/images/image_key.cpp" "$s/images/disk_cache.cpp" "$s/images/image_decode.cpp" \
     "$s/images/image_scheduler.cpp" "$s/images/image_pipeline.cpp" "$s/core/format.cpp" \

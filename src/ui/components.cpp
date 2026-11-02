@@ -458,9 +458,9 @@ namespace ui {
 
     Backdrop::Backdrop(const FloatRect &rect, float fadeLeft, float fadeBottom, float fadeTop) : RectangleShape(rect) {
         setFillColor(theme::none());
-        // no artwork: a faint glow of the accent's dark tint from the right edge
+        // no artwork: a faint neutral glow from the right edge (never the accent: large surfaces stay neutral)
         glow = new GradientRectangle(FloatRect(0, 0, rect.width, rect.height));
-        glow->setColor(theme::withAlpha(theme::accentMuted(), 90), theme::none(), GradientRectangle::Left);
+        glow->setColor(theme::withAlpha(theme::surface(), 120), theme::none(), GradientRectangle::Left);
         add(glow);
         image = new RectangleShape(FloatRect(0, 0, rect.width, rect.height));
         image->setFillColor(theme::backdropTint());   // texture modulation: the artwork itself is dimmed
@@ -470,6 +470,10 @@ namespace ui {
         shade->setFillColor(theme::backdropShade());
         shade->setVisibility(Visibility::Hidden);
         add(shade);
+        // a poster's left edge melts into the page over ~60 % of its visible width: no rectangle, no split
+        posterFade = fade(this, FloatRect(0, 0, std::round(rect.height * 0.42f), rect.height), theme::background(),
+                          Edge::Left);
+        posterFade->setVisibility(Visibility::Hidden);
         // every edge that is not a screen edge dissolves into the page: no frame, no band
         if (fadeLeft > 0) {
             fade(this, FloatRect(0, 0, fadeLeft, rect.height), theme::background(), Edge::Left);
@@ -487,30 +491,56 @@ namespace ui {
         recrop = true;   // the next set() crops again (the texture stays referenced meanwhile)
     }
 
-    void Backdrop::set(const std::shared_ptr<Texture> &texture, const Vector2i &size) {
-        bool has = texture != nullptr && size.x > 0 && size.y > 0;
-        image->setVisibility(has ? Visibility::Visible : Visibility::Hidden);
-        shade->setVisibility(has ? Visibility::Visible : Visibility::Hidden);
-        glow->setVisibility(has ? Visibility::Hidden : Visibility::Visible);
-        if (!has || (texture == shown && !recrop)) {
+    void Backdrop::hide() {
+        image->setVisibility(Visibility::Hidden);
+        shade->setVisibility(Visibility::Hidden);
+        posterFade->setVisibility(Visibility::Hidden);
+        glow->setVisibility(Visibility::Visible);
+    }
+
+    FloatRect Backdrop::artRect() const {
+        if (!image->isVisible()) {
+            return {};
+        }
+        return {image->getPosition().x, image->getPosition().y, image->getSize().x, image->getSize().y};
+    }
+
+    void Backdrop::set(const std::shared_ptr<Texture> &texture, const Vector2i &size, Art art) {
+        if (texture == nullptr || size.x <= 0 || size.y <= 0) {
+            hide();   // `shown` stays referenced by the hidden shape until something else is shown
+            return;
+        }
+        if (texture == shown && art == shownArt && !recrop && image->isVisible()) {
+            return;
+        }
+        const float bw = getSize().x;
+        const float bh = getSize().y;
+        fit::Placement p;
+        if (art == Art::Landscape) {
+            fit::Options o;
+            o.anchorY = anchor;
+            p = fit::place(fit::Mode::Cover, (float) size.x, (float) size.y, bw, bh, o);
+        } else {
+            p = fit::posterBackdrop((float) size.x, (float) size.y, bw, bh, POSTER_HEIGHT, POSTER_BLEED, anchor);
+        }
+        if (!p.valid) {
+            hide();
             return;
         }
         image->setTexture(texture.get(), true);
         shown = texture;   // the previous texture is released only now
+        shownArt = art;
         recrop = false;
-        // cover the box: crop the image's centre to the box's aspect ratio (never stretched)
-        float boxAspect = getSize().x / getSize().y;
-        float imgAspect = (float) size.x / (float) size.y;
-        IntRect crop(0, 0, size.x, size.y);
-        if (imgAspect > boxAspect) {
-            crop.width = std::max(1, (int) std::round((float) size.y * boxAspect));
-            crop.left = (size.x - crop.width) / 2;
-        } else {
-            crop.height = std::max(1, (int) std::round((float) size.x / boxAspect));
-            crop.top = (int) std::round((float) (size.y - crop.height) * anchor);   // faces, not credits
-        }
-        image->setTextureRect(crop);
-        image->setSize(getSize().x, getSize().y);
-        image->setPosition(0, 0);
+        const fit::Rect d = fit::pixelSnap(p.dst);
+        image->setTextureRect(texelRect(p.src));
+        image->setSize(d.w, d.h);
+        image->setPosition(d.x, d.y);
+        shade->setSize(d.w, d.h);
+        shade->setPosition(d.x, d.y);
+        posterFade->setPosition(d.x, 0);
+        image->setVisibility(Visibility::Visible);
+        shade->setVisibility(Visibility::Visible);
+        posterFade->setVisibility(art == Art::Poster ? Visibility::Visible : Visibility::Hidden);
+        glow->setVisibility(Visibility::Hidden);
     }
 }

@@ -43,7 +43,8 @@ namespace images {
 
     const int MAX_DIMENSION = 4096;
 
-    bool decode(const std::string &bytes, Image &out, std::string *error = nullptr);
+    // maxDimension: larger images are rejected from their header, before any pixel is allocated
+    bool decode(const std::string &bytes, Image &out, std::string *error = nullptr, int maxDimension = MAX_DIMENSION);
 
     struct Size {
         int w = 0;

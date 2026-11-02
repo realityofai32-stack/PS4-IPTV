@@ -6,8 +6,11 @@
 //                would you like to watch?" with the sections as buttons.
 //   rails        Continue Watching, Recently Watched, Favorites (data the app already has, nothing invented)
 //
-// Geometry: ui/layout.h (layout::home), docs/v7-ui-v2-layouts.md. Cards are 16:9: movies and episodes show the
-// upper part of their large poster (the grid poster until it arrives), channels their large logo on a tile.
+// Geometry: ui/layout.h (layout::home), docs/v7-ui-v2-layouts.md. Cards are landscape media cards (v3): the whole
+// portrait poster on the left at the size of its texture (no 16:9 crop, no upscaling), title / episode / time left /
+// progress on a neutral surface beside it; channels show their logo contained in a neutral logo area instead.
+// The hero's artwork is the provider's landscape backdrop when get_vod_info / get_series_info has one, otherwise
+// the large poster kept at its own ratio against the right edge, dissolving into the page (ui::Backdrop).
 //
 // Continue Watching comes from the progress store (LibraryStore::continueWatching): movies and episodes in
 // progress, most recent playback first, one card per series. It is rebuilt whenever the store changes
@@ -43,7 +46,6 @@ namespace {
     const int RECENT_MAX = 10;
     const int RECENT_LIVE_MAX = 4;
     const int FAVORITES_MAX = 12;
-    const float CARD_ANCHOR = 0.22f;       // which part of a portrait poster a 16:9 card keeps (faces, not credits)
     const float HERO_ANCHOR = 0.30f;
 
     enum Zone {
@@ -82,13 +84,16 @@ namespace {
         int index = -1;
     };
 
-    // one card of a rail: 16:9 artwork (progress inside it), then a title and one secondary line under it
+    // one media card of a rail: [poster or logo area | title, second line, third line, progress] on a neutral surface
     struct Card {
-        RectangleShape *root = nullptr;   // at the card's slot in the rail; not scaled
-        ui::PosterView *poster = nullptr; // movies / episodes
-        ui::LogoView *logo = nullptr;     // channels
+        RectangleShape *root = nullptr;   // the card surface, at its slot in the rail
+        RectangleShape *ring = nullptr;   // accent focus ring a few px outside the card (hidden at rest)
+        ui::PosterView *poster = nullptr; // movies / episodes / series: the whole poster
+        ui::LogoView *logo = nullptr;     // channels: the logo contained in a neutral area
         ui::Label *title = nullptr;
-        ui::Label *meta = nullptr;
+        ui::Label *meta = nullptr;        // episode code / kind
+        ui::Label *detail = nullptr;      // time left / watched / year / channel number
+        ui::ProgressBar *bar = nullptr;   // in-progress movies and episodes
         std::string image;        // what the artwork shows (for rebinding when images arrive)
         bool live = false;
         bool focused = false;
@@ -517,32 +522,43 @@ namespace {
                 Card c;
                 c.image = image;
                 c.live = live;
-                c.root = new RectangleShape(FloatRect((float) i * (L::CARD_W + L::CARD_GAP), 0, L::CARD_W, L::CARD_H));
-                c.root->setFillColor(theme::none());
-                r.layer->add(c.root);
-                const FloatRect art(0, 0, L::CARD_W, L::CARD_ART_H);
+                c.root = ui::box(r.layer, FloatRect((float) i * (L::CARD_W + L::CARD_GAP), 0, L::CARD_W, L::CARD_H),
+                                 theme::card(), theme::RADIUS);
+                const float g = L::CARD_RING_GAP;
+                c.ring = ui::box(c.root, FloatRect(-g, -g, L::CARD_W + 2 * g, L::CARD_H + 2 * g), theme::none(),
+                                 theme::RADIUS + g);
+                c.ring->setOutlineColor(theme::accent());
+                c.ring->setOutlineThickness(theme::FOCUS_BORDER);
+                c.ring->setVisibility(Visibility::Hidden);
+                const FloatRect art(0, 0, L::CARD_ART_W, L::CARD_H);
                 if (live) {
-                    // the large logo variant, centred on a tile (dark logos stay readable)
-                    c.logo = new ui::LogoView(art, theme::DISPLAY, 44, 1.0f);
+                    // the logo whole, centred in a neutral area (never cropped, never stretched into artwork)
+                    c.logo = new ui::LogoView(art, theme::DISPLAY, L::CARD_LOGO_PAD, 1.6f);
                     c.logo->setCornersRadius(theme::RADIUS);
                     c.root->add(c.logo);
                 } else {
+                    // the whole poster at the size of its texture (ui/image_fit.h Poster: no 16:9 crop)
                     c.poster = new ui::PosterView(art, theme::LABEL);
                     c.poster->setCornersRadius(theme::RADIUS);
-                    c.poster->setCover(true, CARD_ANCHOR);
-                    c.poster->setFocusScale(L::CARD_FOCUS_SCALE);
-                    c.poster->setProgress(progress);
                     c.root->add(c.poster);
                 }
-                const float ty = L::CARD_ART_H + L::CARD_TITLE_GAP;
-                c.title = ui::label(c.root, title, theme::LABEL, 0, ty, ui::Weight::SemiBold, theme::textPrimary());
-                c.title->setMaxWidth(L::CARD_W);
-                std::string meta = second;
-                if (!third.empty()) {
-                    meta += (meta.empty() ? "" : "  \xC2\xB7  ") + third;
+                const float tx = L::CARD_TEXT_X;
+                float ty = L::CARD_PAD - 4;
+                c.title = ui::label(c.root, title, theme::BODY, tx, ty, ui::Weight::SemiBold, theme::textPrimary());
+                c.title->setMaxWidth(L::CARD_TEXT_W);
+                c.title->setMaxLines(2);
+                ty += c.title->height() + 8;
+                c.meta = ui::label(c.root, second, theme::LABEL, tx, ty, ui::Weight::Regular, theme::textSecondary());
+                c.meta->setMaxWidth(L::CARD_TEXT_W);
+                ty += second.empty() ? 0 : c.meta->height() + 4;
+                c.detail = ui::label(c.root, third, theme::CAPTION, tx, ty, ui::Weight::Regular, theme::textMuted());
+                c.detail->setMaxWidth(L::CARD_TEXT_W);
+                if (progress > 0) {
+                    c.bar = new ui::ProgressBar(FloatRect(tx, L::CARD_H - L::CARD_PAD - theme::PROGRESS_H, L::CARD_TEXT_W,
+                                                          theme::PROGRESS_H));
+                    c.bar->setFraction(progress);
+                    c.root->add(c.bar);
                 }
-                c.meta = ui::label(c.root, meta, theme::CAPTION, 0, ty + 34, ui::Weight::Regular, theme::textSecondary());
-                c.meta->setMaxWidth(L::CARD_W);
                 r.cards.push_back(c);
                 bindCardImage(r.cards.back(), title);
             }
@@ -555,7 +571,8 @@ namespace {
             r.empty->setText(r.items.empty() ? tr(emptyKey) : "");
         }
 
-        // movies / episodes: the large poster (sharp at card size), the grid poster until it is ready
+        // movies / episodes: the grid poster, whose texture is exactly the card's poster area (1:1); channels: the
+        // large logo variant, contained
         void bindCardImage(Card &c, const std::string &title) {
             if (c.logo) {
                 std::shared_ptr<ImageSet> img = app.images().get(ImageKind::Logo, c.image);
@@ -563,10 +580,7 @@ namespace {
                 c.logo->set(title, img ? img->at(large ? 1 : 0).texture : nullptr,
                             img ? img->at(large ? 1 : 0).size : Vector2i());
             } else if (c.poster) {
-                std::shared_ptr<ImageSet> img = app.images().get(ImageKind::PosterLarge, c.image);
-                if (!img) {
-                    img = app.images().get(ImageKind::Poster, c.image);
-                }
+                std::shared_ptr<ImageSet> img = app.images().get(ImageKind::Poster, c.image);
                 c.poster->set(title, img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
             }
         }
@@ -614,6 +628,7 @@ namespace {
                 }
             }
             heroCount = (int) heroIds.size();
+            requestHeroInfo();
             // the text stack hangs above the buttons (they keep their line): meta, episode, title, eyebrow
             float y = hero ? L::BUTTONS_Y - L::PROGRESS_TO_BUTTONS - 22 : L::BUTTONS_Y - 40;
             if (!heroMeta->getText().empty()) {
@@ -684,25 +699,61 @@ namespace {
             return out;
         }
 
-        // the hero layer reuses the large poster the first Continue Watching card shows (one texture, one request)
-        void bindHeroImages() {
+        // the hero's real landscape backdrop: backdrop_path of the item's get_vod_info / get_series_info, when the
+        // provider sends one and the response is cached ("" otherwise: the poster is used)
+        std::string heroBackdropUrl() const {
             if (!hero) {
-                backdrop->set(nullptr, Vector2i());
-                return;
+                return "";
             }
-            std::shared_ptr<ImageSet> big = app.images().get(ImageKind::PosterLarge, hero->icon);
-            std::shared_ptr<ImageSet> small = big ? nullptr : app.images().get(ImageKind::Poster, hero->icon);
-            const std::shared_ptr<ImageSet> &img = big ? big : small;
-            backdrop->set(img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
+            if (hero->type == ContentType::Movie) {
+                std::shared_ptr<const MovieInfo> info = app.vod().movieInfo(hero->id);
+                return info ? info->backdrop : "";
+            }
+            if (hero->type == ContentType::Series) {
+                std::shared_ptr<const SeriesInfo> info = app.vod().seriesInfo(hero->seriesId);
+                return info ? info->series.backdrop : "";
+            }
+            return "";
         }
 
-        // the hero's poster, then the cards on screen in every rail (+ the next one): large posters / logos
+        // one detail request for the hero item (the same one its Details page makes, cached by VodLibrary), at most
+        // once per item while Home lives: a failing request is never retried in a loop
+        void requestHeroInfo() {
+            if (!hero || playlist || !app.settings().get().loadImages) {
+                return;
+            }
+            std::string key = (hero->type == ContentType::Series ? "s" + hero->seriesId : "m" + hero->id);
+            if (key == heroInfoRequested) {
+                return;
+            }
+            heroInfoRequested = key;
+            if (hero->type == ContentType::Movie) {
+                app.vod().requestMovieInfo(app.session().profile, hero->id);
+            } else if (hero->type == ContentType::Series) {
+                app.vod().requestSeriesInfo(app.session().profile, hero->seriesId);
+            }
+        }
+
+        // the hero layer: the real backdrop when there is one, else the large poster at its own ratio
+        void bindHeroImages() {
+            if (!hero) {
+                backdrop->set(nullptr, Vector2i(), ui::Backdrop::Art::Poster);
+                return;
+            }
+            screens::bindBackdrop(app, backdrop, hero->icon, heroBackdropUrl());
+        }
+
+        // the hero's artwork, then the cards on screen in every rail (+ the next one): posters / logos
         void requestImages() {
             if (!app.settings().get().loadImages) {
                 return;
             }
             std::vector<ImageRequest> req;
             if (hero) {
+                std::string art = heroBackdropUrl();
+                if (!art.empty()) {
+                    req.push_back({ImageKind::Backdrop, art});
+                }
                 req.push_back({ImageKind::PosterLarge, hero->icon});
             }
             for (const Rail &r: rails) {
@@ -710,7 +761,7 @@ namespace {
                 for (int i = r.first; i < last; i++) {
                     const Card &c = r.cards[(size_t) i];
                     if (!c.image.empty()) {
-                        req.push_back({c.live ? ImageKind::Logo : ImageKind::PosterLarge, c.image});
+                        req.push_back({c.live ? ImageKind::Logo : ImageKind::Poster, c.image});
                     }
                 }
             }
@@ -1006,25 +1057,19 @@ namespace {
             }
         }
 
-        // focused: the artwork grows a little, gets the accent outline and full brightness; the title brightens
+        // focused: a raised neutral surface, the accent ring around the card, the artwork at full brightness and
+        // brighter text. Nothing is scaled: the poster stays at its texture's size (sharp).
         static void focusCard(Card &c, bool f) {
+            c.root->setFillColor(f ? theme::focusNeutral() : theme::card());
+            c.ring->setOutlineColor(theme::accent());
+            c.ring->setVisibility(f ? Visibility::Visible : Visibility::Hidden);
             if (c.poster) {
-                c.poster->setFocused(f);
                 c.poster->setDimmed(!f);
-            } else if (c.logo && f != c.focused) {
-                const float s = L::CARD_FOCUS_SCALE;
-                const float dx = L::CARD_W * (s - 1) / 2;
-                const float dy = L::CARD_ART_H * (s - 1) / 2;
-                c.logo->setScale(f ? s : 1.0f, f ? s : 1.0f);
-                c.logo->setPosition(f ? -dx : 0, f ? -dy : 0);
-            }
-            if (c.logo) {
-                c.logo->setOutlineColor(theme::accent());
-                c.logo->setOutlineThickness(f ? theme::FOCUS_BORDER : 0);
             }
             c.focused = f;
             c.title->setColor(f ? theme::textStrong() : theme::textPrimary());
             c.meta->setColor(f ? theme::textPrimary() : theme::textSecondary());
+            c.detail->setColor(f ? theme::textSecondary() : theme::textMuted());
         }
 
         // the page scrolls so that the focused rail is completely above the hint bar
@@ -1079,6 +1124,7 @@ namespace {
         int heroCount = 0;
         HistoryEntry heroEntry;
         const HistoryEntry *hero = nullptr;
+        std::string heroInfoRequested;   // "m<id>" / "s<id>" whose detail info Home asked for
         std::vector<Rail> rails;
         size_t favoritesTotal = 0;
         bool imagesDue = false;

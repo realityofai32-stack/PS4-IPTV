@@ -96,11 +96,16 @@ namespace {
         }
     }
 
-    // poster: the large version when ready, else the grid version, else the title
-    void bindPoster(App &app, ui::PosterView *view, const std::string &title, const std::string &url) {
-        std::shared_ptr<ImageSet> big = app.images().get(ImageKind::PosterLarge, url);
-        std::shared_ptr<ImageSet> small = big ? nullptr : app.images().get(ImageKind::Poster, url);
-        const std::shared_ptr<ImageSet> &img = big ? big : small;
+    // poster: the version closest to the tile's size first (the large one for the 320 x 480 movie poster, the grid
+    // one for the 180 x 270 series cover: ~1:1 texels, no blur and no shimmer), else the other, else the title
+    void bindPoster(App &app, ui::PosterView *view, const std::string &title, const std::string &url,
+                    bool preferLarge = true) {
+        ImageKind first = preferLarge ? ImageKind::PosterLarge : ImageKind::Poster;
+        ImageKind second = preferLarge ? ImageKind::Poster : ImageKind::PosterLarge;
+        std::shared_ptr<ImageSet> img = app.images().get(first, url);
+        if (!img) {
+            img = app.images().get(second, url);
+        }
         view->set(title, img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
     }
 
@@ -241,7 +246,12 @@ namespace {
 
         void requestImages() {
             if (app.settings().get().loadImages) {
-                app.images().want({{ImageKind::PosterLarge, movie.icon}, {ImageKind::Poster, movie.icon}});
+                std::vector<ImageRequest> req = {{ImageKind::PosterLarge, movie.icon}};
+                if (!backdropUrl.empty()) {
+                    req.push_back({ImageKind::Backdrop, backdropUrl});
+                }
+                req.push_back({ImageKind::Poster, movie.icon});
+                app.images().want(req);
             }
         }
 
@@ -389,8 +399,15 @@ namespace {
             imageGen = app.images().generation();
             libraryGen = app.library().generation();
             bindPoster(app, poster, movie.title, movie.icon);
-            screens::bindBackdrop(app, backdrop, movie.icon);
             std::shared_ptr<const MovieInfo> info = app.vod().movieInfo(movie.streamId);
+            if (info && info != backdropInfo) {
+                // get_vod_info arrived: its backdrop_path (if any) replaces the poster-derived art
+                backdropInfo = info;
+                backdropUrl = info->backdrop;
+                LOG_I("detail", "movie info: provider backdrop %s", backdropUrl.empty() ? "none" : "present");
+                requestImages();
+            }
+            screens::bindBackdrop(app, backdrop, movie.icon, backdropUrl);
             std::string error = app.vod().detailError("m" + movie.streamId);
             float rating = info && info->rating > 0 ? info->rating : movie.rating;
             int duration = info ? info->durationSeconds : 0;
@@ -497,6 +514,8 @@ namespace {
 
         Movie movie;
         ui::Backdrop *backdrop;
+        std::string backdropUrl;                          // the provider's landscape backdrop ("" = none)
+        std::shared_ptr<const MovieInfo> backdropInfo;    // the info backdropUrl was read from
         ui::PosterView *poster;
         ui::Label *title;
         ui::Label *meta;
@@ -524,7 +543,6 @@ namespace {
     // ------------------------------------------------------------------ series
 
     const float CHIP_GAP = 12;
-    const float STILL_ANCHOR = 0.22f;   // a portrait image in the 16:9 still tile keeps its upper part
 
     class SeriesDetailScreen : public Screen, public ui::ListView::Adapter {
     public:
@@ -620,8 +638,8 @@ namespace {
             }
             if (app.images().generation() != imageGen) {
                 imageGen = app.images().generation();
-                bindPoster(app, cover, series.title, series.cover);
-                screens::bindBackdrop(app, backdrop, series.cover);
+                bindPoster(app, cover, series.title, series.cover, false);
+                screens::bindBackdrop(app, backdrop, series.cover, backdropUrl());
                 episodes->reload();   // episode stills
                 redraw();
             }
@@ -639,12 +657,12 @@ namespace {
         C2DObject *createRow(float w, float h) override {
             EpisodeRow r;
             r.bg = new ui::RowFrame(w, h, 0);
-            // the still when the provider has one (portrait covers are cropped to their upper part); otherwise a
-            // text tile with the episode number (never a fake image)
+            // the still when the provider has one; otherwise a text tile with the episode number (never a fake image)
             const float tx = 16;
             r.thumb = new ui::PosterView(FloatRect(tx, (h - L::S_THUMB_H) / 2, L::S_THUMB_W, L::S_THUMB_H), theme::LABEL);
             r.thumb->setCornersRadius(theme::RADIUS_SMALL);
-            r.thumb->setCover(true, STILL_ANCHOR);
+            // source-aware (ui/image_fit.h Poster): a real 16:9 still fills the tile; a portrait image (providers often
+            // repeat the series cover) is shown whole instead of being cropped to a 16:9 fragment
             r.bg->add(r.thumb);
             const float x = tx + L::S_THUMB_W + 28;
             r.name = ui::label(r.bg, "", theme::BODY, x, 20);
@@ -829,12 +847,18 @@ namespace {
 
         bool hasSeasons() const { return info && !info->seasons.empty(); }
 
+        // the provider's landscape backdrop from get_series_info ("" = none or not loaded yet)
+        std::string backdropUrl() const { return info ? info->series.backdrop : std::string(); }
+
         // the cover (large, then grid size) and the stills of the episodes on screen and a few below
         void requestImages() {
             if (!app.settings().get().loadImages) {
                 return;
             }
-            std::vector<ImageRequest> req = {{ImageKind::PosterLarge, series.cover}, {ImageKind::Poster, series.cover}};
+            std::vector<ImageRequest> req = {{ImageKind::Poster, series.cover}, {ImageKind::PosterLarge, series.cover}};
+            if (!backdropUrl().empty()) {
+                req.push_back({ImageKind::Backdrop, backdropUrl()});
+            }
             if (info && seasonIndex < (int) info->seasons.size()) {
                 const auto &eps = info->seasons[(size_t) seasonIndex].episodes;
                 int first = std::max(0, episodes->firstVisible() - 1);
@@ -1165,10 +1189,12 @@ namespace {
                     seasonIndex = a.season;   // open on the episode the main button plays
                     episodes->setSelected(a.episode);
                 }
+                LOG_I("detail", "series info: provider backdrop %s", backdropUrl().empty() ? "none" : "present");
+                requestImages();   // the backdrop (if any) and the stills of the season shown
             }
             imageGen = app.images().generation();
-            bindPoster(app, cover, series.title, series.cover);
-            screens::bindBackdrop(app, backdrop, series.cover);
+            bindPoster(app, cover, series.title, series.cover, false);
+            screens::bindBackdrop(app, backdrop, series.cover, backdropUrl());
             meta->setText(join({series.year > 0 ? std::to_string(series.year) : "", fmt::rating(series.rating),
                                 series.genre,
                                 series.runtimeMinutes > 0 ? tr("detail.per_episode", {std::to_string(series.runtimeMinutes)}) : "",

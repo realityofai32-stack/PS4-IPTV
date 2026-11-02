@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 
@@ -55,15 +56,30 @@ namespace {
     }
 }
 
+// Texture pages are powers of two (makeTexture), so a box is chosen by the page it lands in:
+//   Poster       170 x 255 -> 256 x 256 page, 256 KiB (as 140 x 210 was): the grid's 166 x 249 tile and the Home
+//                card's 170 x 255 poster are drawn at ~1:1 instead of the 1.19x upscale of v2
+//   PosterLarge  400 x 600 -> 512 x 1024, 2 MiB: the 320 x 480 movie poster, and the poster-derived backdrop
+//                (~587 x 880 on Home) at ~1.47x instead of the ~3.9x crop of v2
+//   Backdrop    1024 x 576 -> 1024 x 1024, 4 MiB: a real landscape backdrop for the 1320 x 800 hero (1.29x)
+// Every texture counts against the one byte-bounded LRU (MEMORY_BYTES): bigger images mean fewer cached ones,
+// never a higher peak.
 std::vector<images::Box> ImageLoader::boxes(ImageKind kind) {
     switch (kind) {
         case ImageKind::Poster:
-            return {{140, 210}};
+            return {{170, 255}};
         case ImageKind::PosterLarge:
-            return {{340, 510}};
+            return {{400, 600}};
+        case ImageKind::Backdrop:
+            return {{1024, 576}};
         default:
             return {{96, 52}, {340, 190}};
     }
+}
+
+int ImageLoader::maxSourceDimension(ImageKind kind) {
+    // a 2048 px backdrop decodes into <= 16 MiB of RGBA for a moment; original-size 4K art falls back to the poster
+    return kind == ImageKind::Backdrop ? 2048 : images::MAX_DIMENSION;
 }
 
 ImageLoader::ImageLoader(JobSystem &j, const std::string &cacheDir)
@@ -165,7 +181,8 @@ void ImageLoader::start(const std::string &k) {
     std::shared_ptr<images::DiskCache> cache = disk;
     std::weak_ptr<bool> weak = alive;
     std::vector<images::Box> variantBoxes = boxes(pending->kind);
-    jobs.submit(JobPriority::Low, "image", [pending, cache, variantBoxes](const CancelToken &token) {
+    int maxSource = maxSourceDimension(pending->kind);
+    jobs.submit(JobPriority::Low, "image", [pending, cache, variantBoxes, maxSource](const CancelToken &token) {
         images::Fetcher fetch = [&token](const std::string &u) {
             http::Request req;
             req.url = u;
@@ -189,7 +206,7 @@ void ImageLoader::start(const std::string &k) {
             }
             return f;
         };
-        pending->outcome = images::loadImage(pending->url, *cache, fetch, clockx::unixNow(), variantBoxes);
+        pending->outcome = images::loadImage(pending->url, *cache, fetch, clockx::unixNow(), variantBoxes, maxSource);
     }, [this, weak, pending]() {
         if (weak.lock()) {
             decoded.push_back(pending);
@@ -223,6 +240,16 @@ void ImageLoader::finish(const std::shared_ptr<Pending> &p) {
     for (const auto &evicted: memory.put(p->key, set, bytes)) {
         scheduler.forget(evicted);
     }
+    if (p->kind == ImageKind::Backdrop) {
+        // never a pile of 4 MiB backdrops: the oldest leaves memory (a screen still showing it keeps it alive)
+        backdropKeys.erase(std::remove(backdropKeys.begin(), backdropKeys.end(), p->key), backdropKeys.end());
+        backdropKeys.push_back(p->key);
+        while ((int) backdropKeys.size() > MAX_BACKDROPS) {
+            memory.erase(backdropKeys.front());
+            scheduler.forget(backdropKeys.front());
+            backdropKeys.pop_front();
+        }
+    }
     scheduler.finished(p->key, images::Scheduler::Result::Ok, now);
     gen++;
     LOG_V("images", "image %s kind %d ready: %s%s (memory %d images, %lld KiB)", hash.c_str(), (int) p->kind,
@@ -231,6 +258,7 @@ void ImageLoader::finish(const std::shared_ptr<Pending> &p) {
 
 void ImageLoader::clearCache(std::function<void(int64_t)> done) {
     memory.clear();     // widgets keep what they show until they rebind
+    backdropKeys.clear();
     scheduler.reset();
     gen++;
     std::shared_ptr<images::DiskCache> cache = disk;

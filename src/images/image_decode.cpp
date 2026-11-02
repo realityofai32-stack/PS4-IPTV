@@ -73,7 +73,7 @@ namespace images {
         return ct.compare(0, 6, "image/") == 0 && ct != "image/svg+xml";
     }
 
-    bool decode(const std::string &bytes, Image &out, std::string *error) {
+    bool decode(const std::string &bytes, Image &out, std::string *error, int maxDimension) {
         out = Image();
         Format f = sniff(bytes);
         if (!decodable(f)) {
@@ -100,7 +100,8 @@ namespace images {
             }
             return false;
         }
-        if (w <= 0 || h <= 0 || w > MAX_DIMENSION || h > MAX_DIMENSION) {
+        const int limit = std::min(maxDimension, MAX_DIMENSION);
+        if (w <= 0 || h <= 0 || w > limit || h > limit) {
             if (error) {
                 *error = "image dimensions out of range: " + std::to_string(w) + "x" + std::to_string(h);
             }

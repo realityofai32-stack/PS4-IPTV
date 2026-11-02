@@ -31,9 +31,10 @@
 #include "../network/jobs.h"
 
 enum class ImageKind {
-    Logo,          // channel logo: [0] row tile, [1] details panel
-    Poster,        // movie poster / series cover in grids and cards: [0]
-    PosterLarge    // detail screen poster: [0]
+    Logo,          // channel logo: [0] row tile, [1] details panel / Home card
+    Poster,        // movie poster / series cover in grids, Home cards, series detail cover: [0]
+    PosterLarge,   // movie detail poster, poster-derived backdrops: [0]
+    Backdrop       // real landscape backdrop / fanart (provider backdrop_path): [0]; at most MAX_BACKDROPS in memory
 };
 
 struct ImageVariant {
@@ -58,6 +59,12 @@ public:
 
     // the box each variant is prepared for (aspect ratio kept, never upscaled on the CPU)
     static std::vector<images::Box> boxes(ImageKind kind);
+
+    // largest source image accepted for a kind (either side): bounds the transient decode buffer
+    static int maxSourceDimension(ImageKind kind);
+
+    // backdrops are 4 MiB textures: only the most recent ones stay in memory (one per screen is the norm)
+    static const int MAX_BACKDROPS = 2;
 
     ImageLoader(JobSystem &jobs, const std::string &cacheDir);
 
@@ -115,6 +122,7 @@ private:
     images::LruCache<std::shared_ptr<ImageSet>> memory;
     std::unordered_map<std::string, std::string> normalizedUrls;
     std::deque<std::shared_ptr<Pending>> decoded;
+    std::deque<std::string> backdropKeys;   // loaded backdrops, oldest first
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
     double now = 0;
     unsigned gen = 0;

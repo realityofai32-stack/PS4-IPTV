@@ -3,10 +3,11 @@
 namespace images {
 
     namespace {
-        bool decodeVariants(const std::string &bytes, const std::vector<Box> &boxes, LoadOutcome &out) {
+        bool decodeVariants(const std::string &bytes, const std::vector<Box> &boxes, int maxDimension,
+                            LoadOutcome &out) {
             Image img;
             std::string err;
-            if (!decode(bytes, img, &err)) {
+            if (!decode(bytes, img, &err, maxDimension)) {
                 out.detail = err;
                 return false;
             }
@@ -20,12 +21,12 @@ namespace images {
     }
 
     LoadOutcome loadImage(const std::string &url, DiskCache &disk, const Fetcher &fetch, int64_t now,
-                          const std::vector<Box> &boxes) {
+                          const std::vector<Box> &boxes, int maxDimension) {
         LoadOutcome out;
         std::string cached;
         DiskCache::Lookup lookup = disk.get(url, now, cached);
         if (lookup == DiskCache::Lookup::Fresh) {
-            if (decodeVariants(cached, boxes, out)) {
+            if (decodeVariants(cached, boxes, maxDimension, out)) {
                 out.result = Scheduler::Result::Ok;
                 out.fromDisk = true;
                 return out;
@@ -49,7 +50,7 @@ namespace images {
             failure = "empty response";
         } else if (!acceptableContentType(r.contentType)) {
             failure = "not an image (Content-Type " + r.contentType + ")";
-        } else if (decodeVariants(r.body, boxes, out)) {
+        } else if (decodeVariants(r.body, boxes, maxDimension, out)) {
             std::string err;
             if (!disk.put(url, r.body, now, &err)) {
                 out.detail += " (not cached: " + err + ")";
@@ -60,7 +61,7 @@ namespace images {
             failure = out.detail;   // decode error
         }
 
-        if (lookup == DiskCache::Lookup::Stale && !cached.empty() && decodeVariants(cached, boxes, out)) {
+        if (lookup == DiskCache::Lookup::Stale && !cached.empty() && decodeVariants(cached, boxes, maxDimension, out)) {
             out.result = Scheduler::Result::Ok;
             out.fromDisk = true;
             out.staleUsed = true;

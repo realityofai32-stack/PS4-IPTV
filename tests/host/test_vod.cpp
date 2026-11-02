@@ -151,6 +151,7 @@ TEST(series_info_parse) {
     CHECK(xtream::parseSeriesInfo(SERIES_INFO, si, err));
     CHECK(si.series.name == "Crossing Lines" && si.series.plot.empty() && si.series.year == 2013);
     CHECK(si.series.genre == "Drama" && si.series.runtimeMinutes == 45);
+    CHECK(si.series.backdrop.empty());   // "backdrop_path": [] (the provider used in testing sends none)
     CHECK_EQ(si.seasons.size(), (size_t) 2);   // season 9 has no episodes
     const Season &s1 = si.seasons[0];
     CHECK(s1.number == 1 && s1.name == "1. Sezon" && s1.cover == "https://img.example/s1.jpg");
@@ -166,6 +167,12 @@ TEST(series_info_parse) {
     CHECK(xtream::parseSeriesInfo(R"({"info":{"name":"S"},"episodes":[{"id":"1","season":1,"episode_num":2},
         {"id":"0","season":1,"episode_num":1}]})", si, err) && si.seasons[0].episodes[0].id == "0");
     CHECK(xtream::parseSeriesInfo(R"({"info":[],"episodes":[]})", si, err) && si.seasons.empty());
+    // a real landscape backdrop: string or the first entry of an array
+    CHECK(xtream::parseSeriesInfo(R"({"info":{"name":"S","backdrop_path":["https://img.example/w1280/a.jpg",
+        "https://img.example/w1280/b.jpg"]},"episodes":[]})", si, err));
+    CHECK(si.series.backdrop == "https://img.example/w1280/a.jpg");
+    CHECK(xtream::parseSeriesInfo(R"({"info":{"name":"S","backdrop_path":" https://img.example/c.jpg "}})", si, err));
+    CHECK(si.series.backdrop == "https://img.example/c.jpg");
     CHECK(!xtream::parseSeriesInfo("[1,2]", si, err));
 }
 

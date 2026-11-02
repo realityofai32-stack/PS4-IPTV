@@ -77,11 +77,17 @@ namespace screens {
         ui::box(parent, FloatRect(0, solidY, theme::SCREEN_W, theme::SCREEN_H - solidY), theme::backgroundSecondary(), 0);
     }
 
-    void bindBackdrop(App &app, ui::Backdrop *backdrop, const std::string &url) {
-        std::shared_ptr<ImageSet> big = app.images().get(ImageKind::PosterLarge, url);
-        std::shared_ptr<ImageSet> small = big ? nullptr : app.images().get(ImageKind::Poster, url);
-        const std::shared_ptr<ImageSet> &img = big ? big : small;
-        backdrop->set(img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
+    void bindBackdrop(App &app, ui::Backdrop *backdrop, const std::string &posterUrl, const std::string &backdropUrl) {
+        if (!backdropUrl.empty()) {
+            std::shared_ptr<ImageSet> art = app.images().get(ImageKind::Backdrop, backdropUrl);
+            if (art) {
+                backdrop->set(art->at(0).texture, art->at(0).size, ui::Backdrop::Art::Landscape);
+                return;
+            }
+        }
+        std::shared_ptr<ImageSet> poster = app.images().get(ImageKind::PosterLarge, posterUrl);
+        backdrop->set(poster ? poster->at(0).texture : nullptr, poster ? poster->at(0).size : Vector2i(),
+                      ui::Backdrop::Art::Poster);
     }
 
     void hudShade(C2DObject *parent, float height, float solid, bool top) {

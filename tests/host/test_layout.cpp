@@ -37,10 +37,21 @@ TEST(layout_frame_and_rails) {
 
 TEST(layout_home) {
     using namespace layout::home;
-    // four cards fill the content width exactly
+    // the visible cards fill the content width exactly
     CHECK_EQ(CARDS_VISIBLE * CARD_W + (CARDS_VISIBLE - 1) * CARD_GAP, CONTENT_W);
-    // 16:9 artwork
-    CHECK(CARD_ART_H / CARD_W > 0.55f && CARD_ART_H / CARD_W < 0.58f);
+    // v3 media card: a landscape card whose poster area is a whole 2:3 poster taking 30-38 % of the width,
+    // exactly the Poster texture box (170 x 255, ImageLoader::boxes) so it is drawn 1:1, never cropped to 16:9
+    CHECK(CARD_W > CARD_H * 1.6f);
+    CHECK(CARD_H / CARD_ART_W > 1.49f && CARD_H / CARD_ART_W < 1.51f);
+    CHECK(CARD_ART_W / CARD_W >= 0.30f && CARD_ART_W / CARD_W <= 0.38f);
+    CHECK_EQ(CARD_ART_W, 170.0f);
+    CHECK_EQ(CARD_H, 255.0f);
+    // the text column beside it: a two-line title (2 x 35), a label line, a caption line and the progress bar
+    CHECK_EQ(CARD_TEXT_X + CARD_TEXT_W + CARD_PAD, CARD_W);
+    CHECK(CARD_TEXT_W >= 300);
+    CHECK(CARD_PAD - 4 + 2 * LINE_28 + 8 + LINE_24 + 4 + 28 < CARD_H - CARD_PAD - 6 - 8);
+    // larger than the v2 cards (408 x 230 artwork)
+    CHECK(CARD_W * CARD_H > 408.0f * 230.0f);
     // navigation: the icons end before the clock column, inside the safe area
     float iconsRight = CONTENT_W - CLOCK_W;
     float iconsLeft = iconsRight - 4 * ICON - 3 * ICON_GAP;
@@ -63,10 +74,10 @@ TEST(layout_home) {
     CHECK(RAILS_Y + RAIL_HEADING_H < BOTTOM_FADE_Y - 100);
     // a focused rail is fully above the hints
     CHECK(VIEW_BOTTOM <= CONTENT_BOTTOM);
-    CHECK_EQ(CARD_H, CARD_ART_H + CARD_TITLE_GAP + CARD_TEXT_H);
-    // focus scale stays inside the card gap (both neighbours may not touch)
-    CHECK(CARD_W * (CARD_FOCUS_SCALE - 1) / 2 + FOCUS_BORDER < CARD_GAP / 2);
-    CHECK(CARD_ART_H * (CARD_FOCUS_SCALE - 1) / 2 + FOCUS_BORDER < CARD_TITLE_GAP);
+    CHECK_EQ(RAIL_PITCH, RAIL_HEADING_H + CARD_H + layout::home::RAIL_GAP);
+    // the focus ring (no scaling) stays inside the card gap and under the next rail's heading
+    CHECK(CARD_RING_GAP + FOCUS_BORDER < CARD_GAP / 2);
+    CHECK(CARD_RING_GAP + FOCUS_BORDER < layout::home::RAIL_GAP / 2);
 }
 
 TEST(layout_catalog) {

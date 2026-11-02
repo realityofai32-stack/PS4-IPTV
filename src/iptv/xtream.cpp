@@ -326,6 +326,7 @@ namespace xtream {
             s.rating = clampRating(o["rating"].asDouble(0));
             s.runtimeMinutes = (int) o["episode_run_time"].asInt(0);
             s.lastModified = o["last_modified"].asInt(0);
+            s.backdrop = firstString(o["backdrop_path"]);
             if (!o["category_id"].asString().empty()) {
                 s.categoryId = o["category_id"].asString();
             }

@@ -50,8 +50,11 @@ namespace screens {
     // scrolling pages: content slides under an eased fade and a solid band behind the controller hints
     void bottomFade(c2d::C2DObject *parent);
 
-    // poster-derived backdrop: the large poster when it is ready, else the grid poster, else nothing (a glow)
-    void bindBackdrop(App &app, ui::Backdrop *backdrop, const std::string &posterUrl);
+    // Hero / detail artwork: the provider's real landscape backdrop (backdropUrl, ImageKind::Backdrop) when it is
+    // loaded; otherwise the large portrait poster as Poster art (ratio kept, at the right edge); otherwise nothing
+    // (a faint glow). The small grid poster is never blown up to backdrop size.
+    void bindBackdrop(App &app, ui::Backdrop *backdrop, const std::string &posterUrl,
+                      const std::string &backdropUrl = "");
 
     ui::HintBar *hintBar(c2d::C2DObject *parent, const Hints &hints);
 

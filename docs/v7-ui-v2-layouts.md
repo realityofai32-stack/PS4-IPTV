@@ -28,7 +28,8 @@ Focus language (one per element type):
 
 | Element | Rest | Focused |
 |---|---|---|
-| Poster / card | artwork dimmed to 82 %, quiet title | artwork 100 %, scale 1.04-1.06 around its centre, 4 px accent outline, title strong + metadata line |
+| Poster (grid) | artwork dimmed to 82 %, quiet title | artwork 100 %, scale 1.04 around its centre, 4 px accent outline, title strong + metadata line |
+| Home media card (v3) | neutral card surface, artwork dimmed to 82 % | raised neutral surface, accent ring 5 px outside the card, artwork 100 %, no scaling |
 | List row | no surface, 1 px divider | accent-tinted surface + 4 px accent edge on the left, strong text |
 | Rail row (category) | quiet text; the open one: accent edge + primary semibold | accent-tinted surface + accent edge, strong text |
 | Button | primary: accent fill; secondary: elevated pill | accent ring 6 px outside the pill |
@@ -56,13 +57,13 @@ y744 │ [ 408 x 230 ]  [ 408 x 230 ]  [ 408 x 230 ]  [ 408 x 230 ]   (peek, fad
 | Secondary actions | 4 round 52 px icon buttons, 12 px apart, transparent at rest (accent fill when focused), x 1470..1714; focused icon's name 22 px under it |
 | Clock | 28 px semibold, right-aligned at 1824 |
 | Notices | offline / HTTPS / expiry warning, 22 px, under the brand (only when there is one; no permanent status line) |
-| Hero backdrop | poster layer x 600..1920, y 0..800 (page coordinates), cover-cropped from the 340 x 510 poster (anchor 18 % from the top), tint + shade; eased fades: left 640 (600..1240), bottom 300 (500..800), top 240 (under the navigation). No poster tile. |
+| Hero backdrop (v3) | layer x 600..1920, y 0..800 (page coordinates), tint + shade; eased fades: left 720 (600..1320), bottom 300 (500..800), top 240 (under the navigation). Real landscape backdrop (provider `backdrop_path`, 1024 x 576 texture): cover-cropped. Otherwise the 400 x 600 poster at its own ratio, 1.1 x the layer height (~587 x 880), right edge 40 px past the screen, cropped by the layer, its left edge dissolving over 336 px (`ui::Backdrop`, `fit::posterBackdrop`). Never stretched to the layer. |
 | Hero text | x 96, max width 1000. Anchored on the buttons, stacked upwards: buttons y 548; progress bar 480 x 6 at y 504 with time 22 px to its right; meta 24 px secondary; episode line 28 px; title 64 px semibold (max 2 lines); eyebrow 24 px semibold accent text. One-line title: eyebrow at ~y 270; two lines: ~y 195 (navigation ends at 118) |
 | Hero buttons | Resume 360 x 76 (primary), Details 250 x 76, 24 apart. Start state (no Continue Watching): Live TV / Movies / Series 250 each |
-| Rails | first heading at y 688; pitch 420 (heading 56 + card 308 + gap 56) |
-| Cards | 4 visible, 408 x 230 artwork (16:9) + title 24 px semibold + one 22 px secondary line; 32 px apart (4 x 408 + 3 x 32 = 1728). Progress bar inset 16 px at the bottom of the artwork |
-| Card artwork | movies / episodes: the large poster (340 x 510) cover-cropped to 16:9 at its upper part (1.2x, sharp) - the grid poster cropped the same way until it arrives; channels: the 340 x 190 logo centred on a logo tile |
-| Card focus | artwork scale 1.04 (+8 / +5 px), 4 px accent outline, artwork brightens, title strong |
+| Rails | first heading at y 688; pitch 363 (heading 56 + card 255 + gap 52) |
+| Cards (v3) | 3 visible landscape media cards, 552 x 255, 36 px apart (3 x 552 + 2 x 36 = 1728). Left: the whole poster 170 x 255 (30.8 %); right, inset 28: title 28 px semibold (2 lines), episode / kind 24 px, time left / year 22 px, 6 px progress bar at the bottom (in-progress items) |
+| Card artwork (v3) | movies / episodes / series: the Poster texture (170 x 255) drawn 1:1, `fit::Mode::Poster` (no 16:9 crop); channels: the 340 x 190 logo variant contained (`fit::Mode::Logo`, 22 px inset, <= 1.6x) in a 170 x 255 neutral logo area |
+| Card focus | see the focus table: raised neutral surface + accent ring, no scaling (the poster stays 1:1) |
 | Page scroll | focused rail's lowest text edge at y 958: rail 0 = 94, rail 1 = 514, rail 2 = 934. Once scrolled: solid band 0..124 + eased fade 124..208 under the navigation |
 | Rest view | rail 0 artwork y 744..872 visible, then fades under the hint band (signals more content) |
 | Favorites | landscape cards of real favorites (channels; movies / series whose catalog is in memory). None loadable: one quiet line, not focusable. No "See all" tile (the navigation's Favorites button opens the full list) |
@@ -88,8 +89,8 @@ y 150  Rail 96..426 │ Grid 462..1824: 7 x 166 x 249 posters, ~30 px apart
 | Cell | poster 166 x 249 (2:3), title 24 px at +16, metadata 22 px at +48 (focused cell only); cell 325, row gap 30, pitch 355 |
 | Rows | 2 whole rows (y 150..475, 505..830) + a peek row at y 860 (about 110 px visible before the fade); 14 full + 7 partial posters |
 | Density vs v1 | v1: 24 posters of 140 x 210; v2: 14 + 7 peeking of 166 x 249 (+41 % area each), gaps 30 / 30 instead of 19 / 36; rail 330 instead of 400 |
-| Focus | scale 1.06 around the centre (+5 / +7.5 px), 4 px outline, artwork 100 % (others 82 %), title strong semibold, metadata line (year · rating · progress) |
-| Image | the 140 x 210 grid poster drawn at 166 x 249 (1.19x bilinear) - see uncertainties |
+| Focus | scale 1.04 around the centre (+3.3 / +5 px), 4 px outline, artwork 100 % (others 82 %), title strong semibold, metadata line (year · rating · progress) |
+| Image (v3) | the 170 x 255 Poster texture (same 256 x 256 GPU page as v2's 140 x 210) drawn at 166 x 249 (0.98x), 173 x 259 focused (1.02x) |
 
 ## MOVIE DETAIL
 
@@ -107,7 +108,7 @@ y 150  Rail 96..426 │ Grid 462..1824: 7 x 166 x 249 posters, ~30 px apart
 | Item | Value |
 |---|---|
 | Breadcrumb | V7 symbol 26 px + "Movies" 24 px semibold secondary at y 54 |
-| Backdrop | x 560..1920, y 0..1080, cover-cropped poster (anchor 18 %), eased fades: left 700 (560..1260), bottom 440, top 200 |
+| Backdrop | x 560..1920, y 0..1080: the real backdrop once get_vod_info has one (cover), else the poster at its own ratio against the right edge (v3); eased fades: left 700 (560..1260), bottom 440, top 200 |
 | Poster | x 96, y 160, 320 x 480, radius 12 (large poster, downscaled = sharp) |
 | Text column | x 480, width 1344; plot width 1040 |
 | Stack | title y 160 (64 px; 44 px when longer than 1.6 lines), facts 28 px secondary, genre 24 px muted, plot 28 px primary, progress line + 480 px bar, buttons (y >= 540), people 24 px muted, technical 22 px muted |
@@ -134,7 +135,7 @@ y 150  Rail 96..426 │ Grid 462..1824: 7 x 166 x 249 posters, ~30 px apart
 | Cover | x 96, y 112, 180 x 270 |
 | Text | x 324, width 1500: title 44 px (1 line) y 108, facts 28 px secondary, plot 24 px 2 lines (1100 wide) |
 | Buttons | y 318..382 (64 high, bottom-aligned with the cover): Resume 470, Favorite 300 |
-| Backdrop | x 560..1920, y 0..680, eased fades: left 700, bottom 320 (360..680), top 200 - the episodes sit on clean background |
+| Backdrop | x 560..1920, y 0..680: real backdrop from get_series_info when present, else the poster (v3); eased fades: left 700, bottom 320 (360..680), top 200 - the episodes sit on clean background. Cover 180 x 270 from the 170 x 255 Poster texture (v3) |
 | Season chips | y 414, 48 high, width = text + padding (min 150), 12 apart |
 | Episodes | y 486..954: 4 rows of 108 + 12 gaps. Row: 160 x 90 still (cover-cropped, the series cover when the provider repeats it), title 28 px, "S02E02 · 58 min · 1080p" 22 px secondary, right: position + 240 px bar or state (✓ watched / ↓ downloaded / ↓ 42 %) |
 | Row states | rest: no surface, divider; focused: accent-tinted surface + accent edge, title semibold strong |

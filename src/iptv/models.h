@@ -100,6 +100,7 @@ namespace iptv {
         int year = 0;
         int runtimeMinutes = 0;    // episode_run_time
         int64_t lastModified = 0;
+        std::string backdrop;      // first backdrop_path of get_series_info (landscape art); not kept in the list
     };
 
     // What a list parser saw (get_vod_streams / get_series / get_live_streams). Items are kept whenever they
