@@ -413,7 +413,7 @@ namespace {
                                theme::RADIUS_LARGE);
                 c.bg->setOutlineColor(theme::accent());
                 c.mark = ui::box(c.bg, FloatRect(48, 52, 48, 6), theme::accent(), 3);
-                c.name = ui::label(c.bg, tr(names[i]), theme::TITLE, 48, 80, ui::Weight::SemiBold);
+                c.name = ui::label(c.bg, tr(names[i]), theme::HEADING, 48, 84, ui::Weight::SemiBold);
                 c.name->setMaxWidth(cardW - 96);
                 auto *d = ui::label(c.bg, tr(details[i]), theme::BODY, 48, 150, ui::Weight::Regular, theme::textSecondary());
                 d->setMaxWidth(cardW - 96);

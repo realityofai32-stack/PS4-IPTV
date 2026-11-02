@@ -549,7 +549,7 @@ namespace {
             credits->setMaxLines(2);
             plot = ui::label(this, "", theme::LABEL, S_TEXT_X, 0, ui::Weight::Regular, theme::textPrimary());
             plot->setMaxWidth(std::min(w, 1240.0f));
-            plot->setMaxLines(3);
+            plot->setMaxLines(2);   // a short plot: the actions keep their line under the cover
             for (int i = 0; i < 2; i++) {
                 // the main button holds "Resume S01E03 · 1:02:15"
                 buttons[i] = new ui::Button("", FloatRect(S_TEXT_X + (float) i * 520, S_TOP + S_COVER_H - 76,
