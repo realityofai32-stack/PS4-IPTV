@@ -2,7 +2,7 @@
 # Builds the PS4 IPTV production PKG (title IPTV00002) natively on Linux: the counterpart of
 # scripts/build-ps4iptv.ps1. configure -> compile -> link -> fself (eboot.bin) -> credential guard -> SFO -> GP4
 # -> PKG, with cmake/ps4-linux.cmake and the project-local toolchain (toolchain/, see docs/linux-build.md).
-# Output: build/ps4iptv-<type>/IV0001-IPTV00002_00-IPTV0000200xx000.pkg
+# Output: build/ps4iptv-<type>/IV0001-IPTV00002_00-IPTV000020002000.pkg
 # Usage: scripts/build-ps4iptv.sh [Release|Debug] [--clean]
 set -euo pipefail
 

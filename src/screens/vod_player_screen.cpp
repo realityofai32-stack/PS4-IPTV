@@ -9,8 +9,8 @@
 //     episode and app exit the position is queried from mpv right before stopping and written at once
 //   - overlay: hides 4 s after the last input while playing (player/hud_logic.h)
 //   - episodes: L1/R1 previous/next, an "Up next" panel at the end. Next-episode countdown (app/auto_next.h,
-//     Settings > Playback > Auto-play next episode, on by default): in the last 15 s of an episode with a known
-//     next episode a small panel bottom right counts 15..1; the episode plays to its real end, then the next one
+//     Settings > Playback > Auto-play next episode, on by default): in the last 45 s of an episode with a known
+//     next episode a small panel bottom right counts 45..1; the episode plays to its real end, then the next one
 //     starts. Cross plays it at once, Circle cancels it for this playback. Only while it is shown do Cross / Circle
 //     mean Play now / Cancel. The end of file is the transition (also for files whose position never reaches the
 //     duration), exactly once; playback errors never are. Every transition is startItem(), the same path as L1 / R1.

@@ -21,8 +21,8 @@
 //   - offline (the session could not reach the provider): only a downloaded next episode (VodItem::localPath)
 //
 // When (Countdown), driven by the player's playback time, never by a wall clock (a pause pauses it):
-//   Idle         -> Counting      remaining <= COUNTDOWN_SECONDS (15) while the episode plays normally: 15 .. 1
-//   Counting     -> Idle          the user seeked back: remaining > COUNTDOWN_SECONDS + RESET_MARGIN (16), or
+//   Idle         -> Counting      remaining <= COUNTDOWN_SECONDS (45) while the episode plays normally: 45 .. 1
+//   Counting     -> Idle          the user seeked back: remaining > COUNTDOWN_SECONDS + RESET_MARGIN (46), or
 //                                 playback stopped running normally (buffering / reconnecting / error, Options open)
 //   Counting     -> Cancelled     Circle: no automatic next episode for the rest of this playback
 //   Counting     -> Transitioning Cross (Play now), or the position reached the duration (END_TOLERANCE: float
@@ -42,7 +42,7 @@
 
 namespace autonext {
 
-    constexpr double COUNTDOWN_SECONDS = 15;
+    constexpr double COUNTDOWN_SECONDS = 45;
     constexpr double RESET_MARGIN = 1;       // a seek back must leave this much more than the countdown to reset it
     constexpr double END_TOLERANCE = 0.001;  // remaining seconds that count as "at the end" (rounding only)
 
@@ -78,7 +78,7 @@ namespace autonext {
 
         bool visible() const { return state == Phase::Counting; }
 
-        // the number shown while counting: 15 14 .. 2 1 (never 0)
+        // the number shown while counting: 45 44 .. 2 1 (never 0)
         int seconds() const { return shownSeconds; }
 
         // remaining / COUNTDOWN_SECONDS while counting (the panel's thin bar), 0 otherwise

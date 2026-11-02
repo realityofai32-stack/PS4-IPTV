@@ -12,12 +12,16 @@ if (NOT PS4)
     message(FATAL_ERROR "PS4 only: configure with -DCMAKE_TOOLCHAIN_FILE=cmake/ps4-windows.cmake")
 endif ()
 
-set(APP_VERSION "0.2.0")
+set(APP_VERSION "0.3.0")
 set(APP_TITLE_ID "IPTV00002")      # unique: not PPLA00001 (pPlay), IPTV00001 (old experiment), IPTT00001 (test)
 # shown on the PS4 home screen. Only the display name changed with the V7 IPTV brand: the Title ID, content ID and
-# /data/PS4IPTV/ stay, so the PKG installs over v0.2.0 and keeps profiles, settings, history and downloads.
+# /data/PS4IPTV/ stay, so the PKG installs over earlier versions and keeps profiles, settings, history and downloads.
 set(APP_PKG_TITLE "V7 IPTV")
-set(APP_PKG_VERSION "00.20")       # PS4 APP_VER format XX.YY for 0.2.0
+set(APP_PKG_VERSION "00.30")       # PS4 APP_VER format XX.YY for 0.3.0
+# The content ID's last part stays the one v0.2.0 was published with (IV0001-IPTV00002_00-IPTV000020002000): the
+# release PKG keeps its name and installs over v0.2.0 as an update (same content ID, higher APP_VER). add_pkg would
+# otherwise derive it from APP_PKG_VERSION.
+set(PKG_CONTENT_VERSION "0002000")
 
 set(PLATFORM_PS4 ON CACHE BOOL "Sony PS4 target platform" FORCE)
 set(PPLAY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/pplay-reference" CACHE PATH "pPlay checkout")

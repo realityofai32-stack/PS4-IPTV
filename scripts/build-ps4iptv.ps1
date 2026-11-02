@@ -5,7 +5,7 @@
 .DESCRIPTION
     configure -> compile -> link -> fself (eboot.bin) -> credential guard -> SFO -> GP4 -> PKG.
     Requires scripts\setup-toolchain.ps1 and the pPlay checkout (scripts\build-pplay-reference.ps1).
-    Output: build\ps4iptv-<type>\IV0001-IPTV00002_00-IPTV000020001000.pkg
+    Output: build\ps4iptv-<type>\IV0001-IPTV00002_00-IPTV000020002000.pkg
 #>
 param(
     [ValidateSet('Release', 'Debug')] [string] $BuildType = 'Release',

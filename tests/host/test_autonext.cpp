@@ -1,7 +1,7 @@
 // Series episode context and next-episode countdown / auto-play (app/auto_next.h): the queue every entry point
 // builds (Series Detail, Continue Watching, Downloads; catalog, downloads, the episode alone, the late catalog),
 // which episode is next (catalog order, season boundaries, the last episode, movies / live, offline downloads),
-// the countdown state machine (15..1, Play now, Cancel, seeking back, end of file, exactly one transition, errors,
+// the countdown state machine (45..1, Play now, Cancel, seeking back, end of file, exactly one transition, errors,
 // nothing cut from the end) and the Auto-play next episode setting's migration.
 
 #include <cmath>
@@ -179,38 +179,50 @@ TEST(autonext_offline_needs_the_downloaded_next_episode) {
 }
 
 namespace {
-    const std::vector<int> FIFTEEN = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+    // 45 44 43 ... 3 2 1
+    std::vector<int> fullSequence() {
+        std::vector<int> v;
+        for (int i = (int) autonext::COUNTDOWN_SECONDS; i >= 1; i--) {
+            v.push_back(i);
+        }
+        return v;
+    }
 }
 
-TEST(autonext_countdown_15_to_1_then_one_transition_at_the_end) {
-    // 2 / 3 / 16. appears when 15 s are left, counts 15 .. 1 (never 0); the episode plays to its real end
+TEST(autonext_countdown_45_to_1_then_one_transition_at_the_end) {
+    // the window is 45 s (shown from 45 s left, reset beyond 46 s)
+    CHECK(autonext::COUNTDOWN_SECONDS == 45 && autonext::RESET_MARGIN == 1);
+    // appears when 45 s are left, counts 45 .. 1 (never 0); the episode plays to its real end
     Countdown c;
     std::vector<int> shown;
-    CHECK(!c.update(frame(30)) && !c.update(frame(15.01)) && !c.visible() && c.phase() == Phase::Idle);
-    CHECK(!c.update(frame(15.0)) && c.visible() && c.seconds() == 15);
+    CHECK(!c.update(frame(60)) && !c.update(frame(45.01)) && !c.visible() && c.phase() == Phase::Idle);
+    CHECK(!c.update(frame(45.0)) && c.visible() && c.seconds() == 45);
     c.reset();
-    int starts = playOut(c, 20.0, shown);
+    int starts = playOut(c, 50.0, shown);
     CHECK_EQ(starts, 1);
-    CHECK(shown == FIFTEEN);
+    CHECK(shown == fullSequence() && shown.size() == 45);
+    for (int n: shown) {
+        CHECK(n >= 1 && n <= 45);                    // never 0
+    }
     CHECK(c.phase() == Phase::Transitioning && !c.visible());
     // 20. nothing is cut: a quarter second (or a millisecond and a half) before the end it still shows 1
     Countdown cut;
     CHECK(!cut.update(frame(0.25)) && cut.visible() && cut.seconds() == 1);
     CHECK(!cut.update(frame(0.0015)) && cut.visible());
     CHECK(cut.update(frame(0)));                      // the position reached the duration
-    // the bar shrinks over the whole 15 s window
+    // the bar shrinks over the whole 45 s window
     Countdown d;
-    d.update(frame(15.0));
+    d.update(frame(45.0));
     float full = d.fraction();
-    d.update(frame(7.5));
-    CHECK(std::fabs(full - 1.0f) < 1e-4f && std::fabs(d.fraction() - 0.5f) < 1e-4f && d.seconds() == 8);
+    d.update(frame(22.5));
+    CHECK(std::fabs(full - 1.0f) < 1e-4f && std::fabs(d.fraction() - 0.5f) < 1e-4f && d.seconds() == 23);
     // 12 / 23. after the transition nothing triggers again: not the end, not EOF, not Cross
     CHECK(!c.update(frame(0)) && !c.endOfFile(true) && !c.playNow() && !c.cancel());
     // reset() for the next item: counts again
     c.reset();
     shown.clear();
-    CHECK_EQ(playOut(c, 16.0, shown), 1);
-    CHECK(shown.front() == 15 && shown.back() == 1);
+    CHECK_EQ(playOut(c, 46.0, shown), 1);
+    CHECK(shown.front() == 45 && shown.back() == 1);
 }
 
 TEST(autonext_position_short_of_the_duration_advances_by_end_of_file) {
@@ -218,12 +230,12 @@ TEST(autonext_position_short_of_the_duration_advances_by_end_of_file) {
     // file, which is the one transition (21)
     Countdown c;
     std::vector<int> shown;
-    CHECK_EQ(playOut(c, 18.0, shown, 0.04), 0);
-    CHECK(shown == FIFTEEN && c.visible() && c.seconds() == 1);
+    CHECK_EQ(playOut(c, 48.0, shown, 0.04), 0);
+    CHECK(shown == fullSequence() && c.visible() && c.seconds() == 1);
     CHECK(c.endOfFile(true));
     CHECK(!c.endOfFile(true) && !c.update(frame(0)) && !c.playNow());
     // 24. Cross plays it now at any point of the window: the first second, the middle, the last
-    for (double at: {15.0, 7.3, 0.5}) {
+    for (double at: {45.0, 22.3, 0.5}) {
         Countdown n;
         n.update(frame(at));
         CHECK(n.visible() && n.playNow() && !n.endOfFile(true));
@@ -257,20 +269,21 @@ TEST(autonext_play_now_and_cancel) {
 }
 
 TEST(autonext_seek_back_resets_the_countdown) {
-    // 17 / 18. seeking back out of the window hides it; reaching the last 15 s again shows it again
+    // seeking back out of the window hides it; reaching the last 45 s again shows it again
     Countdown c;
-    c.update(frame(12.0));
+    c.update(frame(40.0));
     CHECK(c.visible());
-    c.update(frame(15.8));                            // jitter / a small step back: stays (hysteresis up to 16 s)
-    CHECK(c.visible() && c.seconds() == 15);
-    c.update(frame(16.2));                            // beyond 16 s: reset
+    c.update(frame(45.8));                            // jitter / a small step back: stays (hysteresis up to 46 s)
+    CHECK(c.visible() && c.seconds() == 45);
+    c.update(frame(46.2));                            // beyond 46 s: reset
     CHECK(!c.visible() && c.phase() == Phase::Idle && c.seconds() == 0);
-    c.update(frame(9.0));
-    c.update(frame(19.0));                            // Left: 10 s back
+    c.update(frame(39.0));
+    CHECK(c.visible());
+    c.update(frame(99.0));                            // L2: a minute back
     CHECK(!c.visible() && c.phase() == Phase::Idle);
     std::vector<int> shown;
-    CHECK_EQ(playOut(c, 19.0, shown), 1);
-    CHECK(shown == FIFTEEN);
+    CHECK_EQ(playOut(c, 49.0, shown), 1);
+    CHECK(shown == fullSequence());
     // a seek forward into the range enters it at the right number
     Countdown f;
     f.update(frame(2.4));
@@ -306,7 +319,7 @@ TEST(autonext_setting_off_and_migration) {
     // 17. Auto-play next episode off: no countdown, EOF ends normally
     Countdown c;
     std::vector<int> shown;
-    for (double r = 20; r >= 0; r -= 0.1) {
+    for (double r = 60; r >= 0; r -= 0.1) {
         CHECK(!c.update(frame(r, false)));
     }
     CHECK(!c.visible() && !c.endOfFile(false));
