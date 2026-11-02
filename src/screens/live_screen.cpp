@@ -328,7 +328,7 @@ namespace {
                     r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surfaceElevated()
                                                                               : theme::surface());
                     r.bg->setOutlineColor(theme::accent());
-                    r.bg->setOutlineThickness(focused ? 3 : 0);
+                    r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
                 }
             }
 
@@ -345,7 +345,7 @@ namespace {
 
         // ------------------------------------------------------------------ details panel
         void buildDetails() {
-            pane = ui::box(this, FloatRect(PANE_X, TOP, PANE_W, LIST_H), theme::surface(), theme::RADIUS);
+            pane = ui::box(this, FloatRect(PANE_X, TOP, PANE_W, LIST_H), theme::card(), theme::RADIUS);
             detailLogo = new ui::LogoView(FloatRect((PANE_W - DETAIL_LOGO_W) / 2, 28, DETAIL_LOGO_W, DETAIL_LOGO_H),
                                           72, 16, 1.6f);
             pane->add(detailLogo);
@@ -362,6 +362,7 @@ namespace {
             watch = ui::box(pane, FloatRect(28, LIST_H - 28 - 72, bw, 72), theme::surfaceElevated(), 36);
             auto *wl = ui::label(watch, tr("live.watch"), theme::BODY, 0, ui::Label::centerOffset(theme::BODY, 72),
                                  ui::Weight::SemiBold);
+            watchLabel = wl;
             float textW = wl->width();
             const float glyph = 36;
             float groupX = (bw - (glyph + 14 + textW)) / 2;
@@ -401,7 +402,9 @@ namespace {
             detailFav->setText(app.library().isFavorite(ContentType::Live, c->id)
                                ? "\xE2\x98\x85  " + tr("favorites.in_favorites") : "");
             detailFav->setPosition(28, y + 8);
+            // the primary action while a channel is focused: accent fill, caption in the accent's text colour
             watch->setFillColor(focus == 1 ? theme::accent() : theme::surfaceElevated());
+            watchLabel->setColor(focus == 1 ? theme::onAccent() : theme::textPrimary());
         }
 
         // ------------------------------------------------------------------ behaviour
@@ -516,11 +519,10 @@ namespace {
             screens::Hints h;
             if (focus == 0) {
                 h = {{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
-                     {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::Triangle, tr("home.search")}};
+                     {ui::Glyph::Triangle, tr("home.search")}};
             } else {
                 h = {{ui::Glyph::Cross, tr("live.watch")}, {ui::Glyph::Square, tr("common.favorite")},
-                     {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::L1, ""},
-                     {ui::Glyph::R1, tr("live.category")}, {ui::Glyph::Triangle, tr("home.search")}};
+                     {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")}, {ui::Glyph::Triangle, tr("home.search")}};
             }
             if (playlist) {
                 h.push_back({ui::Glyph::Options, tr("m3u.options")});
@@ -599,6 +601,7 @@ namespace {
         ui::Label *channelCaption;
         ui::Label *empty;
         RectangleShape *pane = nullptr;
+        ui::Label *watchLabel = nullptr;
         ui::LogoView *detailLogo = nullptr;
         ui::Label *detailName = nullptr;
         ui::Label *detailCategory = nullptr;

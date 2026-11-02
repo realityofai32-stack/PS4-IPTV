@@ -63,10 +63,13 @@ namespace {
             screens::header(this, tr("home.search"));
 
             // query + keyboard
-            field = ui::box(this, FloatRect(LEFT_X, FIELD_Y, LEFT_W, FIELD_H), theme::surface(), theme::RADIUS_SMALL);
+            field = ui::box(this, FloatRect(LEFT_X, FIELD_Y, LEFT_W, FIELD_H), theme::card(), theme::RADIUS);
             field->setOutlineColor(theme::accent());
-            queryText = ui::label(field, "", theme::HEADING, 24, ui::Label::centerOffset(theme::HEADING, FIELD_H));
-            queryText->setMaxWidth(LEFT_W - 48);
+            auto *icon = new ui::IconButton(ui::Icon::Search, 52);
+            icon->setPosition(14, (FIELD_H - 52) / 2);
+            field->add(icon);
+            queryText = ui::label(field, "", theme::HEADING, 84, ui::Label::centerOffset(theme::HEADING, FIELD_H));
+            queryText->setMaxWidth(LEFT_W - 84 - 24);
             const auto &rows = keyboard.rows();
             for (int r = 0; r < (int) rows.size(); r++) {
                 std::vector<KeyView> line;
@@ -210,7 +213,7 @@ namespace {
                 }
                 r.bg->setFillColor(focused ? theme::focus() : theme::surface());
                 r.bg->setOutlineColor(theme::accent());
-                r.bg->setOutlineThickness(focused ? 3 : 0);
+                r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
                 r.title->setColor(focused ? theme::textStrong() : theme::textPrimary());
                 bool live = res.type == ContentType::Live;
                 r.poster->setVisibility(live ? Visibility::Hidden : Visibility::Visible);
@@ -544,11 +547,14 @@ namespace {
                     const Key &k = rows[(size_t) r][(size_t) c];
                     KeyView &v = keys[(size_t) r][(size_t) c];
                     bool focused = zone == 0 && r == keyboard.focusRow() && c == keyboard.focusCol();
-                    v.bg->setFillColor(focused ? theme::accent() : k.action == KeyAction::Ok ? theme::accentMuted()
+                    // while the results have focus the keyboard steps back: flat keys, muted letters
+                    bool typing = zone == 0;
+                    v.bg->setFillColor(focused ? theme::accent() : !typing ? theme::surface()
+                                                                 : k.action == KeyAction::Ok ? theme::accentMuted()
                                                                  : k.action == KeyAction::Char ? theme::surfaceElevated()
                                                                  : theme::cardHover());
-                    v.bg->setOutlineColor(theme::textStrong());
-                    v.bg->setOutlineThickness(focused ? 3 : 0);
+                    v.bg->setOutlineThickness(0);
+                    v.label->setColor(focused ? theme::onAccent() : typing ? theme::textPrimary() : theme::textMuted());
                 }
             }
         }
@@ -557,13 +563,13 @@ namespace {
             const std::string &q = keyboard.text();
             queryText->setText(q.empty() ? tr("search.placeholder") : q + (zone == 0 ? "|" : ""));
             queryText->setColor(q.empty() ? theme::textMuted() : theme::textPrimary());
-            field->setOutlineThickness(zone == 0 ? 2 : 0);
+            field->setOutlineThickness(zone == 0 ? theme::ROW_FOCUS_BORDER : 0);
             refreshKeys();
 
             bool searched = !search::normalize(lastQuery).empty();
             for (int i = 0; i < 4; i++) {
                 bool sel = i == filter;
-                chips[i]->setFillColor(sel ? theme::accentMuted() : theme::surface());
+                chips[i]->setFillColor(sel ? theme::accentMuted() : theme::surfaceElevated());
                 chipText[i]->setText(searched ? tr(FILTER_KEYS[i]) + "  " + countText(totals[i]) : tr(FILTER_KEYS[i]));
                 chipText[i]->setColor(sel ? theme::textStrong() : theme::textSecondary());
             }

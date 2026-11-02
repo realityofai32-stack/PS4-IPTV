@@ -157,8 +157,8 @@ namespace {
                                                                   : k.action == KeyAction::Char ? theme::surfaceElevated()
                                                                   : theme::cardHover();
                     v.bg->setFillColor(bg);
-                    v.bg->setOutlineColor(theme::textStrong());
-                    v.bg->setOutlineThickness(focused ? 3 : 0);
+                    v.bg->setOutlineThickness(0);
+                    v.label->setColor(focused ? theme::onAccent() : theme::textPrimary());
                 }
             }
         }

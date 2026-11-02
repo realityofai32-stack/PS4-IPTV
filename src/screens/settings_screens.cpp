@@ -106,7 +106,7 @@ namespace {
             if (isToggle) {
                 bool on = item.toggle();
                 track->setFillColor(on ? theme::accent() : theme::switchOff());
-                knob->setFillColor(on ? theme::textStrong() : theme::switchKnobOff());
+                knob->setFillColor(on ? theme::onAccent() : theme::switchKnobOff());
                 float r = SWITCH_H / 2 - 5;
                 knob->setPosition(on ? SWITCH_W - 5 - 2 * r : 5, 5);
                 switchText->setText(tr(on ? "common.on" : "common.off"));
