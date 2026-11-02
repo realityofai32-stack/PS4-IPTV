@@ -82,6 +82,9 @@ namespace ui {
 
         void setPrimary(bool primary);
 
+        // a new width (the height stays); the caption is fitted again
+        void setWidth(float width);
+
     private:
         void refresh();
 

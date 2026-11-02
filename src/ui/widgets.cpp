@@ -209,6 +209,20 @@ namespace ui {
         }
     }
 
+    void Button::setWidth(float w) {
+        const float h = getSize().y;
+        const float gap = 6;
+        if (w == getSize().x) {
+            return;
+        }
+        setSize(w, h);
+        setCornersRadius(h / 2.0f);
+        ring->setSize(w + 2 * gap, h + 2 * gap);
+        ring->setCornersRadius(h / 2.0f + gap);
+        caption->setAlign(Align::Center, w);
+        fit();
+    }
+
     void Button::setPrimary(bool p) {
         if (p != primary) {
             primary = p;
