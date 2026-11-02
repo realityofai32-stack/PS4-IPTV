@@ -944,6 +944,7 @@ namespace i18n {
             {"empty.search_none_hint", "Try a shorter word, or another filter."},
             {"source.provides_xtream", "Live TV  ·  Movies  ·  Series  ·  Downloads"},
             {"source.provides_m3u", "Live TV channels"},
+            {"options.subtitle_style", "Subtitle style"},
     };
 
     extern const size_t STRINGS_EN_COUNT = sizeof(STRINGS_EN) / sizeof(STRINGS_EN[0]);

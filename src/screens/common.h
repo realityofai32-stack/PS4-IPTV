@@ -33,6 +33,10 @@ namespace screens {
 
     ui::HintBar *hintBar(c2d::C2DObject *parent, const Hints &hints);
 
+    // playback HUD bands: a short fade from the band's solid overlay into the video, so the band has no hard
+    // edge (the text stays on the solid part). below = the fade hangs under a top band, else above a bottom band.
+    void hudFade(c2d::RectangleShape *band, bool below);
+
     std::string hostOf(const std::string &server);
 
     // "Xtream Codes" / "M3U / M3U8"

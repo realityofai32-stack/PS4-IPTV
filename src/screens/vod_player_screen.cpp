@@ -528,6 +528,7 @@ namespace {
         // ------------------------------------------------------------------ overlay
         void buildOverlay() {
             top = ui::box(this, FloatRect(0, 0, theme::SCREEN_W, 190), theme::overlay(), 0);
+            screens::hudFade(top, true);
             title = ui::label(top, "", theme::TITLE, theme::SAFE_X, 44, ui::Weight::SemiBold);
             title->setMaxWidth(1400);
             subtitle = ui::label(top, "", theme::BODY, theme::SAFE_X, 112, ui::Weight::Regular, theme::textSecondary());
@@ -536,6 +537,7 @@ namespace {
             clock->setAlign(ui::Align::Right, theme::SCREEN_W - theme::SAFE_X);
 
             bottom = ui::box(this, FloatRect(0, theme::SCREEN_H - 230, theme::SCREEN_W, 230), theme::overlay(), 0);
+            screens::hudFade(bottom, false);
             const float barW = theme::SCREEN_W - 2 * theme::SAFE_X;
             barTrack = ui::box(bottom, FloatRect(theme::SAFE_X, 40, barW, 8), theme::progressTrack(), 4);
             barFill = ui::box(barTrack, FloatRect(0, 0, 8, 8), theme::accent(), 4);
@@ -664,10 +666,11 @@ namespace {
                 chipText = res + (chipText.empty() ? "" : "   \xC2\xB7   " + chipText);
             }
             chips->setText(chipText);
+            // the everyday controls only (L2 / R2 still seek a minute)
             std::vector<std::pair<ui::Glyph, std::string>> h = {
                     {ui::Glyph::Cross, tr(pb.state() == PlaybackState::Paused ? "common.play" : "player.pause")},
-                    {ui::Glyph::DPad, tr("player.seek_10")}, {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("player.seek_60")},
-                    {ui::Glyph::Options, tr("player.options")}, {ui::Glyph::Triangle, tr("player.info")}};
+                    {ui::Glyph::DPad, tr("player.seek_10")}, {ui::Glyph::Options, tr("player.options")},
+                    {ui::Glyph::Triangle, tr("player.info")}};
             if (isEpisode()) {
                 h.push_back({ui::Glyph::R1, tr("player.next_episode")});
             }
@@ -770,6 +773,7 @@ namespace {
             AudioMenu,
             SubtitleMenu,
             VideoMenu,
+            SubtitleStyleMenu,
             SubtitleSize,
             SubtitlePosition,
             SubtitleShadow,
@@ -791,7 +795,8 @@ namespace {
             MENU_MAIN = 0,
             MENU_AUDIO = 1,
             MENU_SUBTITLES = 2,
-            MENU_VIDEO = 3
+            MENU_VIDEO = 3,
+            MENU_SUBTITLE_STYLE = 4
         };
 
         struct PanelItem {
@@ -824,7 +829,11 @@ namespace {
             r.name->setMaxWidth(w - 64 - 24);
             r.detail = ui::label(r.bg, "", theme::CAPTION, 64, ui::Label::centerOffset(theme::BODY, h) + 22,
                                  ui::Weight::Regular, theme::textMuted());
-            r.detail->setMaxWidth(w - 64 - 24);
+            r.detail->setMaxWidth(w - 64 - 24 - 40);
+            // rows that open a menu end with a chevron
+            r.chevron = ui::label(r.bg, "\xE2\x80\xBA", theme::HEADING, 0, ui::Label::centerOffset(theme::HEADING, h),
+                                  ui::Weight::SemiBold, theme::textMuted());
+            r.chevron->setAlign(ui::Align::Right, w - 24);
             panelRows.push_back(r);
             return r.bg;
         }
@@ -853,6 +862,12 @@ namespace {
                 case Row::VideoMenu:
                     name = tr("options.video");
                     detail = geometryText();
+                    break;
+                case Row::SubtitleStyleMenu:
+                    name = tr("options.subtitle_style");
+                    detail = tr(SIZE_KEYS[std::min(std::max(s.subtitleSize, 0), 2)]) + "  \xC2\xB7  "
+                             + tr(POSITION_KEYS[s.subtitlePosition == 1 ? 1 : 0]) + "  \xC2\xB7  "
+                             + tr("subtitle.shadow") + " " + tr(s.subtitleShadow ? "common.on" : "common.off");
                     break;
                 case Row::Aspect:
                     name = tr("geometry.aspect") + ":  " + screens::aspectName(geometry.aspect);
@@ -931,6 +946,10 @@ namespace {
                     continue;
                 }
                 r.check->setText(checked ? "\xE2\x9C\x93" : "");
+                bool opensMenu = pi.row == Row::AudioMenu || pi.row == Row::SubtitleMenu || pi.row == Row::VideoMenu
+                                 || pi.row == Row::SubtitleStyleMenu;
+                r.chevron->setVisibility(opensMenu ? Visibility::Visible : Visibility::Hidden);
+                r.chevron->setColor(focused ? theme::textPrimary() : theme::textMuted());
                 r.name->setText(name);
                 r.detail->setText(detail);
                 r.name->setColor(focused ? theme::textStrong() : theme::textPrimary());
@@ -959,8 +978,13 @@ namespace {
             panelItems.clear();
             if (level == MENU_MAIN) {
                 panelTitle->setText(tr("options.title"));
-                for (Row r: {Row::AudioMenu, Row::SubtitleMenu, Row::VideoMenu, Row::SubtitleSize,
-                             Row::SubtitlePosition, Row::SubtitleShadow, Row::TechInfo}) {
+                // five groups: what plays (audio, subtitles, picture), how subtitles look, technical details
+                for (Row r: {Row::AudioMenu, Row::SubtitleMenu, Row::VideoMenu, Row::SubtitleStyleMenu, Row::TechInfo}) {
+                    panelItems.push_back({r, 0});
+                }
+            } else if (level == MENU_SUBTITLE_STYLE) {
+                panelTitle->setText(tr("options.subtitle_style"));
+                for (Row r: {Row::SubtitleSize, Row::SubtitlePosition, Row::SubtitleShadow}) {
                     panelItems.push_back({r, 0});
                 }
             } else if (level == MENU_VIDEO) {
@@ -1010,7 +1034,8 @@ namespace {
                     }
                     if (panelLevel != MENU_MAIN) {
                         // back to the main menu, on the row that opened this one
-                        showMenu(MENU_MAIN, panelLevel == MENU_AUDIO ? 0 : panelLevel == MENU_SUBTITLES ? 1 : 2);
+                        showMenu(MENU_MAIN, panelLevel == MENU_AUDIO ? 0 : panelLevel == MENU_SUBTITLES ? 1
+                                            : panelLevel == MENU_VIDEO ? 2 : 3);
                     } else {
                         closePanel();
                     }
@@ -1047,6 +1072,11 @@ namespace {
                 case Row::VideoMenu:
                     if (delta > 0) {
                         showMenu(MENU_VIDEO);
+                    }
+                    return;
+                case Row::SubtitleStyleMenu:
+                    if (delta > 0) {
+                        showMenu(MENU_SUBTITLE_STYLE);
                     }
                     return;
                 // geometry: applied at once, without a reload (position, pause state and tracks stay)
@@ -1175,6 +1205,7 @@ namespace {
             ui::Label *check;
             ui::Label *name;
             ui::Label *detail;
+            ui::Label *chevron;
         };
 
         std::vector<VodItem> queue;

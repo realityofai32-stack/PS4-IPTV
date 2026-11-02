@@ -38,6 +38,15 @@ namespace screens {
         backdrop->set(img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
     }
 
+    void hudFade(RectangleShape *band, bool below) {
+        const float h = 64;
+        const float w = band->getSize().x;
+        auto *fade = new GradientRectangle(FloatRect(0, below ? band->getSize().y : -h, w, h));
+        Color solid = theme::overlay();
+        fade->setColor(solid, theme::withAlpha(solid, 0), below ? GradientRectangle::Down : GradientRectangle::Up);
+        band->add(fade);
+    }
+
     ui::HintBar *hintBar(C2DObject *parent, const Hints &hints) {
         auto *bar = new ui::HintBar();
         bar->setHints(hints);

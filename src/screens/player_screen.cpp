@@ -121,6 +121,7 @@ namespace {
 
             // top overlay
             top = ui::box(this, FloatRect(0, 0, theme::SCREEN_W, 190), theme::overlay(), 0);
+            screens::hudFade(top, true);
             title = ui::label(top, "", theme::TITLE, theme::SAFE_X, 44, ui::Weight::SemiBold);
             title->setMaxWidth(1300);
             subtitle = ui::label(top, "", theme::LABEL, theme::SAFE_X, 110, ui::Weight::Regular, theme::textSecondary());
@@ -132,6 +133,7 @@ namespace {
 
             // bottom overlay
             bottom = ui::box(this, FloatRect(0, theme::SCREEN_H - 170, theme::SCREEN_W, 170), theme::overlay(), 0);
+            screens::hudFade(bottom, false);
             status = ui::label(bottom, "", theme::BODY, theme::SAFE_X, 24, ui::Weight::SemiBold);
             status->setMaxWidth(1700);
             hints = new ui::HintBar();

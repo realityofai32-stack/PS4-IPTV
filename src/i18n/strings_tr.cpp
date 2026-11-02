@@ -949,6 +949,7 @@ namespace i18n {
             {"empty.search_none_hint", "Daha kısa bir kelime veya başka bir filtre deneyin."},
             {"source.provides_xtream", "Canlı TV  ·  Filmler  ·  Diziler  ·  İndirmeler"},
             {"source.provides_m3u", "Canlı TV kanalları"},
+            {"options.subtitle_style", "Altyazı görünümü"},
     };
 
     extern const size_t STRINGS_TR_COUNT = sizeof(STRINGS_TR) / sizeof(STRINGS_TR[0]);
