@@ -1,0 +1,47 @@
+name: Feature request
+description: Suggest an improvement for PS4 IPTV
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please keep requests focused on the app itself and do not include IPTV providers, copyrighted content sources, credentials, or private playlist URLs.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Explain the user need or limitation behind the request.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed feature
+      description: Describe how you would like the feature to work.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds
+      description: If you already use another workflow, describe it here.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add mockups, screenshots, or technical context if useful.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked existing issues to make sure this has not already been requested.
+          required: true
+        - label: This request does not ask for bundled IPTV services, copyrighted content, credentials, or piracy sources.
+          required: true
