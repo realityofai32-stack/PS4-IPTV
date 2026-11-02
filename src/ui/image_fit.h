@@ -58,6 +58,43 @@ namespace fit {
     Placement posterBackdrop(float imageW, float imageH, float boxW, float boxH, float heightScale, float rightBleed,
                              float anchorY);
 
+    // A portrait poster as decorative hero art, quality first (v3.1, Home): drawn `height` tall at most, but never
+    // more than maxUpscale x its texture (black space instead of a blurry blow-up) and never wider than maxWidth
+    // (square / wide images used as posters); its right edge rightBleed px beyond the box's right edge (cropped
+    // there). anchorY places it vertically: a taller poster's overflow, a shorter poster's room above it, are
+    // split by it (0: top at the box top). A result shorter than minHeight is not drawn (valid = false: no
+    // postage stamp in the hero).
+    struct PosterArt {
+        float height = 0;         // wanted drawn height (px)
+        float maxUpscale = 0;     // drawn height / image height at most (0 = no limit)
+        float maxWidth = 0;       // drawn width at most (0 = no limit)
+        float minHeight = 0;      // smaller results are not drawn
+        float rightBleed = 0;     // px beyond the box's right edge
+        float anchorY = 0.5f;     // 0 = top at the box top .. 1 = bottom at the box bottom
+    };
+
+    struct PosterArtPlacement {
+        Placement placement;      // clipped to the box (what is drawn)
+        Rect drawn;               // the whole poster before clipping, box coordinates
+        float scale = 0;          // drawn size / image size, the same on both axes (never distorted)
+        bool limited = false;     // maxUpscale / maxWidth made it smaller than `height`
+    };
+
+    PosterArtPlacement posterArt(float imageW, float imageH, float boxW, float boxH, const PosterArt &spec);
+
+    struct Rgb {
+        float r = 0;
+        float g = 0;
+        float b = 0;
+    };
+
+    // The colour field behind poster art (v3.1): the poster's average colour as it is drawn (texture modulation
+    // `tint` / 255, then the shade at shadeAlpha), desaturated by `desaturate` (0..1), then `level` of the way
+    // from the page colour to it, every channel capped at maxChannel. Darker than the drawn poster, so the poster
+    // never sits in a lighter frame; a black poster gives the page colour (no field at all).
+    Rgb ambientWash(const Rgb &average, const Rgb &tint, const Rgb &shade, float shadeAlpha, const Rgb &page,
+                    float level, float desaturate, float maxChannel);
+
     // whole pixels, edges rounded (no gap and no overlap between neighbours)
     Rect pixelSnap(const Rect &r);
 }

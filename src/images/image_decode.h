@@ -61,6 +61,16 @@ namespace images {
 
     // fit into the box without upscaling (the GPU scales small images up)
     Image prepare(const Image &src, int boxW, int boxH);
+
+    struct Average {
+        float r = 0;
+        float g = 0;
+        float b = 0;
+    };
+
+    // alpha-weighted mean colour, sampled on a grid of at most 64 x 64 points (cheap at any size); black when the
+    // image is empty or fully transparent
+    Average averageColor(const Image &img);
 }
 
 #endif // PS4IPTV_IMAGES_IMAGE_DECODE_H

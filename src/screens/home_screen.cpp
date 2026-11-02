@@ -10,7 +10,10 @@
 // portrait poster on the left at the size of its texture (no 16:9 crop, no upscaling), title / episode / time left /
 // progress on a neutral surface beside it; channels show their logo contained in a neutral logo area instead.
 // The hero's artwork is the provider's landscape backdrop when get_vod_info / get_series_info has one, otherwise
-// the large poster kept at its own ratio against the right edge, dissolving into the page (ui::Backdrop).
+// the hero poster kept at its own ratio against the right edge, dissolving into the page (ui::Backdrop). v3.1: the
+// poster is never enlarged past layout::home::HERO_POSTER_MAX_UPSCALE (a smaller source is drawn smaller, on a
+// dimmed field of its own average colour), the hero holds exactly one large texture (the backdrop or the poster),
+// and every hero art change is logged with source / texture / drawn sizes (never the URL).
 //
 // Continue Watching comes from the progress store (LibraryStore::continueWatching): movies and episodes in
 // progress, most recent playback first, one card per series. It is rebuilt whenever the store changes
@@ -33,6 +36,7 @@
 #include "../app/offline.h"
 #include "../core/format.h"
 #include "../platform/clock.h"
+#include "../platform/log.h"
 
 using namespace c2d;
 using namespace iptv;
@@ -114,7 +118,9 @@ namespace {
     class HomeScreen : public Screen {
     public:
         explicit HomeScreen(App &a) : Screen(a) {
-            ui::background(this);
+            // a flat page (not the vertical background gradient): the hero's fades end in exactly this colour, so
+            // they leave no faint contour where the page is a level or two lighter than the fade colour (v3 capture)
+            ui::box(this, FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H), theme::background(), 0);
             const Session &s = app.session();
             playlist = s.profile.isPlaylist();
 
@@ -125,6 +131,7 @@ namespace {
             backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, L::BACKDROP_H),
                                         L::BACKDROP_FADE_LEFT, L::BACKDROP_FADE_BOTTOM, L::BACKDROP_FADE_TOP);
             backdrop->setAnchor(HERO_ANCHOR);
+            backdrop->setPosterStyle(heroPosterStyle());
             page->add(backdrop);
             buildHero();
             if (!playlist) {
@@ -734,13 +741,87 @@ namespace {
             }
         }
 
-        // the hero layer: the real backdrop when there is one, else the large poster at its own ratio
+        static ui::Backdrop::PosterStyle heroPosterStyle() {
+            ui::Backdrop::PosterStyle st;
+            st.heightScale = L::HERO_POSTER_SCALE;
+            st.maxUpscale = L::HERO_POSTER_MAX_UPSCALE;
+            st.maxWidth = L::HERO_POSTER_MAX_W;
+            st.minHeight = L::HERO_POSTER_MIN_H;
+            st.rightBleed = L::HERO_POSTER_BLEED;
+            st.leftFade = L::HERO_POSTER_LEFT_FADE;
+            st.bottomFade = L::HERO_POSTER_BOTTOM_FADE;
+            st.washLength = L::HERO_WASH_LENGTH;
+            st.washMinX = L::HERO_TEXT_RIGHT - L::BACKDROP_X;
+            st.anchorY = 0;   // top at the screen's top edge (a natural crop); the bottom dissolves
+            return st;
+        }
+
+        // the hero's one large texture: the provider's landscape backdrop when it has one that did not fail to
+        // load, otherwise the hero poster (never both requested)
+        bool heroUsesBackdrop() {
+            std::string art = heroBackdropUrl();
+            return !art.empty() && !app.images().failed(ImageKind::Backdrop, art);
+        }
+
+        // the hero layer: the real backdrop when there is one, else the hero poster at its own ratio (while a
+        // backdrop loads, the poster stays if it is still in memory)
         void bindHeroImages() {
             if (!hero) {
                 backdrop->set(nullptr, Vector2i(), ui::Backdrop::Art::Poster);
+                logHeroArt(nullptr);
                 return;
             }
-            screens::bindBackdrop(app, backdrop, hero->icon, heroBackdropUrl());
+            bool useBackdrop = heroUsesBackdrop();
+            if (useBackdrop != heroBackdropWanted) {
+                requestImages();   // the backdrop failed: ask for the poster instead
+            }
+            std::shared_ptr<ImageSet> art;
+            ui::Backdrop::Art kind = ui::Backdrop::Art::Poster;
+            if (useBackdrop) {
+                art = app.images().get(ImageKind::Backdrop, heroBackdropUrl());
+                kind = ui::Backdrop::Art::Landscape;
+            }
+            if (!art) {
+                art = app.images().get(ImageKind::HeroPoster, hero->icon);
+                kind = ui::Backdrop::Art::Poster;
+            }
+            if (!art) {
+                backdrop->set(nullptr, Vector2i(), kind);
+                logHeroArt(nullptr);
+                return;
+            }
+            const fit::Rgb average = {art->average.r, art->average.g, art->average.b};
+            backdrop->set(art->at(0).texture, art->at(0).size, kind, &average);
+            logHeroArt(art);
+        }
+
+        // once per hero art change: what was drawn and how much it was enlarged (no URL)
+        void logHeroArt(const std::shared_ptr<ImageSet> &art) {
+            const void *id = art ? art->at(0).texture.get() : nullptr;
+            if (id == heroArtLogged) {
+                return;
+            }
+            heroArtLogged = id;
+            if (!art) {
+                return;
+            }
+            const std::string url = heroBackdropUrl();
+            const bool failed = !url.empty() && app.images().failed(ImageKind::Backdrop, url);
+            const char *provider = url.empty() ? "none" : failed ? "failed" : "present";   // log only i18n-exempt
+            const ImageVariant &v = art->at(0);
+            const ui::Backdrop::Shown &s = backdrop->shownArt();
+            if (!s.visible) {
+                LOG_I("home", "hero art: poster fallback not drawn (provider backdrop %s): source %dx%d, texture %dx%d "
+                              "- under %.0f px at %.2fx, the hero stays black", provider, art->source.x, art->source.y,
+                      v.size.x, v.size.y, L::HERO_POSTER_MIN_H, L::HERO_POSTER_MAX_UPSCALE);
+                return;
+            }
+            const float vsSource = art->source.y > 0 ? s.drawn.h / (float) art->source.y : 0;
+            LOG_I("home", "hero art: %s (provider backdrop %s), source %dx%d, texture %dx%d (page %dx%d), drawn %.0fx%.0f, "
+                          "visible %.0fx%.0f, upscale %.2fx of the texture, %.2fx of the source%s",
+                  s.art == ui::Backdrop::Art::Landscape ? "backdrop" : "poster fallback", provider,
+                  art->source.x, art->source.y, v.size.x, v.size.y, v.page.x, v.page.y, s.drawn.w, s.drawn.h,
+                  s.inBox.w, s.inBox.h, s.scale, vsSource, s.limited ? " (kept smaller: quality limit)" : "");
         }
 
         // the hero's artwork, then the cards on screen in every rail (+ the next one): posters / logos
@@ -749,12 +830,14 @@ namespace {
                 return;
             }
             std::vector<ImageRequest> req;
+            heroBackdropWanted = false;
             if (hero) {
-                std::string art = heroBackdropUrl();
-                if (!art.empty()) {
-                    req.push_back({ImageKind::Backdrop, art});
+                heroBackdropWanted = heroUsesBackdrop();
+                if (heroBackdropWanted) {
+                    req.push_back({ImageKind::Backdrop, heroBackdropUrl()});
+                } else {
+                    req.push_back({ImageKind::HeroPoster, hero->icon});
                 }
-                req.push_back({ImageKind::PosterLarge, hero->icon});
             }
             for (const Rail &r: rails) {
                 int last = std::min((int) r.cards.size(), r.first + L::CARDS_VISIBLE + 1);
@@ -1125,6 +1208,8 @@ namespace {
         HistoryEntry heroEntry;
         const HistoryEntry *hero = nullptr;
         std::string heroInfoRequested;   // "m<id>" / "s<id>" whose detail info Home asked for
+        bool heroBackdropWanted = false; // the last request asked for the backdrop (else the hero poster)
+        const void *heroArtLogged = nullptr;
         std::vector<Rail> rails;
         size_t favoritesTotal = 0;
         bool imagesDue = false;

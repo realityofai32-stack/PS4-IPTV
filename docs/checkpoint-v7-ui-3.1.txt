@@ -1,0 +1,51 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UI-3.1: HOME HERO ARTWORK QUALITY
+===================================================================
+Branch feature/v7-ui-v3-polish (local only), one commit on top of v7-ui-3 (5a6678a).
+Version 0.2.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: build/checkpoint-v7-ui-3.1/BUILD.txt and SHA256SUMS.txt.
+What changed and why: docs/v7-ui-v3.1-hero.md.
+Only the Home hero's artwork changed; everything else is v3 (approved).
+
+Install OVER the existing V7 IPTV (same title ID). Nothing stored changes.
+
+-----------------------------------------------------------------------------------------------------
+THE ONE SCREENSHOT
+-----------------------------------------------------------------------------------------------------
+ 1. Open Home, at rest, with The Walking Dead: Daryl Dixon (or any series) first in Continue Watching.
+    Wait ~3 s for the art. [SHOT]
+    Expected (no provider backdrop, the usual case):
+    - The poster sits at the top right, at its own ratio, cropped by the screen's right edge.
+    - It is smaller than in v3: at most as tall as the hero, and smaller still when the source is small.
+    - It is visibly sharper than v3 at the same viewing distance.
+    - It melts into a very dark field of its own colour on its left and bottom. There is no rectangle, no
+      vertical seam and no hard bottom edge.
+    - Title, episode, progress and buttons stand on pure black; no art and no colour field reach under them.
+    - The faint rectangular steps in the dark area between the text and the art (v3) are gone.
+    Wrong:
+    - a soft or blocky poster;
+    - a stretched or squashed face;
+    - a visible poster boundary;
+    - a coloured slab;
+    - the field reaching the text.
+
+-----------------------------------------------------------------------------------------------------
+THE LOG (FTP /data/PS4IPTV/logs/log.txt after step 1)
+-----------------------------------------------------------------------------------------------------
+ 2. "[home] hero art: poster fallback (provider backdrop none), source WxH, texture WxH (page WxH), drawn WxH,
+    visible WxH, upscale A.AAx of the texture, B.BBx of the source"
+    Expected: A <= 1.25. The source size shows whether softness is the provider's limit (a small source).
+    "provider backdrop present" + "hero art: backdrop": the provider sent landscape art, drawn ~1.11x.
+    "poster fallback not drawn": the source was too small to show; the hero is black on purpose.
+ 3. "[images] large image <hash> kind 4 (poster) / kind 3 (backdrop): source WxH -> texture WxH (page WxH exact, N KiB)"
+    Expected: page == texture (exact size), N <= 1536 for kind 4 and <= 3600 for kind 3.
+
+-----------------------------------------------------------------------------------------------------
+QUICK REGRESSION (no screenshots needed unless something is wrong)
+-----------------------------------------------------------------------------------------------------
+ 4. Home opens as fast as in v3; cards and rails are unchanged.
+ 5. Change the Continue Watching item (play another title a minute, back to Home): the hero art follows.
+ 6. Home -> Details -> back, five times: the hero art is back each time, no crash, no flicker into another image.
+ 7. Movie and series detail pages look exactly like v3.
+ 8. Movies grid: scroll quickly for 20 s, then play a movie for 2 minutes: no stutter, no crash.
+
+REPORT: the step-1 screenshot + log.txt + anything that looks wrong (step number + what you see).

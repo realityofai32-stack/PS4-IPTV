@@ -14,24 +14,20 @@ namespace {
     const int64_t MEMORY_BYTES = 48ll * 1024 * 1024;   // GPU bytes of all cached textures
     const size_t MAX_IMAGE_BYTES = 3u * 1024 * 1024;
 
-    int pow2(int v) {
-        int p = 8;
-        while (p < v) {
-            p <<= 1;
-        }
-        return p;
-    }
-
     // A power-of-two RGBA page with the image in its top-left corner, uploaded once. Same texture type
     // and CPU->GPU path (lock, write the CPU copy, unlock = glTexSubImage2D) as the glyph atlas pages.
     // Afterwards the CPU copy is released: these textures are never locked again (GLTexture's destructor
     // only frees `pixels` when it is set).
-    std::shared_ptr<c2d::Texture> makeTexture(const images::Image &img, int64_t &bytes) {
+    // exact (the large kinds): the texture is exactly the image, clamped to its edges - complete for a
+    // non-power-of-two size in core GLES2 (images/art_sizes.h).
+    std::shared_ptr<c2d::Texture> makeTexture(const images::Image &img, int64_t &bytes, bool exact,
+                                              c2d::Vector2i &pageSize) {
         if (!img.valid()) {
             return nullptr;
         }
-        int tw = pow2(img.w);
-        int th = pow2(img.h);
+        images::art::Page page = images::art::page(img.w, img.h, exact);
+        int tw = page.w;
+        int th = page.h;
         auto *tex = new c2d::C2DTexture(c2d::Vector2f((float) tw, (float) th), c2d::Texture::Format::RGBA8);
         void *pixels = nullptr;
         int pitch = 0;
@@ -47,7 +43,14 @@ namespace {
         tex->unlock();
         free(tex->pixels);
         tex->pixels = nullptr;
-        bytes += (int64_t) tw * th * 4;
+        if (exact) {
+            glBindTexture(GL_TEXTURE_2D, tex->texID);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+        bytes += page.bytes;
+        pageSize = {tw, th};
         return std::shared_ptr<c2d::Texture>(tex);
     }
 
@@ -59,9 +62,9 @@ namespace {
 // Texture pages are powers of two (makeTexture), so a box is chosen by the page it lands in:
 //   Poster       170 x 255 -> 256 x 256 page, 256 KiB (as 140 x 210 was): the grid's 166 x 249 tile and the Home
 //                card's 170 x 255 poster are drawn at ~1:1 instead of the 1.19x upscale of v2
-//   PosterLarge  400 x 600 -> 512 x 1024, 2 MiB: the 320 x 480 movie poster, and the poster-derived backdrop
-//                (~587 x 880 on Home) at ~1.47x instead of the ~3.9x crop of v2
-//   Backdrop    1024 x 576 -> 1024 x 1024, 4 MiB: a real landscape backdrop for the 1320 x 800 hero (1.29x)
+//   PosterLarge  400 x 600 -> 512 x 1024, 2 MiB: the 320 x 480 movie poster, and the detail pages' poster-derived
+//                backdrop
+//   Backdrop / HeroPoster: exact-size textures, see images/art_sizes.h (1280 x 720, 3.52 MiB / 512 x 768, 1.5 MiB)
 // Every texture counts against the one byte-bounded LRU (MEMORY_BYTES): bigger images mean fewer cached ones,
 // never a higher peak.
 std::vector<images::Box> ImageLoader::boxes(ImageKind kind) {
@@ -71,15 +74,20 @@ std::vector<images::Box> ImageLoader::boxes(ImageKind kind) {
         case ImageKind::PosterLarge:
             return {{400, 600}};
         case ImageKind::Backdrop:
-            return {{1024, 576}};
+            return {images::art::BACKDROP};
+        case ImageKind::HeroPoster:
+            return {images::art::HERO_POSTER};
         default:
             return {{96, 52}, {340, 190}};
     }
 }
 
 int ImageLoader::maxSourceDimension(ImageKind kind) {
-    // a 2048 px backdrop decodes into <= 16 MiB of RGBA for a moment; original-size 4K art falls back to the poster
-    return kind == ImageKind::Backdrop ? 2048 : images::MAX_DIMENSION;
+    return kind == ImageKind::Backdrop ? images::art::BACKDROP_MAX_SOURCE : images::MAX_DIMENSION;
+}
+
+bool ImageLoader::exactPage(ImageKind kind) {
+    return kind == ImageKind::Backdrop || kind == ImageKind::HeroPoster;
 }
 
 ImageLoader::ImageLoader(JobSystem &j, const std::string &cacheDir)
@@ -142,6 +150,14 @@ void ImageLoader::want(const std::vector<std::string> &logoUrls) {
         requests.push_back({ImageKind::Logo, u});
     }
     want(requests);
+}
+
+bool ImageLoader::failed(ImageKind kind, const std::string &url) {
+    if (!on || url.empty()) {
+        return false;
+    }
+    std::string k = key(kind, url);
+    return !k.empty() && scheduler.state(k) == images::Scheduler::State::Failed;
 }
 
 std::shared_ptr<ImageSet> ImageLoader::get(ImageKind kind, const std::string &url) {
@@ -207,6 +223,9 @@ void ImageLoader::start(const std::string &k) {
             return f;
         };
         pending->outcome = images::loadImage(pending->url, *cache, fetch, clockx::unixNow(), variantBoxes, maxSource);
+        if (pending->kind == ImageKind::HeroPoster && !pending->outcome.variants.empty()) {
+            pending->average = images::averageColor(pending->outcome.variants[0]);
+        }
     }, [this, weak, pending]() {
         if (weak.lock()) {
             decoded.push_back(pending);
@@ -222,13 +241,19 @@ void ImageLoader::finish(const std::shared_ptr<Pending> &p) {
                                                                              : o.result, now);
         LOG_I("images", "image %s unavailable (%s): %s", hash.c_str(),
               o.result == images::Scheduler::Result::RetryLater ? "retry later" : "placeholder", o.detail.c_str());
+        if (p->kind == ImageKind::Backdrop) {
+            gen++;   // screens waiting for this backdrop rebind and show their poster fallback
+        }
         return;
     }
     auto set = std::make_shared<ImageSet>();
+    set->source = {o.sourceW, o.sourceH};
+    set->average = p->average;
     int64_t bytes = 0;
+    const bool exact = exactPage(p->kind);
     for (const auto &v: o.variants) {
         ImageVariant iv;
-        iv.texture = makeTexture(v, bytes);
+        iv.texture = makeTexture(v, bytes, exact, iv.page);
         iv.size = {v.w, v.h};
         if (!iv.texture) {
             scheduler.finished(p->key, images::Scheduler::Result::RetryLater, now);
@@ -241,7 +266,7 @@ void ImageLoader::finish(const std::shared_ptr<Pending> &p) {
         scheduler.forget(evicted);
     }
     if (p->kind == ImageKind::Backdrop) {
-        // never a pile of 4 MiB backdrops: the oldest leaves memory (a screen still showing it keeps it alive)
+        // never a pile of 3.5 MiB backdrops: the oldest leaves memory (a screen still showing it keeps it alive)
         backdropKeys.erase(std::remove(backdropKeys.begin(), backdropKeys.end(), p->key), backdropKeys.end());
         backdropKeys.push_back(p->key);
         while ((int) backdropKeys.size() > MAX_BACKDROPS) {
@@ -252,6 +277,13 @@ void ImageLoader::finish(const std::shared_ptr<Pending> &p) {
     }
     scheduler.finished(p->key, images::Scheduler::Result::Ok, now);
     gen++;
+    if (exact) {
+        // the large art: what the provider sent and what it became, so a soft picture can be traced to its source
+        const ImageVariant &v = set->variants[0];
+        LOG_I("images", "large image %s kind %d: source %dx%d -> texture %dx%d (page %dx%d exact, %lld KiB)%s",
+              hash.c_str(), (int) p->kind, o.sourceW, o.sourceH, v.size.x, v.size.y, v.page.x, v.page.y,
+              (long long) (bytes / 1024), o.fromDisk ? " from disk" : "");
+    }
     LOG_V("images", "image %s kind %d ready: %s%s (memory %d images, %lld KiB)", hash.c_str(), (int) p->kind,
           o.detail.c_str(), o.fromDisk ? " from disk" : "", (int) memory.size(), (long long) (memory.bytes() / 1024));
 }

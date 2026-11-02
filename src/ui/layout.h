@@ -69,6 +69,20 @@ namespace layout {
         constexpr float BACKDROP_FADE_TOP = 240;       // darker under the navigation
         constexpr float TEXT_X = SAFE_X;
         constexpr float TEXT_W = 1000;
+        // hero poster fallback (v3.1, no landscape backdrop): decorative art, quality first. The v3 capture drew the
+        // poster >= 1.47x its texture and it read as soft on the TV; now it is never enlarged past
+        // HERO_POSTER_MAX_UPSCALE: a 512 x 768 texture fills the box height at 1.04x, a 400 x 600 one is drawn 750
+        // tall, a 300 x 450 one 562 tall - black space instead of a blow-up. Under HERO_POSTER_MIN_H nothing is drawn.
+        // Its own dimmed average colour fills the box behind / right of it and fades out before the text column.
+        constexpr float HERO_POSTER_SCALE = 1.0f;          // wanted height / BACKDROP_H (v3: 1.1)
+        constexpr float HERO_POSTER_MAX_UPSCALE = 1.25f;
+        constexpr float HERO_POSTER_MAX_W = 560;           // square / wide images used as posters
+        constexpr float HERO_POSTER_MIN_H = 400;
+        constexpr float HERO_POSTER_BLEED = 40;            // cropped at the screen's right edge
+        constexpr float HERO_POSTER_LEFT_FADE = 0.5f;      // x its visible width
+        constexpr float HERO_POSTER_BOTTOM_FADE = 0.3f;    // x its height (a short poster has no hard bottom edge)
+        constexpr float HERO_WASH_LENGTH = 420;            // the colour field's fade left of the poster
+        constexpr float HERO_TEXT_RIGHT = TEXT_X + TEXT_W; // 1096: the field never reaches the text column
         // the text stack is anchored on the buttons and grows upwards (a two-line title moves the eyebrow up)
         constexpr float BUTTONS_Y = 548;
         constexpr float BUTTON_H = 76;

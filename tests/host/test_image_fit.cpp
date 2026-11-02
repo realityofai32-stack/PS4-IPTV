@@ -1,6 +1,8 @@
 // Artwork presentation rules (ui/image_fit.h): Cover / Contain / Poster / Logo placements, the portrait-poster
-// backdrop, clipping and degenerate sizes. Synthetic dimensions only.
+// backdrop, the quality-limited hero poster and its colour field (v3.1), clipping and degenerate sizes. Synthetic
+// dimensions only.
 
+#include <algorithm>
 #include <cmath>
 
 #include "check.h"
@@ -129,6 +131,106 @@ TEST(fit_portrait_poster_as_backdrop) {
     CHECK(undistorted(small) && near(small.dst.y, (1080 - 864) / 2.0f));
 }
 
+namespace {
+    // the Home hero's poster fallback (screens/home_screen.cpp heroPosterStyle, layout::home::HERO_POSTER_*)
+    PosterArt homeHero() {
+        PosterArt a;
+        a.height = 800;
+        a.maxUpscale = 1.25f;
+        a.maxWidth = 560;
+        a.minHeight = 400;
+        a.rightBleed = 40;
+        a.anchorY = 0;
+        return a;
+    }
+}
+
+TEST(fit_hero_poster_never_enlarged_past_the_quality_limit) {
+    const float bw = 1320, bh = 800;
+    // the hero poster texture (512 x 768): fills the box height at 1.04x, top at the box top, nothing limited
+    PosterArtPlacement big = posterArt(512, 768, bw, bh, homeHero());
+    CHECK(big.placement.valid && !big.limited && undistorted(big.placement) && inside(big.placement, 512, 768, bw, bh));
+    CHECK(near(big.drawn.h, 800) && near(big.drawn.w, 800.0f * 512 / 768) && near(big.scale, 800.0f / 768));
+    CHECK(near(big.drawn.y, 0) && near(big.drawn.x + big.drawn.w, bw + 40));   // the bleed is cropped at the edge
+    CHECK(near(big.placement.dst.x + big.placement.dst.w, bw) && big.placement.src.w < 512);
+    // v3's 400 x 600 texture was drawn 880 tall (1.47x); now 750 (1.25x), still whole and on the right
+    PosterArtPlacement mid = posterArt(400, 600, bw, bh, homeHero());
+    CHECK(mid.placement.valid && mid.limited && near(mid.scale, 1.25f) && near(mid.drawn.h, 750));
+    CHECK(near(mid.drawn.y, 0) && near(mid.placement.dst.h, 750) && near(mid.placement.src.h, 600));
+    // a provider poster of 300 x 450 is drawn smaller (562 tall), not blown up
+    PosterArtPlacement small = posterArt(300, 450, bw, bh, homeHero());
+    CHECK(small.placement.valid && near(small.drawn.h, 562.5f) && near(small.drawn.w, 375));
+    // tiny sources are not drawn at all: black space instead of a postage stamp
+    CHECK(!posterArt(200, 300, bw, bh, homeHero()).placement.valid);
+    // a square image used as a poster stays narrow; a landscape one becomes too short and is not drawn
+    PosterArtPlacement square = posterArt(600, 600, bw, bh, homeHero());
+    CHECK(square.placement.valid && square.limited && near(square.drawn.w, 560) && near(square.drawn.h, 560));
+    CHECK(!posterArt(1280, 720, bw, bh, homeHero()).placement.valid);
+    // without limits it is v3's posterBackdrop (detail pages unchanged)
+    PosterArt v3;
+    v3.height = bh * 1.1f;
+    v3.rightBleed = 40;
+    v3.anchorY = 0.15f;
+    Placement a = posterArt(400, 600, bw, bh, v3).placement;
+    Placement b = posterBackdrop(400, 600, bw, bh, 1.1f, 40, 0.15f);
+    CHECK(near(a.dst.x, b.dst.x) && near(a.dst.h, b.dst.h) && near(a.src.y, b.src.y) && near(a.src.w, b.src.w));
+}
+
+TEST(fit_hero_poster_sweep_keeps_ratio_bounds_and_limit) {
+    // every texture size and portrait-ish ratio: never past 1.25x, never distorted, always inside the box and the
+    // image, right edge at the bleed, never wider than 560, top at the box top
+    const float bw = 1320, bh = 800;
+    int drawn = 0;
+    for (int h = 60; h <= 2400; h += 37) {
+        for (float aspect: {0.5f, 0.6f, 0.667f, 0.7f, 0.75f, 0.9f, 1.0f, 1.3f, 1.78f}) {
+            float w = std::round(h * aspect);
+            PosterArtPlacement r = posterArt(w, (float) h, bw, bh, homeHero());
+            if (!r.placement.valid) {
+                CHECK(std::min(800.0f, std::min(h * 1.25f, 560.0f * h / w)) < 400 + 0.01f);
+                continue;
+            }
+            drawn++;
+            CHECK(r.scale <= 1.25f + 1e-4f && r.drawn.h <= 800 + 0.01f && r.drawn.w <= 560 + 0.01f);
+            CHECK(r.drawn.h >= 400 - 0.01f);
+            CHECK(near(r.drawn.w / w, r.drawn.h / h, 1e-4f));          // one scale on both axes
+            CHECK(undistorted(r.placement) && inside(r.placement, w, (float) h, bw, bh));
+            CHECK(near(r.drawn.x + r.drawn.w, bw + 40) && near(r.drawn.y, 0));
+        }
+    }
+    CHECK(drawn > 100);
+}
+
+TEST(fit_ambient_wash_is_a_dim_neutral_field) {
+    const Rgb tint = {150, 150, 152}, shade = {5, 6, 8}, page = {5, 6, 8};
+    const float shadeA = 150.0f / 255;
+    auto luma = [](const Rgb &c) { return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b; };
+    auto chroma = [](const Rgb &c) {
+        return std::max(c.r, std::max(c.g, c.b)) - std::min(c.r, std::min(c.g, c.b));
+    };
+    // a warm poster (Daryl Dixon's card art averages ~ (76, 57, 35)): a dark warm charcoal, never the page's
+    // opposite, darker than the poster as drawn, less saturated than it
+    Rgb avg = {76, 57, 35};
+    Rgb drawnAvg = {avg.r * tint.r / 255 * (1 - shadeA) + shade.r * shadeA,
+                    avg.g * tint.g / 255 * (1 - shadeA) + shade.g * shadeA,
+                    avg.b * tint.b / 255 * (1 - shadeA) + shade.b * shadeA};
+    Rgb w = ambientWash(avg, tint, shade, shadeA, page, 0.7f, 0.35f, 34);
+    CHECK(w.r >= page.r && w.g >= page.g && w.b >= page.b);
+    CHECK(luma(w) < luma(drawnAvg) && luma(w) > luma(page));
+    CHECK(chroma(w) < chroma(drawnAvg));
+    CHECK(std::max(w.r, std::max(w.g, w.b)) <= 34);
+    // a white poster: capped, a grey field (no bright slab)
+    Rgb white = ambientWash({255, 255, 255}, tint, shade, shadeA, page, 0.7f, 0.35f, 34);
+    CHECK(white.r <= 34 && white.g <= 34 && white.b <= 34 && chroma(white) <= 3);
+    // a black poster (or level 0): exactly the page - no field, no dark patch
+    Rgb black = ambientWash({0, 0, 0}, tint, shade, shadeA, page, 0.7f, 0.35f, 34);
+    CHECK(near(black.r, page.r) && near(black.g, page.g) && near(black.b, page.b));
+    Rgb off = ambientWash(avg, tint, shade, shadeA, page, 0, 0.35f, 34);
+    CHECK(near(off.r, page.r) && near(off.g, page.g) && near(off.b, page.b));
+    // a saturated red poster stays a dim, desaturated red-grey
+    Rgb red = ambientWash({200, 30, 30}, tint, shade, shadeA, page, 0.7f, 0.35f, 34);
+    CHECK(red.r > red.g && red.r <= 34 && chroma(red) < 20);
+}
+
 TEST(fit_clip_within_target_rect) {
     Placement p;
     p.valid = true;
@@ -161,5 +263,8 @@ TEST(fit_invalid_dimensions_never_divide_by_zero) {
     CHECK(!posterBackdrop(0, 600, 1320, 800, 1.1f, 0, 0.2f).valid);
     CHECK(!posterBackdrop(400, 600, 1320, 0, 1.1f, 0, 0.2f).valid);
     CHECK(!posterBackdrop(400, 600, 1320, 800, 0, 0, 0.2f).valid);
+    CHECK(!posterArt(nan, 600, 1320, 800, homeHero()).placement.valid);
+    CHECK(!posterArt(400, 600, 1320, 800, PosterArt()).placement.valid);   // no height wanted
+    CHECK(!posterArt(400, -1, 1320, 800, homeHero()).placement.valid);
     CHECK(!clip(Placement(), 100, 100).valid);
 }

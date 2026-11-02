@@ -166,6 +166,9 @@ namespace ui {
     c2d::RectangleShape *fade(c2d::C2DObject *parent, const c2d::FloatRect &rect, const c2d::Color &color,
                               Edge solid);
 
+    // moves / resizes / recolours a fade() in place (its four segments follow)
+    void refade(c2d::RectangleShape *fade, const c2d::FloatRect &rect, const c2d::Color &color, Edge solid);
+
     // A list row drawn on the background instead of a filled slab. Rest: a 1 px divider at the bottom (optional).
     // Selected (the open item of a list that does not have the focus): a 4 px accent edge. Focused: the
     // accent-tinted surface and the edge. Children (texts, tiles) are added by the owner.
@@ -206,7 +209,10 @@ namespace ui {
     // ui/image_fit.h:
     //   Landscape  a real backdrop / fanart: cover-cropped to the box (aspect kept, anchored above the centre)
     //   Poster     no landscape art: the portrait poster keeps its ratio, sits against the right edge (bleeding
-    //              past it, cropped by the box) and dissolves into the page on its left - never stretched
+    //              past it, cropped by the box) and dissolves into the page on its left - never stretched.
+    //              PosterStyle sets its size limits (Home: never enlarged past a quality limit, v3.1) and an
+    //              optional colour field: the poster's own average colour, dimmed, filling the box behind and
+    //              right of the poster and fading out to its left, so a smaller poster still reads as one layer.
     // Without an image only a faint neutral glow is drawn.
     class Backdrop : public c2d::RectangleShape {
     public:
@@ -215,10 +221,47 @@ namespace ui {
             Poster
         };
 
+        static constexpr float POSTER_HEIGHT = 1.1f;   // the poster's height / the box height
+        static constexpr float POSTER_BLEED = 40;      // px of the poster beyond the box's right edge
+        // the colour field: 70 % of the way from the page to the poster's drawn average, 35 % desaturated, <= 34
+        static constexpr float WASH_LEVEL = 0.7f;
+        static constexpr float WASH_DESATURATE = 0.35f;
+        static constexpr float WASH_MAX = 34;
+
+        // Poster art (the defaults are the detail pages' v3 treatment)
+        struct PosterStyle {
+            float heightScale = POSTER_HEIGHT;   // wanted height / the box height
+            float maxUpscale = 0;                // drawn / texture at most (0 = no limit)
+            float maxWidth = 0;                  // px (0 = no limit)
+            float minHeight = 0;                 // a smaller poster is not drawn (px)
+            float rightBleed = POSTER_BLEED;     // px beyond the box's right edge
+            float leftFade = 0;                  // left fade width / visible poster width (0 = 0.42 x box height)
+            float bottomFade = 0;                // a fade at the poster's bottom edge, x its drawn height (0 = none)
+            float washLength = 0;                // the colour field's fade left of the poster, px (0 = no field)
+            float washMinX = 0;                  // the field never reaches left of this (box coordinates)
+            float anchorY = -1;                  // vertical placement, 0 = top (< 0: setAnchor's value)
+        };
+
+        // what the last set() drew, for the log (scale: drawn / texture, 0 without artwork)
+        struct Shown {
+            bool visible = false;
+            Art art = Art::Landscape;
+            fit::Rect drawn;            // the whole image as placed (may extend past the box)
+            fit::Rect inBox;            // the part inside the box (what is drawn)
+            float scale = 0;
+            bool limited = false;       // the poster was kept smaller than wanted (quality limit)
+        };
+
         // fadeLeft / fadeBottom / fadeTop: width / height of the eased fades into the background colour
         Backdrop(const c2d::FloatRect &rect, float fadeLeft, float fadeBottom, float fadeTop = 0);
 
-        void set(const std::shared_ptr<c2d::Texture> &texture, const c2d::Vector2i &imageSize, Art art);
+        void setPosterStyle(const PosterStyle &style);
+
+        // average: the image's mean colour (Poster art with a colour field; nullptr = no field)
+        void set(const std::shared_ptr<c2d::Texture> &texture, const c2d::Vector2i &imageSize, Art art,
+                 const fit::Rgb *average = nullptr);
+
+        const Shown &shownArt() const { return info; }
 
         // which part of a taller image is kept: 0 = its top .. 1 = its bottom (default 0.3: above the centre)
         void setAnchor(float anchorY);
@@ -226,18 +269,21 @@ namespace ui {
         // the area the artwork covers (box coordinates; empty without artwork): for tests and layout checks
         c2d::FloatRect artRect() const;
 
-        static constexpr float POSTER_HEIGHT = 1.1f;   // the poster's height / the box height
-        static constexpr float POSTER_BLEED = 40;      // px of the poster beyond the box's right edge
-
     private:
         void hide();
 
         c2d::RectangleShape *image;
         c2d::RectangleShape *shade;
         c2d::RectangleShape *posterFade;   // dissolves the poster's left edge into the page (Poster art only)
+        c2d::RectangleShape *posterBottom; // dissolves a short poster's bottom edge (PosterStyle::bottomFade)
+        c2d::RectangleShape *washField;    // the colour field behind / right of the poster
+        c2d::RectangleShape *washFade;     // ... fading out to its left
+        PosterStyle style;
+        Shown info;
         float anchor = 0.3f;
         bool recrop = false;
-        Art shownArt = Art::Landscape;
+        bool washed = false;
+        c2d::Color washColor;
         c2d::GradientRectangle *glow;
         std::shared_ptr<c2d::Texture> shown;
     };

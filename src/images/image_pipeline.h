@@ -36,6 +36,8 @@ namespace images {
     struct LoadOutcome {
         Scheduler::Result result = Scheduler::Result::Permanent;
         std::vector<Image> variants;   // one per requested box, when result == Ok
+        int sourceW = 0;               // the decoded source image, before any downscale (for the log)
+        int sourceH = 0;
         bool fromDisk = false;
         bool staleUsed = false;
         std::string detail;            // failure reason / notes for the log

@@ -78,6 +78,19 @@ TEST(layout_home) {
     // the focus ring (no scaling) stays inside the card gap and under the next rail's heading
     CHECK(CARD_RING_GAP + FOCUS_BORDER < CARD_GAP / 2);
     CHECK(CARD_RING_GAP + FOCUS_BORDER < layout::home::RAIL_GAP / 2);
+    // hero poster fallback (v3.1): below the v3 enlargement the TV showed as soft (>= 1.47x), at most the box
+    // height, and even the widest poster plus its colour field stay right of the text column (the title area
+    // stays black); its fades fit inside the poster
+    CHECK(HERO_POSTER_MAX_UPSCALE > 1.0f && HERO_POSTER_MAX_UPSCALE <= 1.25f);
+    CHECK(HERO_POSTER_SCALE * BACKDROP_H <= BACKDROP_H);
+    CHECK(HERO_POSTER_MIN_H >= BACKDROP_H / 2 && HERO_POSTER_MIN_H < HERO_POSTER_SCALE * BACKDROP_H);
+    float widestLeft = SCREEN_W + HERO_POSTER_BLEED - HERO_POSTER_MAX_W;
+    CHECK(widestLeft > HERO_TEXT_RIGHT + 200);
+    CHECK(HERO_TEXT_RIGHT == TEXT_X + TEXT_W && HERO_TEXT_RIGHT > BACKDROP_X);
+    CHECK(widestLeft - HERO_WASH_LENGTH < HERO_TEXT_RIGHT);   // the field's start is clamped to the column
+    CHECK(HERO_POSTER_BLEED < HERO_POSTER_MAX_W * 0.15f);      // cropping at the edge stays a sliver
+    CHECK(HERO_POSTER_LEFT_FADE >= 0.4f && HERO_POSTER_LEFT_FADE <= 0.6f);
+    CHECK(HERO_POSTER_BOTTOM_FADE > 0 && HERO_POSTER_BOTTOM_FADE + HERO_POSTER_LEFT_FADE <= 1.0f);
 }
 
 TEST(layout_catalog) {

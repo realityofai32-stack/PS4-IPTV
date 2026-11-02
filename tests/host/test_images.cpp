@@ -1,11 +1,14 @@
 // Channel logo pipeline: URL keys, disk cache bounds/integrity, decoding, resizing, job scheduling,
 // memory LRU and failure fallbacks.
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
 #include "check.h"
 #include "cross2d/skeleton/stb_image_write.h"
+#include "../../src/images/art_sizes.h"
 #include "../../src/images/disk_cache.h"
 #include "../../src/images/image_decode.h"
 #include "../../src/images/image_key.h"
@@ -382,6 +385,7 @@ TEST(image_pipeline_fallbacks) {
     o = loadImage(url, disk, fetch, 100, BOXES);
     CHECK(o.result == Scheduler::Result::Ok && !o.fromDisk && fetches == 1);
     CHECK(o.variants.size() == 2 && o.variants[0].w == 54 && o.variants[1].w == 128);
+    CHECK(o.sourceW == 128 && o.sourceH == 128);   // the source size reaches the log, not only the variants
     CHECK_EQ(disk.fileCount(), 1);
     // second load: from disk, no network
     o = loadImage(url, disk, fetch, 200, BOXES);
@@ -401,6 +405,69 @@ TEST(image_pipeline_fallbacks) {
     next.networkError = true;
     o = loadImage(url, disk, fetch, 300 + 5000, BOXES);
     CHECK(o.result == Scheduler::Result::Ok && o.staleUsed && o.variants.size() == 2);
+}
+
+TEST(image_large_art_sizes_and_gpu_budget) {
+    using namespace images::art;
+    const int64_t MiB = 1024 * 1024;
+    // the real landscape backdrop: 1280 x 720 (v3: 1024 x 576), 16:9, in an exact-size texture
+    CHECK(BACKDROP.w == 1280 && BACKDROP.h == 720);
+    Page bd = page(BACKDROP.w, BACKDROP.h, true);
+    CHECK(bd.w == 1280 && bd.h == 720 && bd.bytes == 1280ll * 720 * 4);   // 3.52 MiB
+    CHECK(bd.bytes < 4 * MiB);                     // below v3's single 1024 x 1024 page
+    CHECK(page(1280, 720, false).w == 2048 && page(1280, 720, false).bytes == 8 * MiB);   // why exact
+    // at most two in memory: <= 7.03 MiB, never more than v3's 2 x 4 MiB, ~15 % of the 48 MiB image budget
+    CHECK(MAX_BACKDROPS == 2 && MAX_BACKDROPS * bd.bytes <= 8 * MiB);
+    CHECK(MAX_BACKDROPS * bd.bytes * 100 / (48 * MiB) < 15);
+    // drawn over the 1320 x 800 Home hero (cover): 1.11x (v3: 1.39x)
+    float cover = std::max(1320.0f / BACKDROP.w, 800.0f / BACKDROP.h);
+    CHECK(cover > 1.10f && cover < 1.12f);
+    // the transient decode buffer of the largest accepted source stays bounded (worker, freed at once)
+    CHECK((int64_t) BACKDROP_MAX_SOURCE * BACKDROP_MAX_SOURCE * 4 <= 16 * MiB);
+    // the hero poster: 512 x 768 (2:3) exact = 1.5 MiB, less than v3's 400 x 600 PosterLarge page (512 x 1024)
+    CHECK(HERO_POSTER.w * 3 == HERO_POSTER.h * 2);
+    Page hp = page(HERO_POSTER.w, HERO_POSTER.h, true);
+    CHECK(hp.bytes == 512ll * 768 * 4 && hp.bytes < page(400, 600, false).bytes);
+    CHECK(page(400, 600, false).w == 512 && page(400, 600, false).h == 1024);
+    // the Home hero holds one of them at a time: <= 3.52 MiB (v3: 4 MiB backdrop page + 2 MiB poster page)
+    CHECK(std::max(bd.bytes, hp.bytes) < 4 * MiB);
+    // prepare() never enlarges: a 300 x 450 provider poster stays 300 x 450 in the 512 x 768 box
+    Size kept = fitInside(300, 450, HERO_POSTER.w, HERO_POSTER.h, false);
+    CHECK(kept.w == 300 && kept.h == 450);
+    Size big = fitInside(600, 900, HERO_POSTER.w, HERO_POSTER.h, false);
+    CHECK(big.w == 512 && big.h == 768);
+    Size wide = fitInside(1920, 1080, BACKDROP.w, BACKDROP.h, false);
+    CHECK(wide.w == 1280 && wide.h == 720);
+    CHECK(page(0, 10, true).bytes == 0);
+}
+
+TEST(image_average_color) {
+    Image img;
+    img.w = 200;
+    img.h = 300;
+    img.rgba.assign((size_t) img.w * img.h * 4, 0);
+    for (int y = 0; y < img.h; y++) {
+        for (int x = 0; x < img.w; x++) {
+            uint8_t *p = &img.rgba[((size_t) y * img.w + x) * 4];
+            bool left = x < img.w / 2;
+            p[0] = left ? 200 : 100;
+            p[1] = left ? 100 : 50;
+            p[2] = 20;
+            p[3] = 255;
+        }
+    }
+    Average a = averageColor(img);
+    CHECK(std::fabs(a.r - 150) < 3 && std::fabs(a.g - 75) < 2 && std::fabs(a.b - 20) < 0.5f);
+    // transparent pixels do not count (a logo's empty margin does not darken it)
+    for (int y = 0; y < img.h; y++) {
+        for (int x = img.w / 2; x < img.w; x++) {
+            img.rgba[((size_t) y * img.w + x) * 4 + 3] = 0;
+        }
+    }
+    a = averageColor(img);
+    CHECK(std::fabs(a.r - 200) < 0.5f && std::fabs(a.g - 100) < 0.5f);
+    Average none = averageColor(Image());
+    CHECK(none.r == 0 && none.g == 0 && none.b == 0);
 }
 
 TEST(image_real_provider_logos) {

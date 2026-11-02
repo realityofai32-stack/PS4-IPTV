@@ -100,17 +100,61 @@ namespace fit {
 
     Placement posterBackdrop(float iw, float ih, float bw, float bh, float heightScale, float rightBleed,
                              float anchorY) {
-        if (!positive(iw) || !positive(ih) || !positive(bw) || !positive(bh) || !positive(heightScale)) {
+        if (!positive(heightScale)) {
             return Placement();
+        }
+        PosterArt spec;
+        spec.height = bh * heightScale;
+        spec.rightBleed = rightBleed;
+        spec.anchorY = anchorY;
+        return posterArt(iw, ih, bw, bh, spec).placement;
+    }
+
+    PosterArtPlacement posterArt(float iw, float ih, float bw, float bh, const PosterArt &spec) {
+        PosterArtPlacement out;
+        if (!positive(iw) || !positive(ih) || !positive(bw) || !positive(bh) || !positive(spec.height)) {
+            return out;
+        }
+        float h = spec.height;
+        if (positive(spec.maxUpscale) && h > ih * spec.maxUpscale) {
+            h = ih * spec.maxUpscale;
+            out.limited = true;
+        }
+        if (positive(spec.maxWidth) && h * iw / ih > spec.maxWidth) {
+            h = spec.maxWidth * ih / iw;
+            out.limited = true;
+        }
+        if (positive(spec.minHeight) && h < spec.minHeight) {
+            return out;   // too small to be art: the hero stays black
         }
         Placement p;
         p.valid = true;
         p.src = {0, 0, iw, ih};
-        p.dst.h = bh * heightScale;
-        p.dst.w = p.dst.h * iw / ih;    // the poster's own ratio: never stretched to the box
-        p.dst.x = bw + (std::isfinite(rightBleed) ? rightBleed : 0) - p.dst.w;
-        p.dst.y = -(p.dst.h - bh) * clamp01(anchorY);
-        return clip(p, bw, bh);
+        p.dst.h = h;
+        p.dst.w = h * iw / ih;    // the poster's own ratio: never stretched to the box
+        p.dst.x = bw + (std::isfinite(spec.rightBleed) ? spec.rightBleed : 0) - p.dst.w;
+        p.dst.y = -(h - bh) * clamp01(spec.anchorY);   // a shorter poster: the room above it, by the anchor
+        out.drawn = p.dst;
+        out.scale = h / ih;
+        out.placement = clip(p, bw, bh);
+        return out;
+    }
+
+    Rgb ambientWash(const Rgb &avg, const Rgb &tint, const Rgb &shade, float shadeAlpha, const Rgb &page,
+                    float level, float desaturate, float maxChannel) {
+        const float a = clamp01(shadeAlpha);
+        // the average as it reaches the screen: texture modulation, then the shade on top
+        Rgb d = {avg.r * tint.r / 255 * (1 - a) + shade.r * a, avg.g * tint.g / 255 * (1 - a) + shade.g * a,
+                 avg.b * tint.b / 255 * (1 - a) + shade.b * a};
+        const float y = 0.2126f * d.r + 0.7152f * d.g + 0.0722f * d.b;
+        const float s = clamp01(desaturate);
+        const float l = clamp01(level);
+        auto channel = [&](float c, float p) {
+            float grey = c + (y - c) * s;
+            float v = std::max(p, p + (grey - p) * l);   // never darker than the page: no dark patch
+            return std::isfinite(maxChannel) && maxChannel > 0 ? std::min(v, std::max(maxChannel, p)) : v;
+        };
+        return {channel(d.r, page.r), channel(d.g, page.g), channel(d.b, page.b)};
     }
 
     Rect pixelSnap(const Rect &r) {

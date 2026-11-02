@@ -352,11 +352,29 @@ namespace ui {
     RectangleShape *fade(C2DObject *parent, const FloatRect &rect, const Color &color, Edge solid) {
         auto *box = new RectangleShape(rect);
         box->setFillColor(theme::none());
+        for (int i = 0; i < 4; i++) {
+            box->add(new GradientRectangle(FloatRect(0, 0, 1, 1)));
+        }
+        refade(box, rect, color, solid);
+        if (parent) {
+            parent->add(box);
+        }
+        return box;
+    }
+
+    void refade(RectangleShape *box, const FloatRect &rect, const Color &color, Edge solid) {
+        box->setPosition(rect.left, rect.top);
+        box->setSize(rect.width, rect.height);
         // smoothstep at 0, 1/4, 1/2, 3/4, 1 (u = 0 at the transparent edge, 1 at the solid edge)
         const float steps[5] = {0.0f, 0.15625f, 0.5f, 0.84375f, 1.0f};
         const bool vertical = solid == Edge::Top || solid == Edge::Bottom;
         const float len = vertical ? rect.height : rect.width;
-        for (int i = 0; i < 4; i++) {
+        int i = 0;
+        for (C2DObject *child: box->getChilds()) {
+            auto *g = dynamic_cast<GradientRectangle *>(child);
+            if (!g || i >= 4) {
+                continue;
+            }
             // segment i runs from the transparent side towards the solid side
             float a0 = steps[i];
             float a1 = steps[i + 1];
@@ -366,16 +384,13 @@ namespace ui {
             float start = reversed ? len - to : from;
             float size = to - from;
             FloatRect r = vertical ? FloatRect(0, start, rect.width, size) : FloatRect(start, 0, size, rect.height);
-            auto *g = new GradientRectangle(r);
+            g->setPosition(r.left, r.top);
+            g->setSize(r.width, r.height);
             Color c0 = theme::withAlpha(color, (uint8_t) std::lround((float) color.a * (reversed ? a1 : a0)));
             Color c1 = theme::withAlpha(color, (uint8_t) std::lround((float) color.a * (reversed ? a0 : a1)));
             g->setColor(c0, c1, vertical ? GradientRectangle::Down : GradientRectangle::Right);
-            box->add(g);
+            i++;
         }
-        if (parent) {
-            parent->add(box);
-        }
-        return box;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -462,6 +477,13 @@ namespace ui {
         glow = new GradientRectangle(FloatRect(0, 0, rect.width, rect.height));
         glow->setColor(theme::withAlpha(theme::surface(), 120), theme::none(), GradientRectangle::Left);
         add(glow);
+        // the colour field (Poster art with PosterStyle::washLength): solid behind the poster, fading out to its left
+        washField = new RectangleShape(FloatRect(0, 0, 1, 1));
+        washField->setFillColor(theme::background());
+        washField->setVisibility(Visibility::Hidden);
+        add(washField);
+        washFade = fade(this, FloatRect(0, 0, 1, rect.height), theme::background(), Edge::Right);
+        washFade->setVisibility(Visibility::Hidden);
         image = new RectangleShape(FloatRect(0, 0, rect.width, rect.height));
         image->setFillColor(theme::backdropTint());   // texture modulation: the artwork itself is dimmed
         image->setVisibility(Visibility::Hidden);
@@ -470,10 +492,12 @@ namespace ui {
         shade->setFillColor(theme::backdropShade());
         shade->setVisibility(Visibility::Hidden);
         add(shade);
-        // a poster's left edge melts into the page over ~60 % of its visible width: no rectangle, no split
+        // a poster's left edge melts into the page (or its colour field): no rectangle, no split
         posterFade = fade(this, FloatRect(0, 0, std::round(rect.height * 0.42f), rect.height), theme::background(),
                           Edge::Left);
         posterFade->setVisibility(Visibility::Hidden);
+        posterBottom = fade(this, FloatRect(0, 0, 1, 1), theme::background(), Edge::Bottom);
+        posterBottom->setVisibility(Visibility::Hidden);
         // every edge that is not a screen edge dissolves into the page: no frame, no band
         if (fadeLeft > 0) {
             fade(this, FloatRect(0, 0, fadeLeft, rect.height), theme::background(), Edge::Left);
@@ -491,11 +515,20 @@ namespace ui {
         recrop = true;   // the next set() crops again (the texture stays referenced meanwhile)
     }
 
+    void Backdrop::setPosterStyle(const PosterStyle &s) {
+        style = s;
+        recrop = true;
+    }
+
     void Backdrop::hide() {
         image->setVisibility(Visibility::Hidden);
         shade->setVisibility(Visibility::Hidden);
         posterFade->setVisibility(Visibility::Hidden);
+        posterBottom->setVisibility(Visibility::Hidden);
+        washField->setVisibility(Visibility::Hidden);
+        washFade->setVisibility(Visibility::Hidden);
         glow->setVisibility(Visibility::Visible);
+        info = Shown();
     }
 
     FloatRect Backdrop::artRect() const {
@@ -505,23 +538,41 @@ namespace ui {
         return {image->getPosition().x, image->getPosition().y, image->getSize().x, image->getSize().y};
     }
 
-    void Backdrop::set(const std::shared_ptr<Texture> &texture, const Vector2i &size, Art art) {
+    void Backdrop::set(const std::shared_ptr<Texture> &texture, const Vector2i &size, Art art, const fit::Rgb *average) {
         if (texture == nullptr || size.x <= 0 || size.y <= 0) {
             hide();   // `shown` stays referenced by the hidden shape until something else is shown
             return;
         }
-        if (texture == shown && art == shownArt && !recrop && image->isVisible()) {
+        const bool wantWash = art == Art::Poster && style.washLength > 0 && average != nullptr;
+        if (texture == shown && art == info.art && !recrop && image->isVisible() && wantWash == washed) {
             return;
         }
         const float bw = getSize().x;
         const float bh = getSize().y;
         fit::Placement p;
+        Shown s;
+        s.art = art;
         if (art == Art::Landscape) {
             fit::Options o;
             o.anchorY = anchor;
             p = fit::place(fit::Mode::Cover, (float) size.x, (float) size.y, bw, bh, o);
+            if (p.valid) {
+                s.scale = bh / p.src.h;
+                s.drawn = {-p.src.x * s.scale, -p.src.y * s.scale, (float) size.x * s.scale, (float) size.y * s.scale};
+            }
         } else {
-            p = fit::posterBackdrop((float) size.x, (float) size.y, bw, bh, POSTER_HEIGHT, POSTER_BLEED, anchor);
+            fit::PosterArt spec;
+            spec.height = bh * style.heightScale;
+            spec.maxUpscale = style.maxUpscale;
+            spec.maxWidth = style.maxWidth;
+            spec.minHeight = style.minHeight;
+            spec.rightBleed = style.rightBleed;
+            spec.anchorY = style.anchorY >= 0 ? style.anchorY : anchor;
+            fit::PosterArtPlacement pa = fit::posterArt((float) size.x, (float) size.y, bw, bh, spec);
+            p = pa.placement;
+            s.drawn = pa.drawn;
+            s.scale = pa.scale;
+            s.limited = pa.limited;
         }
         if (!p.valid) {
             hide();
@@ -529,18 +580,55 @@ namespace ui {
         }
         image->setTexture(texture.get(), true);
         shown = texture;   // the previous texture is released only now
-        shownArt = art;
         recrop = false;
         const fit::Rect d = fit::pixelSnap(p.dst);
+        s.visible = true;
+        s.inBox = d;
+        info = s;
         image->setTextureRect(texelRect(p.src));
         image->setSize(d.w, d.h);
         image->setPosition(d.x, d.y);
         shade->setSize(d.w, d.h);
         shade->setPosition(d.x, d.y);
-        posterFade->setPosition(d.x, 0);
         image->setVisibility(Visibility::Visible);
         shade->setVisibility(Visibility::Visible);
-        posterFade->setVisibility(art == Art::Poster ? Visibility::Visible : Visibility::Hidden);
         glow->setVisibility(Visibility::Hidden);
+
+        washed = wantWash;
+        if (washed) {
+            // the poster's own average colour as drawn, dimmed: the field it dissolves into (ui/image_fit.h)
+            const Color tint = theme::backdropTint();
+            const Color sh = theme::backdropShade();
+            const Color page = theme::background();
+            fit::Rgb w = fit::ambientWash(*average, {(float) tint.r, (float) tint.g, (float) tint.b},
+                                          {(float) sh.r, (float) sh.g, (float) sh.b}, (float) sh.a / 255,
+                                          {(float) page.r, (float) page.g, (float) page.b},
+                                          WASH_LEVEL, WASH_DESATURATE, WASH_MAX);
+            washColor = Color((uint8_t) std::lround(w.r), (uint8_t) std::lround(w.g), (uint8_t) std::lround(w.b));
+        }
+        const Color edgeColor = washed ? washColor : theme::background();
+        if (art == Art::Poster) {
+            // left fade: v3 width (0.42 x the box height, full box height) unless the style sizes it to the poster
+            float fadeW = style.leftFade > 0 ? std::round(d.w * style.leftFade) : std::round(bh * 0.42f);
+            refade(posterFade, FloatRect(d.x, 0, fadeW, bh), edgeColor, Edge::Left);
+            posterFade->setVisibility(Visibility::Visible);
+            float bottomH = style.bottomFade > 0 ? std::round(d.h * style.bottomFade) : 0;
+            if (bottomH > 0) {
+                refade(posterBottom, FloatRect(d.x, d.y + d.h - bottomH, bw - d.x, bottomH), edgeColor, Edge::Bottom);
+            }
+            posterBottom->setVisibility(bottomH > 0 ? Visibility::Visible : Visibility::Hidden);
+        } else {
+            posterFade->setVisibility(Visibility::Hidden);
+            posterBottom->setVisibility(Visibility::Hidden);
+        }
+        if (washed) {
+            washField->setFillColor(washColor);
+            washField->setPosition(d.x, 0);
+            washField->setSize(bw - d.x, bh);
+            float x0 = std::max(style.washMinX, d.x - style.washLength);
+            refade(washFade, FloatRect(x0, 0, std::max(1.0f, d.x - x0), bh), washColor, Edge::Right);
+        }
+        washField->setVisibility(washed ? Visibility::Visible : Visibility::Hidden);
+        washFade->setVisibility(washed ? Visibility::Visible : Visibility::Hidden);
     }
 }

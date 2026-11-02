@@ -12,6 +12,8 @@ namespace images {
                 return false;
             }
             out.variants.clear();
+            out.sourceW = img.w;
+            out.sourceH = img.h;
             for (const Box &b: boxes) {
                 out.variants.push_back(prepare(img, b.w, b.h));
             }

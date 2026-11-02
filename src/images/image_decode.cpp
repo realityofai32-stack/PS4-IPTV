@@ -196,4 +196,32 @@ namespace images {
         Size s = fitInside(src.w, src.h, boxW, boxH, false);
         return resizeArea(src, s.w, s.h);
     }
+
+    Average averageColor(const Image &img) {
+        Average out;
+        if (!img.valid()) {
+            return out;
+        }
+        const int stepX = std::max(1, img.w / 64);
+        const int stepY = std::max(1, img.h / 64);
+        double sum[3] = {0, 0, 0};
+        double weight = 0;
+        for (int y = stepY / 2; y < img.h; y += stepY) {
+            const uint8_t *row = &img.rgba[(size_t) y * (size_t) img.w * 4];
+            for (int x = stepX / 2; x < img.w; x += stepX) {
+                const uint8_t *p = row + (size_t) x * 4;
+                double a = p[3];
+                sum[0] += p[0] * a;
+                sum[1] += p[1] * a;
+                sum[2] += p[2] * a;
+                weight += a;
+            }
+        }
+        if (weight > 0) {
+            out.r = (float) (sum[0] / weight);
+            out.g = (float) (sum[1] / weight);
+            out.b = (float) (sum[2] / weight);
+        }
+        return out;
+    }
 }
