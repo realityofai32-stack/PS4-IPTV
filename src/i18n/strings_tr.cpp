@@ -929,8 +929,6 @@ namespace i18n {
             {"home.hero_start_text_playlist", "Çalma listenizdeki kanallara göz atın veya onlarda arayın."},
             {"home.favorites_empty", "Kanalları, filmleri ve dizileri Favorilere ekleyin; burada görünürler."},
             {"home.favorites_more", "Filmler ve diziler, bölümleri bir kez açıldığında burada görünür."},
-            {"home.see_all", "Tümünü gör"},
-            {"home.see_all_detail", "Tüm favoriler"},
             {"home.source", "Kaynak: {0}"},
             // ---------------------------------------------------------------- V7 IPTV refresh: settings categories
             {"settings.cat.playback", "Oynatma"},

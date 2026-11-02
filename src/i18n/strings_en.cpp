@@ -924,8 +924,6 @@ namespace i18n {
             {"home.hero_start_text_playlist", "Browse the channels of your playlist, or search them."},
             {"home.favorites_empty", "Add channels, movies and series to Favorites and they appear here."},
             {"home.favorites_more", "Movies and series appear here once their section has been opened."},
-            {"home.see_all", "See all"},
-            {"home.see_all_detail", "Every favorite"},
             {"home.source", "Source: {0}"},
             // ---------------------------------------------------------------- V7 IPTV refresh: settings categories
             {"settings.cat.playback", "Playback"},

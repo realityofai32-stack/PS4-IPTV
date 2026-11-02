@@ -8,11 +8,12 @@ using namespace c2d;
 namespace screens {
 
     ui::Label *header(C2DObject *parent, const std::string &title, const std::string &subtitle) {
-        // the V7 symbol in front of every screen title: one brand, one place; the mark sits on the title's
-        // cap height (a 44 px semibold line: caps ~32 px tall, ~12 px below the label top)
+        // the V7 symbol in front of every screen title: one brand, one place. It is centred on the title's caps
+        // (44 px semibold: baseline ~44 px below the label top, caps ~32 px tall -> caps span ~+11..+43), so it
+        // reads as part of the title and never towers over it (v1 sat ~5 px high)
         const float mark = layout::HEADER_MARK_H;
         auto *m = new ui::BrandMark(mark);
-        m->setPosition(theme::SAFE_X, layout::HEADER_Y + std::round(ui::Label::centerOffset(theme::TITLE, 56) + 5));
+        m->setPosition(theme::SAFE_X, layout::HEADER_Y + std::round(27 - mark / 2));
         parent->add(m);
         const float x = theme::SAFE_X + m->getSize().x + theme::SPACE_M;
         auto *t = ui::label(parent, title, theme::TITLE, x, layout::HEADER_Y, ui::Weight::SemiBold);

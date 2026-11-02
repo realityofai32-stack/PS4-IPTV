@@ -10,8 +10,12 @@ using namespace iptv;
 
 namespace {
 
-    const float TOP = 236;
-    const float CONTENT_H = 740;
+    // tabs like Downloads, posters like the catalogs (8 columns at the full content width, two rows)
+    namespace C = layout::catalog;
+    const float TABS_Y = layout::downloads::TABS_Y;
+    const float TOP = 206;
+    const float CONTENT_H = layout::CONTENT_BOTTOM - TOP;
+    const int GRID_COLUMNS = 8;
     const char *TAB_KEYS[] = {"favorites.tab_channels", "home.movies", "home.series"};
 
     class FavoritesScreen : public Screen {
@@ -21,14 +25,13 @@ namespace {
             liveGen = app.session().liveGeneration;
             ui::background(this);
             screens::header(this, tr("home.favorites"));
-            tabLayer = new RectangleShape(FloatRect(theme::SAFE_X, 140, 1200, 60));
+            tabLayer = new RectangleShape(FloatRect(theme::SAFE_X, TABS_Y, 1200, layout::downloads::TAB_H));
             tabLayer->setFillColor(theme::none());
             add(tabLayer);
-            channels = new ui::ListView(FloatRect(theme::SAFE_X, TOP, theme::SCREEN_W - 2 * theme::SAFE_X, CONTENT_H),
-                                        84, 8, &listAdapter);
+            channels = new ui::ListView(FloatRect(theme::SAFE_X, TOP, theme::CONTENT_W, CONTENT_H), 80, 2, &listAdapter);
             add(channels);
-            grid = new ui::GridView(FloatRect(theme::SAFE_X, TOP, theme::SCREEN_W - 2 * theme::SAFE_X, CONTENT_H),
-                                    140, 246, 10, 3, &gridAdapter);
+            grid = new ui::GridView(FloatRect(theme::SAFE_X, TOP, theme::CONTENT_W, C::GRID_H), C::POSTER_W, C::CELL_H,
+                                    GRID_COLUMNS, C::ROWS, &gridAdapter);
             add(grid);
             empty = new ui::EmptyState(FloatRect(theme::SAFE_X, TOP, theme::CONTENT_W, 480));
             add(empty);
@@ -130,8 +133,9 @@ namespace {
 
         C2DObject *createRow(float w, float h) {
             ChannelRow r;
-            r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::surface(), theme::RADIUS_SMALL);
-            r.logo = new ui::LogoView(FloatRect(16, (h - 60) / 2, 104, 60), 22, 4, 1.25f);
+            r.bg = new ui::RowFrame(w, h, 16);
+            r.logo = new ui::LogoView(FloatRect(16, (h - 56) / 2, 96, 56), 22, 4, 1.25f);
+            r.logo->setCornersRadius(theme::RADIUS_SMALL);
             r.bg->add(r.logo);
             r.name = ui::label(r.bg, "", theme::BODY, 144, ui::Label::centerOffset(theme::BODY, h));
             r.name->setMaxWidth(w - 144 - 500);
@@ -153,9 +157,8 @@ namespace {
                 r.logo->set(c.name, img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
                 r.name->setText(c.name);
                 r.meta->setText(categoryName(c.categoryId));
-                r.bg->setFillColor(focused ? theme::focus() : theme::surface());
-                r.bg->setOutlineColor(theme::accent());
-                r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
+                r.bg->setState(focused);
+                r.name->setColor(focused ? theme::textStrong() : theme::textPrimary());
             }
         }
 
@@ -164,9 +167,12 @@ namespace {
             Cell c;
             c.root = new RectangleShape(FloatRect(0, 0, w, h));
             c.root->setFillColor(theme::none());
-            c.poster = new ui::PosterView(FloatRect(0, 0, w, 210), theme::CAPTION);
+            c.poster = new ui::PosterView(FloatRect(0, 0, w, C::POSTER_H), theme::LABEL);
+            c.poster->setCornersRadius(theme::RADIUS);
+            c.poster->setFocusScale(C::POSTER_FOCUS_SCALE);
             c.root->add(c.poster);
-            c.title = ui::label(c.root, "", theme::CAPTION, 0, 218, ui::Weight::Regular, theme::textSecondary());
+            c.title = ui::label(c.root, "", theme::LABEL, 0, C::POSTER_H + C::TITLE_GAP, ui::Weight::Regular,
+                                theme::textMuted());
             c.title->setAlign(ui::Align::Center, w);
             c.title->setMaxWidth(w);
             cells.push_back(c);
@@ -185,8 +191,10 @@ namespace {
                 c.poster->setProgress(0);
                 c.poster->setWatched(false);
                 c.poster->setFocused(focused);
+                c.poster->setDimmed(!focused);
                 c.title->setText(title);
-                c.title->setColor(focused ? theme::textStrong() : theme::textSecondary());
+                c.title->setColor(focused ? theme::textStrong() : theme::textMuted());
+                c.title->setWeight(focused ? ui::Weight::SemiBold : ui::Weight::Regular);
             }
         }
 
@@ -218,7 +226,7 @@ namespace {
         };
 
         struct ChannelRow {
-            RectangleShape *bg;
+            ui::RowFrame *bg;
             ui::LogoView *logo;
             ui::Label *name;
             ui::Label *meta;
@@ -265,13 +273,11 @@ namespace {
             }
             float x = 0;
             for (int t = 0; t < tabs; t++) {
-                bool sel = t == tab;
-                std::string text = tr(TAB_KEYS[t]) + "  " + std::to_string(counts[t]);
-                auto *chip = ui::box(tabLayer, FloatRect(x, 0, 260, 56), sel ? theme::accentMuted() : theme::surface(), 28);
-                auto *l = ui::label(chip, text, theme::LABEL, 0, ui::Label::centerOffset(theme::LABEL, 56),
-                                    sel ? ui::Weight::SemiBold : ui::Weight::Regular, sel ? theme::textStrong() : theme::textSecondary());
-                l->setAlign(ui::Align::Center, 260);
-                x += 276;
+                auto *chip = new ui::Chip(tr(TAB_KEYS[t]) + "  " + std::to_string(counts[t]), x, 0, 0,
+                                          layout::downloads::TAB_H);
+                chip->setState(t == tab, false);
+                tabLayer->add(chip);
+                x += chip->width() + 12;
             }
             channels->setVisibility(tab == 0 ? Visibility::Visible : Visibility::Hidden);
             grid->setVisibility(tab != 0 ? Visibility::Visible : Visibility::Hidden);

@@ -125,6 +125,26 @@ TEST(theme_focus_is_visible_and_surfaces_stay_dark) {
     CHECK(luminance(SURFACE_ELEVATED) < luminance(CARD_HOVER));
 }
 
+// v2 lists are separators on the background: the focused row is only its tinted surface and a 4 px accent edge
+// (no outline), so both must stand out from the page for every preset; dividers stay quiet; dimmed artwork
+// (the posters / cards that are not focused) stays clearly visible
+TEST(theme_v2_row_focus_dividers_and_artwork_dim) {
+    for (const Accent &a: ACCENTS) {
+        double surface = contrast(a.focus, BACKGROUND);
+        if (surface < 1.3) {
+            std::printf("  %s: focused row surface contrast %.2f < 1.30\n", a.key, surface);
+        }
+        CHECK(surface >= 1.3);
+        CHECK(contrast(a.accent, a.focus) >= 3.0);         // the edge reads on the focused surface
+        CHECK(contrast(a.accent, BACKGROUND) >= 4.5);      // and next to unfocused rows
+    }
+    double divider = contrast(DIVIDER_SOFT, BACKGROUND);
+    CHECK(divider >= 1.1 && divider <= 1.7);
+    CHECK(ARTWORK_DIM.r >= 190 && ARTWORK_DIM.r <= 230);
+    CHECK(ARTWORK_DIM.g >= 190 && ARTWORK_DIM.g <= 230);
+    CHECK(ARTWORK_DIM.b >= 190 && ARTWORK_DIM.b <= 230);
+}
+
 TEST(theme_no_colour_literals_outside_the_theme) {
     const char *src = std::getenv("PS4IPTV_SOURCE_DIR");
     if (!src) {

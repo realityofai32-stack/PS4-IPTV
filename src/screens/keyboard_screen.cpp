@@ -255,14 +255,18 @@ namespace {
                    std::function<void(int)> choice, std::vector<std::string> extra)
                 : Screen(a, true), options(std::move(opts)), details(std::move(extra)), checked(checkedIndex),
                   onChoice(std::move(choice)) {
-            const float w = 680;
-            auto *panel = ui::box(this, FloatRect(theme::SCREEN_W - w, 0, w, theme::SCREEN_H), theme::panel(), 0);
-            auto *t = ui::label(panel, title, theme::TITLE, 48, 64, ui::Weight::SemiBold);
-            t->setMaxWidth(w - 96);
-            list = new ui::ListView(FloatRect(40, 170, w - 70, 760), 84, 8, this);
+            // the same side panel as Playback Options: rows end at the safe edge, soft left edge
+            namespace P = layout::player;
+            auto *panel = ui::box(this, FloatRect(P::OPTIONS_X, 0, P::OPTIONS_W, theme::SCREEN_H), theme::panel(), 0);
+            ui::fade(panel, FloatRect(-P::OPTIONS_EDGE_W, 0, P::OPTIONS_EDGE_W, theme::SCREEN_H), theme::panel(),
+                     ui::Edge::Right);
+            auto *t = ui::label(panel, title, theme::TITLE, P::OPTIONS_PAD, 70, ui::Weight::SemiBold);
+            t->setMaxWidth(P::OPTIONS_LIST_W);
+            list = new ui::ListView(FloatRect(P::OPTIONS_PAD, 170, P::OPTIONS_LIST_W + ui::ScrollBar::WIDTH
+                                                                    + ui::ScrollBar::GAP, 760), 84, 4, this);
             panel->add(list);
             auto *hints = new ui::HintBar();
-            hints->setPosition(48, theme::SCREEN_H - theme::SAFE_Y - 40);
+            hints->setPosition(P::OPTIONS_PAD, layout::HINTS_Y);
             hints->setHints({{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("common.back")}});
             panel->add(hints);
             list->setSelected(checked >= 0 ? checked : 0);
@@ -274,14 +278,14 @@ namespace {
 
         C2DObject *createRow(float w, float h) override {
             Row r;
-            r.bg = ui::box(nullptr, FloatRect(0, 0, w, h), theme::none(), theme::RADIUS_SMALL);
+            r.bg = new ui::RowFrame(w, h, -1);
             r.check = ui::label(r.bg, "", theme::BODY, 20, ui::Label::centerOffset(theme::BODY, h), ui::Weight::SemiBold,
                                 theme::accentText());
-            r.name = ui::label(r.bg, "", theme::BODY, 64, ui::Label::centerOffset(theme::BODY, h));
-            r.name->setMaxWidth(w - 64 - 24);
-            r.detail = ui::label(r.bg, "", theme::CAPTION, 64, ui::Label::centerOffset(theme::BODY, h) + 22,
+            r.name = ui::label(r.bg, "", theme::BODY, 56, ui::Label::centerOffset(theme::BODY, h));
+            r.name->setMaxWidth(w - 56 - 24);
+            r.detail = ui::label(r.bg, "", theme::CAPTION, 56, ui::Label::centerOffset(theme::BODY, h) + 22,
                                  ui::Weight::Regular, theme::textMuted());
-            r.detail->setMaxWidth(w - 64 - 24);
+            r.detail->setMaxWidth(w - 56 - 24);
             rows.push_back(r);
             return r.bg;
         }
@@ -294,12 +298,11 @@ namespace {
                 }
                 r.check->setText(i == checked ? "\xE2\x9C\x93" : "");
                 r.name->setText(options[(size_t) i]);
-                r.name->setPosition(64, ui::Label::centerOffset(theme::BODY, 84) - (hasDetail ? 12 : 0));
+                r.name->setPosition(56, ui::Label::centerOffset(theme::BODY, 84) - (hasDetail ? 12 : 0));
                 r.detail->setText(hasDetail ? details[(size_t) i] : "");
                 r.name->setColor(focused ? theme::textStrong() : theme::textPrimary());
-                r.bg->setFillColor(focused ? theme::focus() : theme::none());
-                r.bg->setOutlineColor(theme::accent());
-                r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
+                r.name->setWeight(focused ? ui::Weight::SemiBold : ui::Weight::Regular);
+                r.bg->setState(focused);
             }
         }
 
@@ -333,7 +336,7 @@ namespace {
     private:
 
         struct Row {
-            RectangleShape *bg;
+            ui::RowFrame *bg;
             ui::Label *check;
             ui::Label *name;
             ui::Label *detail;
