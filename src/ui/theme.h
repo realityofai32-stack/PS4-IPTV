@@ -1,12 +1,13 @@
-// Visual design tokens of the V7 IPTV 1920x1080 TV layout: one deep-navy dark theme with a user-chosen accent.
+// Visual design tokens of the V7 IPTV 1920x1080 TV layout: one neutral black theme with a user-chosen accent.
 //
 // Every screen colour comes from here (tests/host/test_theme.cpp rejects colour literals in screens and
 // widgets). The values live in ui/palette.h, where the host tests check text contrast on every surface for
 // every accent preset.
 //
 // Hierarchy: background (near-black gradient) < surface (panels, rows) < card (tiles) < surfaceElevated
-// (buttons, chips) < cardHover (focused card). Focus = one step lighter fill + an accent outline; the accent
-// fills only small things (the primary button, selected chips, markers, progress).
+// (buttons, chips) < cardHover (focused card). Every base step is neutral charcoal and never follows the accent.
+// Focus = a raised neutral surface + an accent edge or ring; the accent fills only small things (the primary
+// button, selected / focused chips, toggles, markers, progress) and never tints a large surface.
 //
 // The accent is chosen at run time (Settings > Appearance > Accent color): accent(), accentText(),
 // accentMuted(), focus() and onAccent() read the active preset. Screens read colours when they build shapes or
@@ -94,8 +95,11 @@ namespace theme {
 
     inline c2d::Color accentMuted() { return color(accentPreset().muted); }
 
-    // focused list row: dark, slightly accent-tinted
+    // focused list row / cell: raised neutral with a barely visible accent tint (the accent edge marks it)
     inline c2d::Color focus() { return color(accentPreset().focus); }
+
+    // the same raised surface without any tint (large focused areas, every accent alike)
+    inline c2d::Color focusNeutral() { return color(palette::FOCUS_NEUTRAL); }
 
     // captions on an accent fill (primary button, selected chip when focused)
     inline c2d::Color onAccent() { return color(accentPreset().onAccent); }

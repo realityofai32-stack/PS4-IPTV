@@ -2,6 +2,7 @@
 // preset, surfaces that stay dark, and no colour literals in screens / widgets / app code (everything goes
 // through ui/theme.h).
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -143,6 +144,44 @@ TEST(theme_v2_row_focus_dividers_and_artwork_dim) {
     CHECK(ARTWORK_DIM.r >= 190 && ARTWORK_DIM.r <= 230);
     CHECK(ARTWORK_DIM.g >= 190 && ARTWORK_DIM.g <= 230);
     CHECK(ARTWORK_DIM.b >= 190 && ARTWORK_DIM.b <= 230);
+}
+
+// v3: the base reads as professional black + charcoal, never dark navy; the accent stays on small things. The
+// focus / selected surfaces derived from an accent are raised neutral with a barely visible tint, so a focused row
+// is never a large red / purple / green slab (v7-ui-2 Playback Options with Red).
+TEST(theme_v3_neutral_black_base_and_restrained_accent) {
+    auto chroma = [](Rgba c) { return std::max({c.r, c.g, c.b}) - std::min({c.r, c.g, c.b}); };
+    auto coolCast = [](Rgba c) { return (int) c.b - (int) c.r; };
+    for (const Named &bg: {Named{"background", BACKGROUND}, Named{"backgroundSecondary", BACKGROUND_SECONDARY},
+                           Named{"surface", SURFACE}, Named{"card", CARD}, Named{"surfaceElevated", SURFACE_ELEVATED},
+                           Named{"cardHover", CARD_HOVER}, Named{"logoTile", LOGO_TILE}, Named{"divider", DIVIDER},
+                           Named{"dividerSoft", DIVIDER_SOFT}, Named{"panel", PANEL}, Named{"focusNeutral", FOCUS_NEUTRAL},
+                           Named{"overlay", OVERLAY}, Named{"overlayPanel", OVERLAY_PANEL}}) {
+        if (coolCast(bg.color) > 13 || chroma(bg.color) > 13) {
+            std::printf("  %s (%d, %d, %d) has a blue cast\n", bg.name, bg.color.r, bg.color.g, bg.color.b);
+        }
+        CHECK(coolCast(bg.color) <= 13);   // v2 was 9..31 (navy)
+        CHECK(chroma(bg.color) <= 13);
+    }
+    // the page itself is nearly black
+    CHECK(luminance(BACKGROUND) < 0.003);
+    CHECK(BACKGROUND.r <= 8 && BACKGROUND.g <= 8 && BACKGROUND.b <= 10);
+    // texture modulation of backdrops is grey (dims the artwork without tinting it)
+    CHECK(chroma(BACKDROP_TINT) <= 4 && chroma(ARTWORK_DIM) <= 12);
+    for (const Accent &a: ACCENTS) {
+        // the focused / selected surfaces stay within a few levels of the neutral base, whatever the accent
+        auto distance = [](Rgba x, Rgba y) {
+            return std::max({std::abs(x.r - y.r), std::abs(x.g - y.g), std::abs(x.b - y.b)});
+        };
+        if (distance(a.focus, FOCUS_NEUTRAL) > 12) {
+            std::printf("  %s focus (%d, %d, %d) is too tinted\n", a.key, a.focus.r, a.focus.g, a.focus.b);
+        }
+        CHECK(distance(a.focus, FOCUS_NEUTRAL) <= 12);
+        CHECK(distance(a.muted, rgb(38, 42, 49)) <= 24);
+        CHECK(chroma(a.focus) <= 22);
+        // ...and are no brighter than a raised surface: the edge / ring carries the accent
+        CHECK(luminance(a.focus) < luminance(CARD_HOVER) * 1.25);
+    }
 }
 
 TEST(theme_no_colour_literals_outside_the_theme) {

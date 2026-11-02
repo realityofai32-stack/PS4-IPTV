@@ -79,11 +79,12 @@ per screen, a fixed 6 px focus lift (existing), outline + fill focus.
 
 ## 2. Design system (Phase 1)
 
-- **Palette** (`ui/palette.h`): deep-navy near-black surfaces (background < surface < card < elevated < hover),
-  blue-grey text; all text/surface pairs contrast-tested.
+- **Palette** (`ui/palette.h`): neutral black / charcoal surfaces since v3 (background `#050608` < surface < card
+  < elevated < hover; v1/v2 were deep navy), neutral-grey text; all text/surface pairs contrast-tested, and the
+  base is tested for a blue cast (blue - red <= 13).
 - **Accent presets** (`palette::ACCENTS`): V7 Blue (default), Cyan, Teal, Green, Purple, Magenta, Red, Orange,
   White. Each preset = accent (borders, fills, progress), accentText (accent as text), accentMuted (selected
-  chip / tab at rest), focus (dark tinted row fill), onAccent (text on an accent fill: white or near-black,
+  chip / tab at rest), focus (raised neutral row fill, 4.5 % accent tint since v3), onAccent (text on an accent fill: white or near-black,
   whichever passes). Host tests check every preset on every surface.
 - **Runtime accent** (`theme::setAccent`): `theme::accent()` & co. read the active preset; nothing else in the
   call sites changes. Applying a new accent rebuilds the screen stack like a language change.
