@@ -160,3 +160,35 @@ TEST(theme_no_colour_literals_outside_the_theme) {
     CHECK(files > 20);
     CHECK_EQ(hits, 0);
 }
+
+// Focus treatment is one design-system rule: every focused outline uses a theme thickness token (no per-screen
+// numbers), and every accent fill on a text control picks its caption colour from the preset (onAccent).
+TEST(theme_focus_outlines_use_tokens) {
+    const char *src = std::getenv("PS4IPTV_SOURCE_DIR");
+    if (!src) {
+        std::printf("  (skipped: PS4IPTV_SOURCE_DIR not set)\n");
+        return;
+    }
+    namespace fsys = std::filesystem;
+    const std::regex rawFocus(R"(setOutlineThickness\(\s*(focused|f|foc|focus\s*==\s*\w+)\s*\?\s*\d)");
+    int hits = 0;
+    for (const char *dir: {"screens", "ui"}) {
+        for (const auto &e: fsys::recursive_directory_iterator(fsys::path(src) / dir)) {
+            if (!e.is_regular_file() || e.path().extension() != ".cpp") {
+                continue;
+            }
+            std::ifstream in(e.path());
+            std::string line;
+            int n = 0;
+            while (std::getline(in, line)) {
+                n++;
+                if (std::regex_search(line, rawFocus)) {
+                    std::printf("  %s:%d focus outline without a token: %s\n", e.path().filename().string().c_str(), n,
+                                line.c_str());
+                    hits++;
+                }
+            }
+        }
+    }
+    CHECK_EQ(hits, 0);
+}

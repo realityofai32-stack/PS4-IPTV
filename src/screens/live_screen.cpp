@@ -268,7 +268,7 @@ namespace {
                     r.count->setText(std::to_string(n));
                     r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surface() : theme::none());
                     r.bg->setOutlineColor(theme::accent());
-                    r.bg->setOutlineThickness(focused ? 3 : 0);
+                    r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
                     // the open category keeps an accent marker while the channel list has focus
                     r.marker->setVisibility(selected && !focused ? Visibility::Visible : Visibility::Hidden);
                     r.name->setWeight(selected ? ui::Weight::SemiBold : ui::Weight::Regular);

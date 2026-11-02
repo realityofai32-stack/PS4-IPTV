@@ -1,0 +1,201 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UI-1: BRAND, DESIGN SYSTEM, ACCENT COLORS, NEW HOME / DETAILS / SETTINGS
+======================================================================================================
+Branch feature/v7-ui-refresh (local only). Version 0.2.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: see build/checkpoint-v7-ui-1/BUILD.txt and SHA256SUMS.txt.
+
+What changed since Checkpoint 3.2 (build 87f5bcd, v0.2.0):
+  - The app is called V7 IPTV: new V7 symbol in every screen header, on Home, onboarding, About and the PS4
+    home screen icon; PKG display name "V7 IPTV". Title ID, content ID and /data/PS4IPTV/ are UNCHANGED, so
+    the PKG installs over v0.2.0 and keeps sources, favorites, history, positions, downloads and settings.
+  - Deep-navy theme with a user-chosen accent: Settings > Appearance > Accent color (V7 Blue, Cyan, Teal,
+    Green, Purple, Magenta, Red, Orange, White). Saved in settings.json ("accentColor"); older files get V7 Blue.
+  - Home: top navigation (Home / Live TV / Movies / Series, then Search / Favorites / Downloads / Settings
+    icons), a hero for the last Continue Watching item (or a "What would you like to watch?" start state),
+    rails: Continue Watching, Recently Watched, Favorites.
+  - Movie / Series details: poster-derived backdrop, actions under the plot (Play / Resume dominant), episode
+    rows with stills when the provider has them, season tabs.
+  - Settings: categories | settings | description. Add Source: two large choices.
+  - Player: Playback Options grouped (Audio, Subtitles, Video, Subtitle style, Technical info); HUD bands fade
+    into the video; shorter hint bars everywhere.
+  - Media stack, downloads, search ranking, parsers, storage formats: unchanged.
+
+This PKG contains NO credentials and NO playlists. Install it OVER the existing "PS4 IPTV" (it will show as
+"V7 IPTV" afterwards). Take screenshots (SHARE button) of every screen marked [SHOT].
+
+HARDWARE UNKNOWNS (what these steps decide):
+  U1 vertex-alpha gradients over artwork (Home hero, detail backdrops, HUD fades). Expected: smooth dark fades.
+     Wrong: black / white rectangles, banding stripes, or the backdrop drawn over the text.
+  U2 enlarged poster as backdrop: a 340x510 poster stretched ~4x with bilinear filtering. Expected: a soft,
+     dimmed colour wash (blur-like). Wrong: hard pixel blocks, or a bright image fighting the text.
+  U3 home page scroll: the whole page moves when a lower rail is focused (glides with Smooth scrolling On).
+     Wrong: rails drawn over the navigation or the hint bar, jitter, or slow input while it moves.
+  U4 rebuild on accent change: applying an accent rebuilds every screen (like a language change). Wrong:
+     crash, missing images afterwards, or a long freeze (> 1 s).
+  U5 vector shapes: V7 symbol, nav icons (magnifier, star, arrow, gear), season chips. Wrong: jagged or
+     broken shapes, a star drawn as a pentagon fan with holes, gear teeth misplaced.
+
+-----------------------------------------------------------------------------------------------------
+BRANDING
+-----------------------------------------------------------------------------------------------------
+ 1. PS4 home screen: the tile shows the new V7 icon (blue V7 on dark navy) and the name "V7 IPTV". [SHOT]
+ 2. Start the app. Expected: it opens your source as before; no crash; the first screen shows the V7 symbol.
+ 3. Home: top-left "V7 IPTV" with the symbol, sharp at couch distance. [SHOT]
+ 4. Settings > About > About V7 IPTV: name, version 0.2.0, build, licenses and notices complete.
+ 5. Exit dialog (Circle on Home hero): "Exit V7 IPTV?".
+ 6. (If you can delete all sources safely - otherwise skip) Onboarding shows the large lockup, the tagline
+    and "Welcome to V7 IPTV". [SHOT]
+
+-----------------------------------------------------------------------------------------------------
+HOME
+-----------------------------------------------------------------------------------------------------
+ 7. Navigation: Up from the hero reaches the nav. Left/Right walks Home, Live TV, Movies, Series, then the four
+    icons; the focused icon shows its name under it. X opens each one; Circle comes back. [SHOT nav focused]
+ 8. Hero with Continue Watching: last movie/episode title, episode line, time left, progress bar with
+    "position / duration", poster on the right, dim backdrop from the same poster. [SHOT]
+ 9. Hero X on "Resume 1:02:15": playback resumes at exactly that position (as before).
+10. Hero "Details": opens the movie detail / the series detail.
+11. Continue Watching rail: up to 4 cards visible (poster, title, episode / time left, progress bar). Moving
+    right past the 4th card shifts the rail by one card. Heading line shows the focused item in full.
+12. Square on a Continue Watching card: removed (toast), the resume position is kept (Movie detail still offers
+    Resume).
+13. Recently Watched rail: channels show the logo tile, movies/episodes the poster. X opens / plays as before.
+14. Favorites rail: favorite channels (always), favorite movies / series only after Movies / Series was
+    opened once in this session, then "See all" (opens Favorites). X on a channel plays it; L1/R1 in the
+    player zaps through your favorite channels.
+15. Down to the lowest rail: the page scrolls up, the rail is fully above the hint bar, nothing is drawn over
+    the navigation. Up / Circle brings it back. Repeat with Settings > Appearance > Smooth scrolling Off. [SHOT]
+16. Empty Home variants: a source with no history shows the start hero ("What would you like to watch?",
+    Live TV / Movies / Series buttons, counts of what is loaded) and short messages in the empty rails. [SHOT]
+17. M3U playlist source: nav has Home / Live TV only (+ icons), hero buttons Live TV / Search, no Continue
+    Watching rail.
+18. Offline start (Continue offline): status dot amber, offline notice next to the source name; downloaded
+    items resume from Home.
+19. Downloads badge: while a download runs, the downloads icon shows a small number.
+
+-----------------------------------------------------------------------------------------------------
+THEMES (Settings > Appearance > Accent color)
+-----------------------------------------------------------------------------------------------------
+20. Settings opens on the category list. Appearance shows nine color rows, each with its swatch; the active
+    one has a white ring and a check mark. [SHOT]
+21. Press X on each preset in turn. Expected each time: screens rebuild in < 1 s, you are back on the same row,
+    a toast "Accent color: <name>", focus outlines / primary buttons / chips / progress / switches use it.
+22. Fill the matrix below (OK / problem) - focused row/card outline, selected tab/chip, a disabled or idle
+    control next to it, a progress bar, and the primary button. Text on accent fills must be readable
+    (white on Blue/Purple/Magenta/Red, near-black on Cyan/Teal/Green/Orange/White).
+
+                     Home  Movies Series MovieDet SeriesDet LiveTV Search Settings HUD  Options Sources Downl.
+      V7 Blue        [ ]   [ ]    [ ]    [ ]      [ ]       [ ]    [ ]    [ ]      [ ]  [ ]     [ ]     [ ]
+      Cyan           [ ]   [ ]    [ ]    [ ]      [ ]       [ ]    [ ]    [ ]      [ ]  [ ]     [ ]     [ ]
+      Teal           [ ]   [ ]    [ ]    [ ]      [ ]       [ ]    [ ]    [ ]      [ ]  [ ]     [ ]     [ ]
+      Green          [ ]   [ ]    [ ]    [ ]      [ ]       [ ]    [ ]    [ ]      [ ]  [ ]     [ ]     [ ]
+      Purple         [ ]   [ ]    [ ]    [ ]      [ ]       [ ]    [ ]    [ ]      [ ]  [ ]     [ ]     [ ]
+      Magenta        [ ]   [ ]    [ ]    [ ]      [ ]       [ ]    [ ]    [ ]      [ ]  [ ]     [ ]     [ ]
+      Red            [ ]   [ ]    [ ]    [ ]      [ ]       [ ]    [ ]    [ ]      [ ]  [ ]     [ ]     [ ]
+      Orange         [ ]   [ ]    [ ]    [ ]      [ ]       [ ]    [ ]    [ ]      [ ]  [ ]     [ ]     [ ]
+      White          [ ]   [ ]    [ ]    [ ]      [ ]       [ ]    [ ]    [ ]      [ ]  [ ]     [ ]     [ ]
+    Minimum: every preset on Home + Settings + Movie detail; all screens for V7 Blue and one bright preset
+    (Cyan or White). [SHOT one screen per preset]
+23. Errors / destructive stay red whatever the accent: Downloads > a download > Cancel / Delete dialog: the
+    confirming button is dark red, focus starts on "Cancel".
+24. Persistence: choose Teal, close the app normally, start again: Teal. Then choose V7 Blue again.
+25. Language change after an accent change (Settings > Language > Türkçe and back): the accent stays.
+
+-----------------------------------------------------------------------------------------------------
+MOVIES
+-----------------------------------------------------------------------------------------------------
+26. Movies: header with the V7 symbol; categories left, poster grid right; only the focused poster's caption
+    is bright. [SHOT]
+27. Focus: accent outline + small lift on the poster; obvious from the couch.
+28. Hold Down 10 s in the grid (and full stick): as fast as 3.2, no stutter; posters load lazily as before.
+29. OPTIONS > Sort: unchanged behaviour; Square favorite; Triangle search; L1/R1 category.
+30. Movie detail: breadcrumb "Movies", backdrop from the poster, poster left, title / year / rating /
+    duration / resolution, genre, plot, then actions (Play or Resume widest and filled), then director / cast,
+    then the codec line in small grey. No empty labels for missing fields. [SHOT]
+31. Play / Resume / Start over / Download / Download actions / Delete download / Favorite: as before.
+
+-----------------------------------------------------------------------------------------------------
+SERIES
+-----------------------------------------------------------------------------------------------------
+32. Series grid: same look as Movies.
+33. Series detail: breadcrumb "Series", backdrop, cover, title, facts, credits line, plot, Resume / Play
+    S01E03 button (filled) + Favorite. [SHOT]
+34. Season tabs: the selected season is a tinted chip, the focused one accent-filled. L1/R1 switch seasons
+    fast from anywhere on the page.
+35. Episode rows: provider still on the left when the panel sends one (otherwise an "E3" tile - never a fake
+    picture), title, "S01E03 · 46 min · 1080p", progress bar + time on the right for started episodes,
+    "✓ Watched" / "↓ Downloaded" states. Stills load for the visible rows. [SHOT]
+36. X plays, Square downloads, OPTIONS episode menu (incl. season download), as before.
+
+-----------------------------------------------------------------------------------------------------
+LIVE TV
+-----------------------------------------------------------------------------------------------------
+37. Categories | channels (number, logo, name, ★) | channel card (big logo, name, category, number, favorite).
+    No programme / EPG text anywhere. [SHOT]
+38. While a channel is focused the card's "X Watch" is accent-filled and readable with every preset.
+39. Hold Down through hundreds of channels: no new delay; logos as before. X plays; zapping L1/R1 as before.
+40. Square favorite on a channel: ★ appears in the row and on the card; the Favorites category updates.
+
+-----------------------------------------------------------------------------------------------------
+SEARCH
+-----------------------------------------------------------------------------------------------------
+41. Search: magnifier in the field, "Search everything" empty state before typing. [SHOT]
+42. Type fast (Turkish letters too: ş ğ ı İ ö ü ç): results update as before, same speed and ranking.
+43. Move to the results: the keyboard turns flat and grey (secondary), results focused with the accent.
+44. L1/R1 filters All / Movies / Series / Live TV with counts. No results: "No results for …" + a hint line.
+
+-----------------------------------------------------------------------------------------------------
+DOWNLOADS
+-----------------------------------------------------------------------------------------------------
+45. Downloading tab: queued / downloading % / paused / "paused while playing" / waiting / failed states with
+    their colours and the progress bar; Downloaded tab: size, date, watched / time left. [SHOT]
+46. Empty tabs show a title and one line ("Nothing is downloading" / "No downloads yet").
+47. Start a movie while a download runs: the download pauses (as before) and resumes after playback.
+48. Offline item: plays from the console; resume position kept.
+
+-----------------------------------------------------------------------------------------------------
+PLAYER
+-----------------------------------------------------------------------------------------------------
+49. HUD: title / episode / time / bar / resolution · audio · subtitles as before; the top and bottom bands fade
+    into the picture (no hard edge). Hints: Play/Pause, Seek, Options, Info, (Next episode), Back. [SHOT]
+50. Auto-hide after ~4 s: the picture is completely unobstructed.
+51. Seek: Left/Right 10 s, L2/R2 1 min (not shown in the hints any more, still works); exact resume as before.
+52. OPTIONS: Audio ›, Subtitles ›, Video ›, Subtitle style ›, Technical info. [SHOT]
+53. Audio / Subtitles: switching tracks works without reload (as before).
+54. Subtitle style: size / position / shadow change live; the main row shows the summary.
+55. Video: aspect / crop / zoom / position / reset / set as default - unchanged behaviour.
+56. Live player: HUD fades, channel zapping, favorite, info as before.
+
+-----------------------------------------------------------------------------------------------------
+SETTINGS
+-----------------------------------------------------------------------------------------------------
+57. Categories: Appearance, Playback, Audio & subtitles, Video, Storage & downloads, Sources, Language,
+    Diagnostics, About. Up/Down + X/Right enter, L1/R1 jump categories, Circle back to the list. [SHOT]
+58. Choices (Left/Right + dots), switches (knob readable on the accent), actions (X) - every setting from
+    v0.2.0 is present and behaves the same; the right panel explains the focused one.
+59. Storage & downloads: sizes, delete partial / completed (red confirm), clear caches / history.
+60. Sources > Manage: source cards; Add Source shows two large choices (Xtream Codes / M3U playlist). [SHOT]
+
+-----------------------------------------------------------------------------------------------------
+ERROR / EMPTY
+-----------------------------------------------------------------------------------------------------
+61. Favorites with nothing in a tab: "No favorites yet" + how to add.
+62. Search with no results: title + hint.
+63. Provider unreachable (e.g. unplug network before start): connect screen explains it and offers Continue
+    offline / Retry / Edit / Sources; no password or full stream URL is shown anywhere.
+
+-----------------------------------------------------------------------------------------------------
+PERFORMANCE
+-----------------------------------------------------------------------------------------------------
+64. Scrolling: Movies grid, Live TV list, Search results, Settings, Home rails - no visible frame drops.
+65. Focus responsiveness: no input lag on Home (backdrop + rails) or details.
+66. Image loading: Home hero backdrop and posters appear within a second or two on a warm cache.
+
+-----------------------------------------------------------------------------------------------------
+STABILITY
+-----------------------------------------------------------------------------------------------------
+67. 20x quickly: Home -> Movies -> detail -> back -> back; Home -> Series -> detail -> season switch -> back.
+68. 10x: start playback, back, start again (movie, episode, live channel).
+69. Change accent 5x in a row, then use the app normally.
+70. Exit with the exit dialog; start again: everything restored, no crash at any point.
+
+Report: the matrix, every [SHOT], and anything marked Wrong in U1-U5.

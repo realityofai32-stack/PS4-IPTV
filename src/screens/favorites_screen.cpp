@@ -155,7 +155,7 @@ namespace {
                 r.meta->setText(categoryName(c.categoryId));
                 r.bg->setFillColor(focused ? theme::focus() : theme::surface());
                 r.bg->setOutlineColor(theme::accent());
-                r.bg->setOutlineThickness(focused ? 3 : 0);
+                r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
             }
         }
 

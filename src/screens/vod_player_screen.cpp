@@ -955,7 +955,7 @@ namespace {
                 r.name->setColor(focused ? theme::textStrong() : theme::textPrimary());
                 r.bg->setFillColor(focused ? theme::focus() : theme::none());
                 r.bg->setOutlineColor(theme::accent());
-                r.bg->setOutlineThickness(focused ? 3 : 0);
+                r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
             }
         }
 

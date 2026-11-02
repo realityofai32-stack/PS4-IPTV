@@ -140,6 +140,47 @@ per screen, a fixed 6 px focus lift (existing), outline + fill focus.
 - i18n: new keys in English and Turkish, placeholders, the hard-coded text scan covers the new UI files.
 - Branding: `app.name` is V7 IPTV in both languages; no user-facing "PS4 IPTV" left in the tables.
 
-## 7. Progress log
+## 7. Implementation notes (what was built)
+
+- **Accent storage**: `settings.json` key `accentColor` (`blue`, `cyan`, `teal`, `green`, `purple`, `magenta`,
+  `red`, `orange`, `white`). Absent (v0.2.0 files) or unknown -> `blue`; the settings format version stays 2,
+  so v0.2.0 can still read a file written by this build (it ignores the key). Settings are app-wide (one file),
+  like the language.
+- **Applying an accent**: `App::applyAccent(true)` sets the preset and rebuilds the stack (Home, then Settings
+  on Appearance), exactly like a language change; nothing has to be repainted in place.
+- **Focus**: cards / posters / rows: accent outline (`FOCUS_BORDER` / `ROW_FOCUS_BORDER`) + lighter fill;
+  buttons: an offset accent ring (6 px gap) so it reads on accent fills and with the White preset; chips: accent
+  fill. A host test rejects focus outlines without a token.
+- **Captions on accent fills** always use `theme::onAccent()` (white or near-black per preset): buttons, chips,
+  keyboard keys, the Live TV Watch action, switch knobs.
+- **Destructive actions** (dialog confirm buttons) use a dark red pill (`Button::setDanger`), never the accent.
+- **Home** is the only screen with the top navigation; other screens keep Circle = back and get the branded
+  header / breadcrumb, so the controller model of every other screen is unchanged.
+- **Backdrops**: `ui::Backdrop` = textured rectangle (poster centre-crop, tinted 150/255) + 59 % shade + two
+  2-colour gradients. One per screen; it reuses the PosterLarge texture the poster already needs.
+- **Episode stills**: `Episode::image` through the existing `Poster` image kind (140 x 210 box, aspect kept: a
+  16:9 still becomes 140 x 79, shown at 150 x 84), requested only for the visible rows (+3 below).
+
+## 8. Progress log
 
 - Phase 0 audit: this document.
+- Phase 1 (fa28901): palette, accent presets, runtime accent, settings field + migration tests, components,
+  Button / HintBar rules, V7 brand (symbol, icon0.png, PKG title, strings).
+- Phase 2 (07c7008): Home navigation, hero, rails, page scroll.
+- Phase 3 (26dadda): movie / series details, episode rows, season chips, browse polish.
+- Phase 4 (1b3bfaf): Live TV panel, Search field / keyboard / chips, on-accent captions.
+- Phase 5 (d8aa0f6): Settings categories + Appearance, dialogs, Add Source chooser, empty states.
+- Phase 6 (8eb848b): Playback Options groups, HUD fades, player hints.
+- Phase 7: focus-token and branding tests, hardware checklist `docs/checkpoint-v7-ui-1.txt`.
+
+## 9. Known limitations of this checkpoint
+
+- No host rendering route exists (libcross2d PS4 renderer only), so layouts are verified on hardware with the
+  checklist; there are no automated screenshots.
+- Favorites on Home can show movies / series only after their catalog was loaded in the session (Home never
+  starts a catalog download); "See all" always opens the complete Favorites screen.
+- Backdrops come from posters: there is no provider backdrop / fanart image kind yet (`MovieInfo::backdrop` is
+  parsed but not loaded) - a possible later step once its memory cost is measured on hardware.
+- Movies, Series, Live TV, Search, Favorites and Downloads keep their existing layouts with the new tokens and
+  components; the structural redesign this phase is Home, details, Settings, Add Source and Playback Options.
+- The public README and the PowerShell scripts still say "PS4 IPTV"; they change with the next release.

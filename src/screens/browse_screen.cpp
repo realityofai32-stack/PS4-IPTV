@@ -419,7 +419,7 @@ namespace {
                     r.count->setText(n >= 0 ? std::to_string(n) : "");
                     r.bg->setFillColor(focused ? theme::focus() : selected ? theme::surface() : theme::none());
                     r.bg->setOutlineColor(theme::accent());
-                    r.bg->setOutlineThickness(focused ? 3 : 0);
+                    r.bg->setOutlineThickness(focused ? theme::ROW_FOCUS_BORDER : 0);
                     r.marker->setVisibility(selected && !focused ? Visibility::Visible : Visibility::Hidden);
                     r.name->setWeight(selected ? ui::Weight::SemiBold : ui::Weight::Regular);
                     r.name->setColor(focused ? theme::textStrong() : selected ? theme::textPrimary() : theme::textSecondary());
