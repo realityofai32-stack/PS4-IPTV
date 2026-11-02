@@ -1,4 +1,4 @@
-PS4 IPTV
+V7 IPTV (formerly PS4 IPTV)
 Copyright (C) 2026 PS4 IPTV contributors
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General
@@ -8,7 +8,7 @@ option) any later version. See LICENSE.
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
 implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-PS4 IPTV does not provide, host or link to any content: no channels, movies, series, accounts or playlists.
+V7 IPTV does not provide, host or link to any content: no channels, movies, series, accounts or playlists.
 It is a client for Xtream Codes compatible services and M3U / M3U8 playlists the user is entitled to access. The offline download
 feature stores the service's original files on the console and is intended only for services and content
 where the user has permission to store content locally; it does not remove DRM, decrypt content or
@@ -26,7 +26,7 @@ pPlay                       Copyright (C) Cpasjuste                      GPL-3.0
 
 libcross2d                  Copyright (C) Cpasjuste                      GPL-3.0
   https://github.com/Cpasjuste/libcross2d (as pinned by pPlay)
-  Includes stb_image 2.23 / stb_image_write 1.13 (Sean Barrett, public domain or MIT), which PS4 IPTV
+  Includes stb_image 2.23 / stb_image_write 1.13 (Sean Barrett, public domain or MIT), which V7 IPTV
   also uses to decode channel logos.
 
 Linked from PacBrew PS4 portlibs (https://github.com/PacBrew/pacbrew-packages):

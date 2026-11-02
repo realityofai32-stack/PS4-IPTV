@@ -4,7 +4,7 @@
 
 Please **do not open a public issue** for:
 
-- a security vulnerability in PS4 IPTV,
+- a security vulnerability in V7 IPTV (formerly PS4 IPTV),
 - a way the app could reveal credentials, playlist addresses or authenticated stream URLs (in logs, on screen,
   in files it writes, in crash output),
 - credentials or private data you found in this repository, its history or a release.
@@ -18,7 +18,7 @@ token**, not even your own. Replace them with placeholders such as `http://examp
 
 ## Scope
 
-PS4 IPTV is a client. It does not run servers and does not provide content, accounts or playlists. Problems with
+V7 IPTV is a client. It does not run servers and does not provide content, accounts or playlists. Problems with
 an IPTV service itself (its availability, its content, its accounts) are outside this project.
 
 ## Supported versions

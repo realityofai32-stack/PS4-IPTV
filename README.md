@@ -1,6 +1,6 @@
-# PS4 IPTV
+# V7 IPTV
 
-Native, open-source IPTV/media client for jailbroken PlayStation 4 consoles, built for the TV and the DualShock 4.
+Native, open-source IPTV and media client for jailbroken PlayStation 4 consoles, designed for TV and DualShock 4.
 
 <p align="center">
   <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/realityofai32-stack/PS4-IPTV?label=release" alt="Latest release"></a>
@@ -18,72 +18,113 @@ Native, open-source IPTV/media client for jailbroken PlayStation 4 consoles, bui
   · <a href="#building-from-source">Build from Source</a>
 </p>
 
-> **PS4 IPTV is a client only.** It ships with no channels, movies, series, accounts, subscriptions, credentials or playlists, and it is not affiliated with any IPTV provider. Bring your own legitimate source and make sure you have permission to access, play and download its content.
+> **V7 IPTV is a client only.** It ships with no channels, movies, series, accounts, subscriptions, playlists or
+> provider credentials, and it is not affiliated with any IPTV provider. Bring your own legitimate source and make
+> sure you have permission to access, play and download its content.
 
 <p align="center">
-  <img src="docs/screenshots/home.jpg" alt="PS4 IPTV home screen with Live TV, Movies, Series, Downloads, Favorites, Search, Continue Watching and Recently Watched" width="100%">
+  <img src="docs/screenshots/home.jpg" alt="V7 IPTV Home: navigation, Continue Watching hero with Resume and Details, and Continue Watching cards" width="100%">
 </p>
 
-## Highlights
+V7 IPTV is the redesigned evolution of the PS4 IPTV project: same app, same title ID and same data on the console,
+with a new interface and name.
 
-- **Xtream Codes** accounts and **M3U / M3U8** playlists, with multiple sources
-- **Live TV** with categories, channel logos, favorites, fast zapping and MPEG-TS / HLS fallback
-- **Movies & Series** with poster grids, metadata, seasons and episodes
-- **Search** across Live TV, Movies and Series, including tolerant matching for small typos
-- **Favorites, Continue Watching and Recently Watched** with exact resume positions
-- **Offline downloads** for movies and episodes, including interrupted-download resume and offline playback
-- **Multiple audio tracks and embedded subtitles**, switchable during playback
-- **Aspect ratio, crop / fill, zoom and position controls** applied live during playback
-- **DualShock 4 optimized interface** with accelerated hold-to-scroll, smooth lists and an on-screen keyboard
-- **English and Turkish UI**, plus broad international title/channel-name support
+## What's new in v0.3.0
 
-## Quick Start
+- **Complete V7 IPTV redesign**: new V7 branding and logo, a neutral black / charcoal TV interface and nine
+  selectable accent themes
+- **Redesigned screens**: Home, Movies, Series, Movie and Series details, Live TV, Search and Settings, with
+  updated Downloads and Favorites
+- **Artwork**: posters are fitted to their own shape instead of being cropped, sharper poster images, provider
+  backdrops where the source offers them, with a safe poster fallback
+- **Accelerated hold-to-scroll** on every list
+- **Next Episode auto-play**: a 45-second countdown at the end of an episode with *Play now* and *Cancel*, from
+  Series Detail and Continue Watching, across season boundaries, and offline-aware
+- **Native Kubuntu build workflow**: this release was built and validated on Kubuntu Linux
 
-1. Download the latest `.pkg` from [Releases](../../releases/latest).
-2. Install it with the package installer in your PS4 homebrew environment.
-3. Launch **PS4 IPTV** and choose **Add Source**.
-4. Add your own Xtream Codes compatible service or M3U / M3U8 playlist and start watching.
+### Accent themes
+
+*Settings › Appearance* offers **V7 Blue** (default), **Cyan**, **Teal**, **Green**, **Purple**, **Magenta**,
+**Red**, **Orange** and **White**. The base interface always stays neutral black / charcoal; the accent colours only
+the focus, buttons, active tabs, progress bars, toggles and selection indicators.
 
 ## Screenshots
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/movie-detail.jpg" alt="Movie details with Play, Download and Add to favorites"></td>
-    <td width="50%"><img src="docs/screenshots/series-detail.jpg" alt="Series details with seasons, episodes and resume position"></td>
+    <td width="50%"><img src="docs/screenshots/movies.jpg" alt="Movies: categories and poster grid"></td>
+    <td width="50%"><img src="docs/screenshots/series.jpg" alt="Series: categories and poster grid"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Movie details</sub></td>
-    <td align="center"><sub>Series, seasons and episodes</sub></td>
+    <td align="center"><sub>Movies</sub></td>
+    <td align="center"><sub>Series</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/playback.jpg" alt="Movie playback with progress bar, audio and subtitle status"></td>
-    <td><img src="docs/screenshots/playback-options.jpg" alt="Playback options: audio, subtitles, video geometry"></td>
+    <td><img src="docs/screenshots/series-detail.jpg" alt="Series details with seasons, episodes and resume position"></td>
+    <td><img src="docs/screenshots/search.jpg" alt="Search across movies, series and live channels with the on-screen keyboard"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Series details: seasons, episodes, resume</sub></td>
+    <td align="center"><sub>Search across Movies, Series and Live TV</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/settings.jpg" alt="Settings: Appearance with the nine accent themes"></td>
+    <td><img src="docs/screenshots/downloads.jpg" alt="Downloads with progress and resume"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Settings: accent themes</sub></td>
+    <td align="center"><sub>Downloads</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/live-tv.jpg" alt="Live TV: categories, channels and the channel card"></td>
+    <td><img src="docs/screenshots/favorites.jpg" alt="Favorites: channels, movies and series"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Live TV</sub></td>
+    <td align="center"><sub>Favorites</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/video.jpg" alt="Episode playback with progress, audio and subtitle status"></td>
+    <td><img src="docs/screenshots/video-options.jpg" alt="Playback options: audio, subtitles, video, subtitle style"></td>
   </tr>
   <tr>
     <td align="center"><sub>Playback</sub></td>
-    <td align="center"><sub>Playback options: audio, subtitles, aspect ratio / crop / zoom</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/search.jpg" alt="Search across movies, series and live channels with the on-screen keyboard"></td>
-    <td><img src="docs/screenshots/live-tv.jpg" alt="Live TV playback"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Search across Movies, Series and Live TV</sub></td>
-    <td align="center"><sub>Live TV</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/sources.jpg" alt="Add Source: Xtream Codes or M3U / M3U8 playlist (server address redacted)"></td>
-    <td></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Sources: Xtream Codes or M3U / M3U8 (server address redacted)</sub></td>
-    <td></td>
+    <td align="center"><sub>Playback options</sub></td>
   </tr>
 </table>
 
-<sub>Screenshots were taken on a PS4 and show the client interface only. Channel names and logos, posters,
-artwork and video frames come from the user's own source and belong to their respective owners; they are not
-part of this project and are not distributed with it.</sub>
+<sub>Screenshots were captured on a real PS4. Channel names, logos, posters, artwork, video frames and media
+metadata shown in them come from the user's own configured source and belong to their respective owners; they are
+not distributed with V7 IPTV.</sub>
+
+## Features
+
+- **Sources**: Xtream Codes accounts and M3U / M3U8 playlists, with multiple sources
+- **Live TV** with categories, channel logos, favorites, fast zapping and MPEG-TS / HLS fallback
+- **Movies & Series** with poster grids, sorting, metadata, seasons and episodes
+- **Search** across Live TV, Movies and Series, including tolerant matching for small typos
+- **Favorites, Continue Watching and Recently Watched** with exact resume positions
+- **Offline downloads** for movies and episodes: resumable, interrupted downloads continue, offline playback
+- **Multiple audio tracks and embedded subtitles**, switchable during playback, with subtitle size, position and
+  shadow
+- **Video geometry**: Aspect Ratio, Crop / Fill, Zoom and video position, applied live during playback
+- **Next Episode** countdown and auto-play for series episodes
+- **English and Turkish UI**, plus Unicode fallback fonts for international titles and channel names
+- **DualShock 4 navigation** designed for the TV, with accelerated hold-to-scroll and an on-screen keyboard
+
+### Next Episode
+
+Series episodes support a **45-second Next Episode countdown**. During the final 45 seconds of an episode that has
+a next episode, a small panel appears in the bottom-right corner:
+
+- **✕ Cross**: play the next episode now
+- **○ Circle**: cancel auto-play for this playback
+
+If no button is pressed, the next episode starts automatically when the current episode genuinely ends; nothing
+of the ending is cut. It works for episodes started from Series Detail and from Continue Watching, follows the
+provider's episode order across season boundaries, and respects *Settings › Playback › Auto-play next episode*
+(on by default; when off, the usual *Up next* screen appears at the end). In offline mode the next episode must
+already be downloaded.
 
 ### What each source type supports
 
@@ -101,28 +142,38 @@ Continue Watching and downloads.
 ## Requirements
 
 - A **jailbroken PS4** or another compatible homebrew environment that can install fake-signed PKG files.
-  PS4 IPTV does not include or describe any exploit.
+  V7 IPTV does not include or describe any exploit.
 - **Your own source**: an Xtream Codes compatible service (server address, username, password) and/or the address
   of an M3U / M3U8 playlist you are entitled to use. The project provides no content, accounts or playlists.
 - Network access for streaming; downloaded content plays offline.
+
+## Quick Start
+
+1. Download the latest PKG from [Releases](../../releases/latest).
+2. Install it with the PS4 package installer of your homebrew environment.
+3. Launch **V7 IPTV**.
+4. Choose **Add Source**.
+5. Select **Xtream Codes** or **M3U / M3U8 Playlist**.
+6. Enter your own valid source information and start watching.
 
 ## Installing
 
 1. Download `IV0001-IPTV00002_00-IPTV000020002000.pkg` from the [Releases](../../releases) page (or build it
    yourself, below). Each release lists the PKG's SHA-256.
-2. Install it with the package installer of your PS4 homebrew environment.
-3. Start **PS4 IPTV**.
-4. Choose **Add Source**, then **Xtream Codes** or **M3U / M3U8 Playlist**, and enter your details.
+2. Install it with the package installer of your PS4 homebrew environment. It installs over PS4 IPTV v0.2.0 as an
+   update (same title ID `IPTV00002`).
+3. Start **V7 IPTV**.
 
-The app keeps its data in `/data/PS4IPTV/` on the console (sources, settings, history, caches, downloads).
-Sources, including passwords and playlist addresses, are stored only on the console.
+The app keeps its data in `/data/PS4IPTV/` on the console (sources, settings, history, caches, downloads); the
+path is unchanged from earlier versions, so an update keeps everything. Sources, including passwords and playlist
+addresses, are stored only on the console.
 
 ## Using the app
 
 | Button | Action |
 |---|---|
-| ✕ | Select / open / play |
-| ○ | Back |
+| ✕ | Select / open / play; in the player: pause / resume; during the Next Episode countdown: play now |
+| ○ | Back; during the Next Episode countdown: cancel auto-play |
 | □ | Favorite; on an episode: download it; on a Continue Watching card: remove it from the row |
 | △ | Search (Live TV, Movies, Series); in the player: technical info |
 | OPTIONS | Settings (Home); sort & refresh (Movies, Series); Refresh Playlist / Playlist Info (playlist sources); source actions (Sources); playback options (player) |
@@ -130,9 +181,9 @@ Sources, including passwords and playlist addresses, are stored only on the cons
 | L2 / R2 | Page up / down; in the player: seek 1 minute |
 | D-pad ← → | Seek 10 seconds in the player |
 
-Hold a direction to scroll quickly: after 0.3 s the list moves every 90 ms, then 60 ms, 40 ms and, after 3.5 s,
-every 30 ms. A short press always moves exactly one item. *Settings › Smooth scrolling* turns the gliding
-animation off.
+**Accelerated hold-to-scroll**: hold a direction to scroll quickly. After 0.3 s the list moves every 90 ms, then
+60 ms, 40 ms and, after 3.5 s, every 30 ms. A short press always moves exactly one item. *Settings › Appearance ›
+Smooth scrolling* turns the gliding animation off.
 
 ### Playback options
 
@@ -208,17 +259,46 @@ control.
 
 ## Building from source
 
-Builds run **natively on Windows 11** with PowerShell. No WSL, VM or Docker is needed.
+**v0.3.0 was built and validated natively on Kubuntu Linux** (x86-64) with the Bash scripts below. The Windows
+11 / PowerShell workflow is kept for contributors but was not re-tested for this release.
 
 The toolchain reproduces [pPlay](https://github.com/Cpasjuste/pplay)'s PS4 build: **LLVM/Clang 12.0.1**,
 **CMake 3.31**, **Ninja**, **pkgconf**, the **PacBrew PS4 sysroot** (musl, libc++, SDL2, libmpv 0.34.1,
-FFmpeg 5.0, libcurl 7.80 + Mbed TLS, ...) and the **OpenOrbis** tools (`create-fself`, `create-gp4`, built with
-Go) plus **LibOrbisPkg** `PkgTool.Core` for the PKG. `scripts\setup-toolchain.ps1` downloads all of them,
-checks each against a pinned SHA-256 and unpacks them into `toolchain\` inside the repository (git-ignored).
-Nothing is added to PATH; only LLVM's official installer needs one administrator (UAC) prompt.
+FFmpeg 5.0, libcurl 7.80 + Mbed TLS, ...) and the **OpenOrbis** tools (`create-fself`, `create-gp4`) plus
+**LibOrbisPkg** `PkgTool.Core` for the PKG. Everything lives in `toolchain\` / `toolchain/` inside the repository
+(git-ignored); nothing is installed system-wide.
 
-Prerequisites: Windows 11, PowerShell 5.1, Git, Python 3, the .NET runtime (for PkgTool.Core) and, for the host
-tests only, Visual Studio 2022 Build Tools with the Windows SDK. The first setup downloads about 0.5 GB.
+Both workflows need the pPlay checkout in `external/pplay-reference` at the pinned commit
+`039954636c1f2ef20b5ec188226e7ed245cbb763`: V7 IPTV compiles libcross2d and two pPlay sources from it and copies
+pPlay's PS4 system modules into the PKG.
+
+### Kubuntu / Linux (release build)
+
+The project-local toolchain is described component by component in [docs/linux-build.md](docs/linux-build.md).
+`PkgTool.Core` needs **OpenSSL 1.1**, which current Kubuntu / Ubuntu releases no longer ship: a project-local
+OpenSSL 1.1.1 in `toolchain/openssl-1.1.1/` is used for that tool only (`cmake/ps4-linux.cmake`). System packages:
+`g++` (host tests), `pkgconf`, `python3`, `git`.
+
+```bash
+git clone https://github.com/realityofai32-stack/PS4-IPTV.git
+cd PS4-IPTV
+git clone --recursive https://github.com/Cpasjuste/pplay external/pplay-reference
+git -C external/pplay-reference checkout --recurse-submodules 039954636c1f2ef20b5ec188226e7ed245cbb763
+# toolchain/ as described in docs/linux-build.md, then:
+scripts/build-ps4iptv.sh Release                 # -> build/ps4iptv-release/IV0001-IPTV00002_00-IPTV000020002000.pkg
+scripts/test-host.sh                             # host unit tests (g++ -Wall -Wextra -Werror)
+scripts/test-download-integration.sh             # libcurl transport + downloads + M3U against a local test server
+scripts/test-credential-guard.sh                 # self-test of the PKG credential guard
+scripts/verify-ps4iptv.sh Release                # full release validation
+```
+
+### Windows 11
+
+Builds run natively with PowerShell (no WSL, VM or Docker). `scripts\setup-toolchain.ps1` downloads every
+component, checks each against a pinned SHA-256 and unpacks it into `toolchain\`; only LLVM's official installer
+needs one administrator (UAC) prompt. Prerequisites: Windows 11, PowerShell 5.1, Git, Python 3, the .NET runtime
+(for PkgTool.Core) and, for the host tests only, Visual Studio 2022 Build Tools with the Windows SDK. The first
+setup downloads about 0.5 GB.
 
 ```powershell
 git clone https://github.com/realityofai32-stack/PS4-IPTV.git
@@ -226,29 +306,26 @@ cd PS4-IPTV
 powershell -ExecutionPolicy Bypass -File scripts\setup-toolchain.ps1        # once: toolchain\ (pinned, verified)
 powershell -ExecutionPolicy Bypass -File scripts\build-pplay-reference.ps1  # once: pPlay checkout + reference build
 powershell -ExecutionPolicy Bypass -File scripts\build-ps4iptv.ps1          # -> build\ps4iptv-release\*.pkg
-```
-
-`build-pplay-reference.ps1` clones pPlay at a pinned commit into `external\pplay-reference`. PS4 IPTV compiles
-libcross2d and two pPlay sources from that checkout and copies pPlay's PS4 system modules into the PKG, so this
-step is required. The reference pPlay build also serves as the baseline for the release checks.
-
-### Tests and release validation
-
-```powershell
 powershell -ExecutionPolicy Bypass -File scripts\run-host-tests.ps1                # unit tests (MSVC)
-powershell -ExecutionPolicy Bypass -File scripts\run-download-integration-test.ps1 # host libcurl (built on first run) + local HTTP server
+powershell -ExecutionPolicy Bypass -File scripts\run-download-integration-test.ps1 # host libcurl + local HTTP server
 powershell -ExecutionPolicy Bypass -File scripts\verify-ps4iptv.ps1                # full release validation
 ```
 
-`verify-ps4iptv.ps1` rebuilds from clean and checks: zero errors and warnings, all host tests, the localization
-checks, the download integration test, `pkg_validate`, an exact allow-list of packaged files, a secret scan of
-the extracted PKG and of the complete Git history, the linked system modules (against the pPlay reference build)
-and that no diagnostic screen can open by itself.
+### Release validation
+
+`verify-ps4iptv.sh` / `verify-ps4iptv.ps1` rebuild from clean and check:
+
+- zero errors and zero warnings from the project's sources;
+- all host tests, the localization checks and the download integration test;
+- `pkg_validate`, an exact allow-list of packaged files, and a secret scan of the extracted PKG;
+- a secret scan of the Git history;
+- the linked system modules, against a pPlay reference build;
+- that no diagnostic screen can open by itself.
 
 The secret scans compare against values only you know. Put any private value (your server host, username,
 password, playlist address) one per line in `config/forbidden_strings.txt`, or a test stream URL in
-`config/test_streams.txt` (see `config/test_streams.example.txt`). Both files are git-ignored. Without either
-file the history scan reports that it has nothing to compare against and the validation fails on purpose.
+`config/test_streams.txt` (see `config/test_streams.example.txt`). Both files are git-ignored. Without them the
+scans fall back to patterns (authenticated-looking URLs, token parameters, playlists) and report that.
 
 ### Keeping credentials out of the repository
 
@@ -261,24 +338,24 @@ any of them.
 ## Project layout
 
 ```
-src/app/          application shell, services (Xtream, catalogs, progress, offline glue)
+src/app/          application shell, services (Xtream, catalogs, progress, next episode, offline glue)
 src/core/         shared helpers: JSON, URLs, UTF-8, formatting
 src/downloads/    download engine: manifest, resumable transfers (libcurl), queue, storage checks
 src/i18n/         localization tables (English, Turkish)
-src/images/       channel logo / poster loading, decoding, disk and memory cache
+src/images/       logo / poster / backdrop loading, decoding, disk and memory cache
 src/iptv/         Xtream API and Extended M3U parsing, catalogs, search index, sorting
 src/network/      HTTP client (libcurl) and background jobs
 src/player/       playback adapter over pPlay's mpv wrapper, tracks, stability, video geometry
-src/platform/     PS4 / host platform glue, controller input
+src/platform/     PS4 / host platform glue, controller input, clock
 src/screens/      TV screens
 src/storage/      JSON stores on the console (sources, settings, favorites, history)
-src/ui/           theme, UTF-8 text rendering with fallback fonts, widgets, on-screen keyboard
+src/ui/           V7 design system: theme, palette, layout, artwork fitting, text with fallback fonts, widgets
 tests/host/       host unit tests, download and playlist integration tests
 tests/fixtures/   sanitized M3U parser fixtures
-scripts/          toolchain setup, build, tests, release validation
-cmake/            Windows PS4 toolchain file, PKG credential scan
+scripts/          toolchain setup, build, tests, release validation (Bash and PowerShell)
+cmake/            Linux and Windows PS4 toolchain files, PKG credential scan
 third_party/      bundled fonts and their licenses
-docs/             screenshots and the hardware test checklists used for each checkpoint
+docs/             screenshots, design notes and the hardware test checklists used for each checkpoint
 ```
 
 **Adding a language**: copy `src/i18n/strings_en.cpp`, translate every entry (keep the keys and the `{0}`
@@ -290,7 +367,7 @@ reporting credential leaks or security issues.
 
 ## License
 
-PS4 IPTV is free software under the **GNU General Public License v3.0 or later**; see [LICENSE](LICENSE).
+V7 IPTV is free software under the **GNU General Public License v3.0 or later**; see [LICENSE](LICENSE).
 It builds on pPlay and libcross2d (GPL-3.0, Cpasjuste), mpv, FFmpeg, SDL2, libass, FreeType, FriBidi, libcurl,
 Mbed TLS, stb_image, the OpenOrbis PS4 Toolchain and PacBrew's PS4 ports, and the Inter, DejaVu Sans and Droid
 Sans Fallback typefaces. [NOTICE](NOTICE) lists every component with its authors and license.

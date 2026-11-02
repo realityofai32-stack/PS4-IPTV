@@ -18,7 +18,7 @@ if a playlist entry breaks the parser, reproduce it with example values. Credent
 
 A useful report contains:
 
-- the PS4 IPTV version (*Settings › About* shows the version and build ID) and your firmware / homebrew
+- the V7 IPTV version (*Settings › About* shows the version and build ID) and your firmware / homebrew
   environment,
 - the source type (Xtream Codes or M3U / M3U8) and the stream format if known (MPEG-TS, HLS, MKV, ...),
 - exact steps to reproduce, what you expected and what happened,

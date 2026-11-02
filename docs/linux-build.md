@@ -1,7 +1,7 @@
-# Building on Linux (developer notes)
+# Building on Linux (Kubuntu)
 
-Status: verified on **Kubuntu / Ubuntu 26.04** (x86-64). This is a developer note, not yet a supported public
-build path; the README's Windows workflow is unchanged.
+Status: the release workflow. **V7 IPTV v0.3.0 was built and validated with it** on Kubuntu / Ubuntu 26.04
+(x86-64). The Windows / PowerShell workflow in the README is kept for contributors.
 
 ## Project-local toolchain (`toolchain/`, git-ignored)
 
@@ -25,10 +25,28 @@ distributions ship only OpenSSL 3, so `cmake/ps4-linux.cmake` runs it with
 
 System packages used: `g++` (host tests), `pkgconf`, `python3`, `git`.
 
+## pPlay checkout
+
+V7 IPTV compiles libcross2d and two pPlay sources from `external/pplay-reference` and copies pPlay's PS4 system
+modules into the PKG. The checkout is pinned (the same commit `scripts/build-pplay-reference.ps1` uses):
+
+```bash
+git clone --recursive https://github.com/Cpasjuste/pplay external/pplay-reference
+git -C external/pplay-reference checkout --recurse-submodules 039954636c1f2ef20b5ec188226e7ed245cbb763
+```
+
+Release check 8 compares the PKG's linked system modules with a pPlay reference ELF in
+`build/pplay-ps4-linux/pplay` (or `build/pplay-ps4/pplay`); without one it reports WARN.
+
 ## Commands
 
 ```bash
-scripts/build-ps4iptv.sh [Release|Debug] [--clean]   # PKG -> build/ps4iptv-release/
+scripts/build-ps4iptv.sh [Release|Debug] [--clean]   # PKG -> build/ps4iptv-release/IV0001-IPTV00002_00-IPTV000020002000.pkg
 scripts/test-host.sh                                  # host unit tests with g++ -Wall -Wextra -Werror
-scripts/verify-ps4iptv.sh                             # release validation (build, tests, PKG checks, scans)
+scripts/test-download-integration.sh                  # libcurl transport, downloads, M3U service vs a local server
+scripts/test-credential-guard.sh                      # self-test of the PKG credential guard
+scripts/verify-ps4iptv.sh [Release|Debug]             # release validation (build, tests, PKG checks, scans)
 ```
+
+Run the scripts with `LC_ALL=C` on systems whose locale uses decimal commas (sorting and number formatting in
+the checks expect the C locale).
