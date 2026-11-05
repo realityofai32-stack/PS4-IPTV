@@ -108,6 +108,69 @@ namespace {
         }
     }
 
+    int hexValue(char c) {
+        return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+    }
+
+    // one level of percent-decoding (a URL nested in another URL's query: redirectors, proxies)
+    std::string percentDecode(const std::string &s) {
+        std::string out;
+        out.reserve(s.size());
+        for (size_t i = 0; i < s.size(); i++) {
+            if (s[i] == '%' && i + 2 < s.size() && hexValue(s[i + 1]) >= 0 && hexValue(s[i + 2]) >= 0) {
+                out += (char) (hexValue(s[i + 1]) * 16 + hexValue(s[i + 2]));
+                i += 2;
+            } else {
+                out += s[i];
+            }
+        }
+        return out;
+    }
+
+    std::string percentEncode(const std::string &s) {
+        static const char *const HEX = "0123456789ABCDEF";
+        std::string out;
+        for (unsigned char c: s) {
+            if (std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~') {
+                out += (char) c;
+            } else {
+                out += '%';
+                out += HEX[c >> 4];
+                out += HEX[c & 15];
+            }
+        }
+        return out;
+    }
+
+    // the same parameters percent-encoded inside another URL: "%3Fpassword%3Dxyz%26..." / "%26token%3Dxyz"
+    void maskEncodedQueryValues(std::string &text) {
+        std::string lower = toLower(text);
+        for (const char *key: QUERY_KEYS) {
+            std::string name(key);
+            name.pop_back();   // without '='
+            for (const char *boundary: {"%3f", "%26"}) {
+                const std::string k = std::string(boundary) + name + "%3d";
+                size_t pos = 0;
+                while ((pos = lower.find(k, pos)) != std::string::npos) {
+                    size_t start = pos + k.size();
+                    if (maskedAt(text, start)) {
+                        pos = start;
+                        continue;
+                    }
+                    size_t end = start;
+                    while (end < text.size() && lower.compare(end, 3, "%26") != 0 && !isUrlStop(text[end])) {
+                        end++;
+                    }
+                    if (end > start) {
+                        text.replace(start, end - start, MASK);
+                        lower.replace(start, end - start, MASK);
+                    }
+                    pos = start;
+                }
+            }
+        }
+    }
+
     // "scheme://user:pass@host" -> "scheme://[REDACTED]@host"
     void maskUserInfo(std::string &text) {
         size_t pos = 0;
@@ -124,15 +187,25 @@ namespace {
         }
     }
 
+    void addOneLocked(const std::string &s) {
+        if (std::find(g_secrets.begin(), g_secrets.end(), s) == g_secrets.end()) {
+            g_secrets.push_back(s);
+            std::sort(g_secrets.begin(), g_secrets.end(),
+                      [](const std::string &a, const std::string &b) { return a.size() > b.size(); });
+        }
+    }
+
     void addSecretLocked(const std::string &s) {
         // very short values would mangle unrelated text; the structural rules still cover them
         if (s.size() < 3 || s == MASK) {
             return;
         }
-        if (std::find(g_secrets.begin(), g_secrets.end(), s) == g_secrets.end()) {
-            g_secrets.push_back(s);
-            std::sort(g_secrets.begin(), g_secrets.end(),
-                      [](const std::string &a, const std::string &b) { return a.size() > b.size(); });
+        addOneLocked(s);
+        // the spellings a secret takes inside another URL (percent-encoded once or twice)
+        std::string once = percentEncode(s);
+        if (once != s) {
+            addOneLocked(once);
+            addOneLocked(percentEncode(once));
         }
     }
 
@@ -154,7 +227,23 @@ namespace {
 
 namespace redact {
 
+    void addUrlOnce(const std::string &url);
+
     void addUrl(const std::string &url) {
+        addUrlOnce(url);
+        // a URL nested in this one's query (redirector / proxy links): its credentials too, up to two levels deep
+        std::string decoded = url;
+        for (int depth = 0; depth < 2 && decoded.find('%') != std::string::npos; depth++) {
+            std::string next = percentDecode(decoded);
+            if (next == decoded) {
+                break;
+            }
+            decoded = next;
+            addUrlOnce(decoded);
+        }
+    }
+
+    void addUrlOnce(const std::string &url) {
         const std::string lower = toLower(url);
         std::lock_guard<std::mutex> lock(g_mutex);
 
@@ -288,6 +377,7 @@ namespace redact {
             maskSegmentsAfter(out, marker, 2);
         }
         maskQueryValues(out);
+        maskEncodedQueryValues(out);
         maskUserInfo(out);
         return out;
     }

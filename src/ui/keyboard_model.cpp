@@ -140,6 +140,32 @@ bool KeyboardModel::typeText(const std::string &text) {
     return value.size() != before;
 }
 
+KeyboardModel::KeyResult KeyboardModel::applyKey(const kbd::Event &k) {
+    std::string before = value;
+    switch (k.key) {
+        case kbd::Key::Char:
+            typeText(k.text);
+            break;
+        case kbd::Key::Backspace:
+            backspace();
+            break;
+        case kbd::Key::Delete:
+            if (!k.repeat) {
+                clear();
+            }
+            break;
+        case kbd::Key::Enter:
+            return k.repeat ? KeyResult::Unchanged : KeyResult::Ok;
+        case kbd::Key::Escape:
+            return k.repeat ? KeyResult::Unchanged : KeyResult::Cancel;
+        case kbd::Key::Tab:
+            return KeyResult::Unchanged;
+        default:
+            return KeyResult::Unhandled;
+    }
+    return value == before ? KeyResult::Unchanged : KeyResult::Edited;
+}
+
 void KeyboardModel::backspace() {
     utf8::popBack(value);
 }

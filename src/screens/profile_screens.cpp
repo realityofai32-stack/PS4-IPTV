@@ -409,11 +409,15 @@ namespace {
             screens::header(this, tr(portal ? (isNew ? "stalker.add_title" : "stalker.edit_title")
                                             : (isNew ? "profile.add_title" : "profile.edit_title")),
                             tr(portal ? "stalker.subtitle" : "profile.subtitle"));
-            const char *xtreamCaptions[] = {"profile.name", "profile.server_url", "profile.username", "profile.password"};
-            const char *portalCaptions[] = {"profile.name", "stalker.portal_url", "stalker.mac"};
+            static const char *const XTREAM_CAPTIONS[4] = {"profile.name", "profile.server_url", "profile.username",
+                                                           "profile.password"};
+            static const char *const PORTAL_CAPTIONS[3] = {"profile.name", "stalker.portal_url", "stalker.mac"};
+            // one source for the captions and their number
+            const char *const *captions = portal ? PORTAL_CAPTIONS : XTREAM_CAPTIONS;
+            fieldCount = portal ? 3 : 4;
             for (int i = 0; i < fieldCount; i++) {
                 fields[i] = new screens::FieldRow(FloatRect(theme::SAFE_X, 230 + (float) i * 104, 1000, 88),
-                                                  tr(portal ? portalCaptions[i] : xtreamCaptions[i]));
+                                                  tr(captions[i]));
                 add(fields[i]);
             }
             const char *labels[] = {"profile.test", "profile.save_connect", "common.cancel"};

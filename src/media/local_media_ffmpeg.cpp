@@ -2,7 +2,7 @@
 
 #include "local_media.h"
 
-#ifdef __PS4__
+#if defined(__PS4__) || defined(PS4IPTV_FFMPEG_FORMATS)   // the host media test links the host FFmpeg build
 
 extern "C" {
 #include <libavformat/avformat.h>

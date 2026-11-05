@@ -452,7 +452,7 @@ namespace json {
                         case 'r': out += '\r'; break;
                         case 't': out += '\t'; break;
                         case 'u': {
-                            unsigned cp;
+                            unsigned cp = 0;
                             if (!readHex4(cp)) {
                                 return false;
                             }

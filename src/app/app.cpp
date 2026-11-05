@@ -8,6 +8,7 @@
 #include "../network/http.h"
 #include "../platform/clock.h"
 #include "../platform/fs.h"
+#include "../platform/key_routing.h"
 #include "../platform/log.h"
 #include "../ui/text.h"
 #include "../ui/theme.h"
@@ -469,11 +470,19 @@ void App::logic() {
         }
         requestRedraw();
     }
-    // the physical keyboard after the controller; both always work
+    // the physical keyboard after the controller; both always work. A key that opens / closes a screen (typing on
+    // a source field opens its keyboard) holds the keys after it until that screen is on top: they belong to it.
     for (const auto &k: keyboard.poll(t)) {
-        onKey(k);
+        if (heldKeys.size() < 64) {   // bounded: a screen that never settles cannot make it grow
+            heldKeys.push_back(k);
+        }
+    }
+    size_t used = 0;
+    while (used < heldKeys.size() && pendingOps.empty()) {
+        onKey(heldKeys[used++]);
         requestRedraw();
     }
+    heldKeys.erase(heldKeys.begin(), heldKeys.begin() + (long) used);
 
     if (jobSystem.pump() > 0) {
         requestRedraw();
@@ -500,43 +509,9 @@ void App::onKey(const kbd::Event &k) {
     }
     // not taken by the screen: the controller button that means the same (navigation everywhere)
     InputEvent e;
-    e.repeat = k.repeat;
-    e.repeatCount = k.repeatCount;
-    switch (k.key) {
-        case kbd::Key::Up:
-            e.button = PadButton::Up;
-            break;
-        case kbd::Key::Down:
-            e.button = PadButton::Down;
-            break;
-        case kbd::Key::Left:
-            e.button = PadButton::Left;
-            break;
-        case kbd::Key::Right:
-            e.button = PadButton::Right;
-            break;
-        case kbd::Key::Enter:
-            e.button = PadButton::Cross;
-            break;
-        case kbd::Key::Escape:
-            e.button = PadButton::Circle;
-            break;
-        case kbd::Key::Backspace:
-            if (k.repeat) {
-                return;   // holding Backspace never leaves several screens
-            }
-            e.button = PadButton::Circle;
-            break;
-        case kbd::Key::PageUp:
-            e.button = PadButton::L2;
-            break;
-        case kbd::Key::PageDown:
-            e.button = PadButton::R2;
-            break;
-        default:
-            return;   // characters outside a text field, Tab, Home / End, Delete: nothing
+    if (kbd::toPad(k, e)) {
+        s->handleInput(e);
     }
-    s->handleInput(e);
 }
 
 void App::run() {

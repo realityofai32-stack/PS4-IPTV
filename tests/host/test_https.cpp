@@ -74,3 +74,26 @@ TEST(https_log_origin_hides_path_query_and_credentials) {
     CHECK(line.find("someuser") == std::string::npos && line.find("somepass") == std::string::npos);
     CHECK(line.find("t0k3n") == std::string::npos);
 }
+
+// a stream address nested percent-encoded in another one (redirectors, proxy links, HTTP -> HTTPS hops): its
+// credentials are masked in every spelling, registered or not
+TEST(https_nested_encoded_urls_are_redacted) {
+    std::string inner = "https://cdn.example.com/live/nesteduser/nestedpass/1.ts?token=N3STEDT0K&e=99";
+    std::string outer = "https://redir.example.com/r?to=https%3A%2F%2Fcdn.example.com%2Flive%2Fnesteduser%2Fnestedpass"
+                        "%2F1.ts%3Ftoken%3DN3STEDT0K%26e%3D99";
+    redact::addUrl(outer);
+    for (const std::string &line: {outer, inner, "Playing: " + outer, std::string("redirect to ") + inner}) {
+        std::string out = redact::apply(line);
+        CHECK(out.find("nesteduser") == std::string::npos);
+        CHECK(out.find("nestedpass") == std::string::npos);
+        CHECK(out.find("N3STEDT0K") == std::string::npos);
+    }
+    // not registered at all: the encoded query parameters are masked structurally
+    std::string unknown = redact::apply("open https://p.example.com/go?u=http%3A%2F%2Fh%2Fget.php%3Fusername%3Dzzuser"
+                                        "%26password%3Dzzpass%26type%3Dm3u");
+    CHECK(unknown.find("zzuser") == std::string::npos && unknown.find("zzpass") == std::string::npos);
+    CHECK(unknown.find("type%3Dm3u") != std::string::npos);   // ordinary parameters stay readable
+    // secrets with reserved characters also match their percent-encoded spelling
+    redact::addSecret("p@ss w/rd");
+    CHECK(redact::apply("x=p%40ss%20w%2Frd").find("p%40ss") == std::string::npos);
+}

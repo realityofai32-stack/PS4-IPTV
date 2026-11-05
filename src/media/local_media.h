@@ -30,8 +30,12 @@ namespace localmedia {
         int number = 0;          // USB: 1..8
     };
 
-    // the roots that may exist on the console, in display order
-    std::vector<Root> candidateRoots();
+    // the roots that may exist on the console, in display order. base: a directory standing in for the file system
+    // root in tests ("" on the console)
+    std::vector<Root> candidateRoots(const std::string &base = "");
+
+    // the candidate roots that can be opened right now
+    std::vector<Root> detectRoots(const std::string &base = "");
 
     // "/data//a/./b/" -> "/data/a/b"; false for relative paths and any ".." segment
     bool normalize(const std::string &path, std::string &out);
@@ -86,10 +90,14 @@ namespace localmedia {
     // hidden entries (".name"), unsafe names and unsupported files are dropped
     std::vector<Entry> prepare(std::vector<Entry> raw, const Formats &formats);
 
+    // entries one folder shows at most (folders and playable files; what is skipped does not count)
+    constexpr size_t MAX_ENTRIES = 5000;
+
     struct Listing {
         bool ok = false;
         std::vector<Entry> entries;
-        int skipped = 0;      // files that are not playable / hidden
+        int skipped = 0;      // hidden, unsafe, unsupported, symbolic links, special files
+        bool truncated = false;   // more than MAX_ENTRIES entries to show
     };
 
     // reads one folder inside `root` (symbolic links are skipped, never followed)

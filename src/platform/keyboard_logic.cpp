@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstring>
 
 #include "keyboard_logic.h"
 
@@ -248,5 +249,63 @@ namespace kbd {
         down.clear();
         repeating = 0;
         repeats = 0;
+    }
+
+    bool parseState(const unsigned char *raw, size_t size, State &out) {
+        out = State();
+        if (raw == nullptr || size < STATE_SIZE) {
+            return false;
+        }
+        int32_t n;
+        std::memcpy(&n, raw + STATE_NKEYS, sizeof(n));
+        std::memcpy(&out.locks, raw + STATE_LOCKS, sizeof(out.locks));
+        std::memcpy(&out.mods, raw + STATE_MODS, sizeof(out.mods));
+        out.count = n < 0 ? 0 : n > (int32_t) STATE_MAX_KEYS ? (int) STATE_MAX_KEYS : (int) n;
+        std::memcpy(out.keys, raw + STATE_KEYS, sizeof(out.keys));
+        for (size_t i = (size_t) out.count; i < STATE_MAX_KEYS; i++) {
+            out.keys[i] = 0;   // only the reported entries are keys
+        }
+        return true;
+    }
+
+    const std::vector<Event> &Session::poll(double now) {
+        events.clear();
+        lastChange = Change::None;
+        if (handle < 0) {
+            if (now < nextOpen || !dev.open) {
+                return events;
+            }
+            nextOpen = now + OPEN_RETRY;
+            int h = dev.open();
+            if (h < 0) {
+                return events;
+            }
+            handle = h;
+            failures = 0;
+            keys.reset();
+            lastChange = Change::Opened;
+        }
+        unsigned char raw[BUFFER];
+        std::memset(raw, 0, sizeof(raw));
+        int rc = dev.read ? dev.read(handle, raw, sizeof(raw)) : -1;
+        if (rc < 0) {
+            error = rc;
+            if (++failures >= READ_FAILURES) {
+                if (dev.close) {
+                    dev.close(handle);
+                }
+                handle = -1;
+                keys.reset();
+                nextOpen = now + OPEN_RETRY;
+                lastChange = Change::Disconnected;
+            }
+            return events;   // a read error is never a key state
+        }
+        failures = 0;
+        State st;
+        if (parseState(raw, sizeof(raw), st)) {
+            events = keys.update(st.keys, st.count, st.mods, st.locks, now);
+        }
+        return events;
     }
 }

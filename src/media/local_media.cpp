@@ -12,13 +12,23 @@
 
 namespace localmedia {
 
-    std::vector<Root> candidateRoots() {
+    std::vector<Root> candidateRoots(const std::string &base) {
         std::vector<Root> roots;
-        roots.push_back({"/data/", false, 0});
+        roots.push_back({base + "/data/", false, 0});
         for (int i = 0; i < 8; i++) {
-            roots.push_back({"/mnt/usb" + std::to_string(i) + "/", true, i + 1});
+            roots.push_back({base + "/mnt/usb" + std::to_string(i) + "/", true, i + 1});
         }
         return roots;
+    }
+
+    std::vector<Root> detectRoots(const std::string &base) {
+        std::vector<Root> out;
+        for (const auto &r: candidateRoots(base)) {
+            if (available(r)) {
+                out.push_back(r);
+            }
+        }
+        return out;
     }
 
     bool normalize(const std::string &path, std::string &out) {
@@ -239,8 +249,8 @@ namespace localmedia {
                 continue;
             }
             total++;
-            if (!safeName(name) || raw.size() >= 5000) {
-                continue;
+            if (!safeName(name) || name[0] == '.') {
+                continue;   // hidden or unsafe
             }
             Entry e;
             e.name = name;
@@ -251,9 +261,13 @@ namespace localmedia {
             }
             if (S_ISDIR(st.st_mode)) {
                 e.directory = true;
-            } else if (S_ISREG(st.st_mode)) {
+            } else if (S_ISREG(st.st_mode) && formats.supported(extensionOf(name))) {
                 e.size = (int64_t) st.st_size;
             } else {
+                continue;   // not playable, or a device / socket / pipe
+            }
+            if (raw.size() >= MAX_ENTRIES) {
+                out.truncated = true;   // only what is shown counts, so a folder of pictures never hides its videos
                 continue;
             }
             raw.push_back(std::move(e));
@@ -266,7 +280,11 @@ namespace localmedia {
         }
         for (const auto &fe: fs::listDir(dir)) {
             total++;
-            if (!safeName(fe.name) || raw.size() >= 5000) {
+            if (!safeName(fe.name) || fe.name[0] == '.' || (!fe.dir && !formats.supported(extensionOf(fe.name)))) {
+                continue;
+            }
+            if (raw.size() >= MAX_ENTRIES) {
+                out.truncated = true;
                 continue;
             }
             Entry e;

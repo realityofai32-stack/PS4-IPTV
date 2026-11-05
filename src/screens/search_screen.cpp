@@ -249,35 +249,24 @@ namespace {
         // physical keyboard: typing always edits the query (searching as you go); Enter shows the results, and in
         // the results opens the selected one (Cross)
         bool handleKey(const kbd::Event &k) override {
-            switch (k.key) {
-                case kbd::Key::Char:
-                    if (keyboard.typeText(k.text)) {
-                        edited();
-                    }
-                    return true;
-                case kbd::Key::Backspace:
-                    keyboard.backspace();
+            if (k.key == kbd::Key::Enter && zone == 1) {
+                return false;   // Cross: open the selected result
+            }
+            switch (keyboard.applyKey(k)) {
+                case KeyboardModel::KeyResult::Edited:
                     edited();
                     return true;
-                case kbd::Key::Delete:
-                    if (!k.repeat) {
-                        keyboard.clear();
-                        edited();
+                case KeyboardModel::KeyResult::Ok:
+                    flush();
+                    if (!shown.empty()) {
+                        setZone(1);
                     }
                     return true;
-                case kbd::Key::Enter:
-                    if (zone == 1) {
-                        return false;   // Cross: open the selected result
-                    }
-                    if (!k.repeat) {
-                        flush();
-                        if (!shown.empty()) {
-                            setZone(1);
-                        }
-                    }
-                    return true;
+                case KeyboardModel::KeyResult::Cancel:
+                case KeyboardModel::KeyResult::Unhandled:
+                    return false;   // Escape = Circle, arrows move
                 default:
-                    return false;
+                    return true;
             }
         }
 

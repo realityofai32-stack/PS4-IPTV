@@ -9,7 +9,8 @@
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-out="$repo/build/host-tests-linux"
+# HOST_TEST_VARIANT / HOST_TEST_FLAGS: a separate build with extra flags (scripts/test-host-sanitize.sh)
+out="$repo/build/host-tests-linux${HOST_TEST_VARIANT:+-$HOST_TEST_VARIANT}"
 mkdir -p "$out"
 
 cxx="${CXX:-g++}"
@@ -17,6 +18,8 @@ cxx="${CXX:-g++}"
 flags=(-std=c++17 -O2 -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers -pthread
        # stb_image.h / stb_image_write.h: the copies libcross2d compiles into the PS4 build
        -I "$repo/external/pplay-reference/libcross2d/include")
+# shellcheck disable=SC2206
+flags+=(${HOST_TEST_FLAGS:-})
 
 build() {
     local name="$1"; shift
@@ -30,7 +33,8 @@ build() {
         if [[ ! -f "$o" || "$src" -nt "$o" || -n "$(find "$repo/src" "$repo/tests" -name '*.h' -newer "$o" -print -quit)" ]]; then
             local extra=()
             # third-party stb_image (MSVC: #pragma warning(push, 0) in stb_impl.cpp)
-            [[ "$src" == */stb_impl.cpp ]] && extra=(-w)
+            # shellcheck disable=SC2206
+            [[ "$src" == */stb_impl.cpp ]] && extra=(-w ${HOST_TEST_STB_FLAGS:-})
             "$cxx" "${flags[@]}" "${extra[@]}" -I "$repo/src" -c "$src" -o "$o" &
             pids+=($!)
             if (( ${#pids[@]} >= $(nproc) )); then wait "${pids[0]}"; pids=("${pids[@]:1}"); fi

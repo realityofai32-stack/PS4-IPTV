@@ -10,8 +10,17 @@
 #include <orbis/UserService.h>
 #include <orbis/_types/keyboard.h>
 
+#include <cstddef>
+
+// the offsets kbd::parseState decodes are the OpenOrbis structure's
+static_assert(offsetof(OrbisKeyboardData, nkeys) == kbd::STATE_NKEYS, "OrbisKeyboardData.nkeys");
+static_assert(offsetof(OrbisKeyboardData, locks) == kbd::STATE_LOCKS, "OrbisKeyboardData.locks");
+static_assert(offsetof(OrbisKeyboardData, mods) == kbd::STATE_MODS, "OrbisKeyboardData.mods");
+static_assert(offsetof(OrbisKeyboardData, keycodes) == kbd::STATE_KEYS, "OrbisKeyboardData.keycodes");
+static_assert(sizeof(OrbisKeyboardData) == kbd::STATE_SIZE, "OrbisKeyboardData size");
+static_assert(sizeof(OrbisKeyboardData) <= kbd::Session::BUFFER, "state buffer");
+
 namespace {
-    const double OPEN_RETRY = 3.0;   // seconds between attempts to open a keyboard that is not connected
 
     // handle of a loaded system module by file name (the way the SDL2 port finds Piglet)
     int moduleHandle(const char *name) {
@@ -74,62 +83,40 @@ bool PhysicalKeyboard::init() {
         return false;
     }
     userId = user;
-    available = true;
-    LOG_I("keyboard", "keyboard library ready (layout %s)",
-          decoder.currentLayout() == kbd::Layout::TurkishQ ? "Turkish Q" : "US");
+    kbd::Session::Device dev;
+    dev.open = [this]() { return fnOpen(userId, 0, 0, nullptr); };
+    // the firmware writes the state into the session's zeroed kbd::Session::BUFFER bytes (bigger than the
+    // reverse-engineered structure: a larger firmware structure never writes past our memory)
+    dev.read = [this](int handle, unsigned char *buffer, size_t) { return fnReadState(handle, buffer); };
+    dev.close = [this](int handle) { fnClose(handle); };
+    session.reset(new kbd::Session(dev));
+    session->decoder().setLayout(layout);
+    LOG_I("keyboard", "keyboard library ready (layout %s)", layout == kbd::Layout::TurkishQ ? "Turkish Q" : "US");
     return true;
 }
 
-void PhysicalKeyboard::tryOpen(double now) {
-    nextOpen = now + OPEN_RETRY;
-    int h = fnOpen(userId, 0, 0, nullptr);
-    if (h >= 0) {
-        handle = h;
-        readFailures = 0;
-        decoder.reset();
-        LOG_I("keyboard", "physical keyboard opened");
-    }
-}
-
 const std::vector<kbd::Event> &PhysicalKeyboard::poll(double now) {
-    events.clear();
-    if (!available) {
-        return events;
+    if (!session) {
+        return none;
     }
-    if (handle < 0) {
-        if (now >= nextOpen) {
-            tryOpen(now);
-        }
-        if (handle < 0) {
-            return events;
-        }
+    const std::vector<kbd::Event> &events = session->poll(now);
+    if (session->change() == kbd::Session::Change::Opened) {
+        LOG_I("keyboard", "physical keyboard opened");
+    } else if (session->change() == kbd::Session::Change::Disconnected) {
+        LOG_I("keyboard", "physical keyboard disconnected (0x%08x)", (unsigned) session->lastError());
     }
-    // The state is read into a larger zeroed buffer: OrbisKeyboardData is a reverse-engineered layout (OpenOrbis
-    // keyboard sample) and the firmware's own structure must never write past our memory if it is bigger.
-    alignas(8) unsigned char raw[512];
-    memset(raw, 0, sizeof(raw));
-    int rc = fnReadState(handle, raw);
-    OrbisKeyboardData data;
-    memcpy(&data, raw, sizeof(data));
-    if (rc < 0) {
-        // unplugged: close and look for a keyboard again later
-        if (++readFailures >= 30) {
-            LOG_I("keyboard", "physical keyboard disconnected (0x%08x)", (unsigned) rc);
-            fnClose(handle);
-            handle = -1;
-            decoder.reset();
-            nextOpen = now + OPEN_RETRY;
-        }
-        return events;
-    }
-    readFailures = 0;
-    int n = data.nkeys < 0 ? 0 : data.nkeys > 32 ? 32 : data.nkeys;
-    events = decoder.update(data.keycodes, n, data.mods, data.locks, now);
     if (!events.empty() && !firstKeyLogged) {
         firstKeyLogged = true;   // never which key: it could be part of a password
         LOG_I("keyboard", "first key press received");
     }
     return events;
+}
+
+void PhysicalKeyboard::setLayout(kbd::Layout l) {
+    layout = l;
+    if (session) {
+        session->decoder().setLayout(l);
+    }
 }
 
 #else
@@ -138,11 +125,12 @@ bool PhysicalKeyboard::init() {
     return false;
 }
 
-void PhysicalKeyboard::tryOpen(double) {}
-
 const std::vector<kbd::Event> &PhysicalKeyboard::poll(double) {
-    events.clear();
-    return events;
+    return none;
+}
+
+void PhysicalKeyboard::setLayout(kbd::Layout l) {
+    layout = l;
 }
 
 #endif

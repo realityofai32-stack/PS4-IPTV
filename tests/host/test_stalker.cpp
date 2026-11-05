@@ -340,3 +340,116 @@ TEST(stalker_values_never_reach_logs) {
     std::string l2 = redact::apply("device " + id.deviceId + " Authorization: Bearer SESSIONTOKEN42");
     CHECK(l2.find(id.deviceId) == std::string::npos && l2.find("SESSIONTOKEN42") == std::string::npos);
 }
+
+namespace {
+    // what v0.3.0 does with a file it opens and saves again (src/storage/profile_store.cpp at 590c3cc): entries with
+    // a source type other than xtream / m3u are skipped, unknown top-level keys are not written back
+    std::string savedByV030(const std::string &text, const std::string &addXtreamId = "") {
+        json::Value root;
+        json::parse(text, root);
+        json::Value out = json::Value::makeObject();
+        out.set("version", json::Value::makeInt(2));
+        out.set("activeProfileId", json::Value::makeString(root["activeProfileId"].asString()));
+        json::Value list = json::Value::makeArray();
+        for (const auto &o: root["profiles"].items()) {
+            std::string t = o["sourceType"].asString();
+            if (t == "xtream" || t == "m3u") {
+                list.push(o);
+            }
+        }
+        if (!addXtreamId.empty()) {
+            json::Value o = json::Value::makeObject();
+            o.set("id", json::Value::makeString(addXtreamId));
+            o.set("sourceType", json::Value::makeString("xtream"));
+            o.set("name", json::Value::makeString("Added in v0.3.0"));
+            o.set("server", json::Value::makeString("http://new.example.com"));
+            o.set("username", json::Value::makeString("nu"));
+            o.set("password", json::Value::makeString("np"));
+            list.push(o);
+        }
+        out.set("profiles", std::move(list));
+        return json::write(out);
+    }
+}
+
+TEST(stalker_profiles_survive_a_downgrade_round_trip) {
+    std::string dir = tempDir("profiles_downgrade");
+    fs::removeFile(fs::join(dir, "profiles.stalker.json"));
+    ProfileStore s(dir);
+    Profile x;
+    x.type = SourceType::Xtream;
+    x.name = "X";
+    x.server = "http://x.example.com";
+    x.username = "u";
+    x.password = "p";
+    Profile m;
+    m.type = SourceType::M3u;
+    m.name = "M";
+    m.playlistUrl = "http://m.example.com/a.m3u";
+    Profile k;
+    k.type = SourceType::Stalker;
+    k.name = "Portal";
+    k.server = "http://portal.example.com/c/";
+    k.mac = "00:1A:79:AA:BB:CC";
+    std::string xid = s.upsert(x, 1);
+    std::string mid = s.upsert(m, 2);
+    std::string kid = s.upsert(k, 3);
+    s.setActive(kid);
+    CHECK(s.save());
+    CHECK(fs::exists(s.sidecarPath()));
+    std::string written;
+    CHECK(fs::readFile(s.path(), written, 1 << 20));
+
+    // 1. downgrade: v0.3.0 signs in once (setLastStatus + save) and rewrites profiles.json without the portal
+    std::string old = savedByV030(written);
+    CHECK(old.find("stalker") == std::string::npos);
+    CHECK(fs::writeFileAtomic(s.path(), old));
+    // 2. upgrade again: the portal is back, nothing else changed
+    ProfileStore t(dir);
+    std::string warning;
+    CHECK(t.load(&warning));
+    CHECK_EQ(t.profiles().size(), (size_t) 3);
+    const Profile *back = t.find(kid);
+    CHECK(back && back->isStalker() && back->mac == k.mac && back->server == k.server && back->name == "Portal");
+    CHECK(t.find(xid) && t.find(xid)->password == "p" && t.find(mid) && t.find(mid)->playlistUrl == m.playlistUrl);
+    CHECK(warning.find("restored") != std::string::npos);
+    // 3. v0.3.0 also added a source and reused the portal's id for it: both are kept, the portal gets a new id
+    CHECK(fs::writeFileAtomic(s.path(), savedByV030(written, kid)));
+    ProfileStore u(dir);
+    CHECK(u.load());
+    CHECK_EQ(u.profiles().size(), (size_t) 4);
+    CHECK(u.find(kid) && u.find(kid)->type == SourceType::Xtream && u.find(kid)->name == "Added in v0.3.0");
+    int portals = 0;
+    for (const auto &p: u.profiles()) {
+        portals += p.isStalker() && p.mac == k.mac && p.id != kid;
+    }
+    CHECK_EQ(portals, 1);
+    // 4. a file written by this build is authoritative: a portal deleted here never comes back
+    ProfileStore v(dir);
+    CHECK(v.load());
+    for (const auto &p: std::vector<Profile>(v.profiles())) {
+        if (p.isStalker()) {
+            v.remove(p.id);
+        }
+    }
+    CHECK(v.save());
+    CHECK(!fs::exists(v.sidecarPath()));   // no portal left: no sidecar
+    ProfileStore w(dir);
+    CHECK(w.load());
+    for (const auto &p: w.profiles()) {
+        CHECK(!p.isStalker());
+    }
+    // 5. an untouched v0.3.0 installation (no sidecar, no marker) loads exactly as before
+    std::string legacy = tempDir("profiles_legacy");
+    fs::removeFile(fs::join(legacy, "profiles.stalker.json"));
+    std::string v030 = R"({"version":2,"activeProfileId":"p1","profiles":[{"id":"p1","sourceType":"xtream","name":"A",)"
+                       R"("server":"http://a.example.com","username":"u","password":"p","createdAt":1,"lastUsedAt":2,"lastStatus":"Connected"}]})";
+    CHECK(fs::writeFileAtomic(fs::join(legacy, "profiles.json"), v030));
+    ProfileStore l(legacy);
+    std::string lw;
+    CHECK(l.load(&lw) && lw.empty() && l.profiles().size() == 1);
+    // a damaged sidecar never breaks loading
+    CHECK(fs::writeFileAtomic(fs::join(legacy, "profiles.stalker.json"), "{not json"));
+    ProfileStore l2(legacy);
+    CHECK(l2.load() && l2.profiles().size() == 1);
+}

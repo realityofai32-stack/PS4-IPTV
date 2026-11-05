@@ -33,18 +33,9 @@ namespace {
     }
 }
 
-ProfileStore::ProfileStore(std::string dataDir) : dir(std::move(dataDir)) {}
-
-std::string ProfileStore::path() const {
-    return fs::join(dir, "profiles.json");
-}
-
-std::string ProfileStore::serialize() const {
-    json::Value root = json::Value::makeObject();
-    root.set("version", json::Value::makeInt(FORMAT_VERSION));
-    root.set("activeProfileId", json::Value::makeString(activeProfileId));
-    json::Value list = json::Value::makeArray();
-    for (const auto &p: items) {
+namespace {
+    // one profile as stored (profiles.json and the Stalker sidecar use the same entries)
+    json::Value entryJson(const iptv::Profile &p) {
         json::Value o = json::Value::makeObject();
         o.set("id", json::Value::makeString(p.id));
         o.set("sourceType", json::Value::makeString(iptv::sourceTypeKey(p.type)));
@@ -64,10 +55,94 @@ std::string ProfileStore::serialize() const {
         o.set("createdAt", json::Value::makeInt(p.createdAt));
         o.set("lastUsedAt", json::Value::makeInt(p.lastUsedAt));
         o.set("lastStatus", json::Value::makeString(p.lastStatus));
-        list.push(std::move(o));
+        return o;
+    }
+
+    // false for entries to skip: unknown source type (a newer writer), no id, incomplete
+    bool entryFrom(const json::Value &o, int64_t version, iptv::Profile &p) {
+        p = iptv::Profile();
+        p.id = o["id"].asString();
+        // version 1 has no source type: every profile was an Xtream one
+        if (version >= 2 && !iptv::sourceTypeFromKey(o["sourceType"].asString(), p.type)) {
+            return false;   // a source type this version does not know
+        }
+        p.name = o["name"].asString();
+        p.server = o["server"].asString();
+        p.username = o["username"].asString();
+        p.password = o["password"].asString();
+        p.playlistUrl = o["playlistUrl"].asString();
+        p.userAgent = o["userAgent"].asString();
+        p.playlistChannels = (int) o["playlistChannels"].asInt(-1);
+        p.mac = p.type == iptv::SourceType::Stalker ? o["mac"].asString() : "";
+        p.createdAt = o["createdAt"].asInt(0);
+        p.lastUsedAt = o["lastUsedAt"].asInt(0);
+        p.lastStatus = o["lastStatus"].asString();
+        return !p.id.empty() && complete(p);
+    }
+
+    // written by builds that know Stalker sources; an older build saving profiles.json drops it (see sidecarPath)
+    const char *const MARKER = "stalkerSidecar";
+}
+
+ProfileStore::ProfileStore(std::string dataDir) : dir(std::move(dataDir)) {}
+
+std::string ProfileStore::path() const {
+    return fs::join(dir, "profiles.json");
+}
+
+std::string ProfileStore::serialize() const {
+    json::Value root = json::Value::makeObject();
+    root.set("version", json::Value::makeInt(FORMAT_VERSION));
+    root.set("activeProfileId", json::Value::makeString(activeProfileId));
+    json::Value list = json::Value::makeArray();
+    for (const auto &p: items) {
+        list.push(entryJson(p));
+    }
+    root.set("profiles", std::move(list));
+    root.set(MARKER, json::Value::makeInt(1));
+    return json::write(root);
+}
+
+std::string ProfileStore::sidecarPath() const {
+    return fs::join(dir, "profiles.stalker.json");
+}
+
+std::string ProfileStore::serializeSidecar() const {
+    json::Value root = json::Value::makeObject();
+    root.set("version", json::Value::makeInt(1));
+    json::Value list = json::Value::makeArray();
+    for (const auto &p: items) {
+        if (p.isStalker()) {
+            list.push(entryJson(p));
+        }
     }
     root.set("profiles", std::move(list));
     return json::write(root);
+}
+
+int ProfileStore::restoreFromSidecar(const std::string &text) {
+    json::Value root;
+    if (!json::parse(text, root) || !root.isObject() || root["version"].asInt(0) != 1) {
+        return 0;
+    }
+    int restored = 0;
+    for (const auto &o: root["profiles"].items()) {
+        iptv::Profile p;
+        if (!entryFrom(o, 2, p) || !p.isStalker()) {
+            continue;
+        }
+        const iptv::Profile *same = find(p.id);
+        if (same != nullptr) {
+            if (same->isStalker()) {
+                continue;   // still there
+            }
+            p.id = newId();   // the older build gave this id to a source it added: keep both
+        }
+        registerSecrets(p);
+        items.push_back(std::move(p));
+        restored++;
+    }
+    return restored;
 }
 
 bool ProfileStore::deserialize(const std::string &text, std::string *error) {
@@ -89,23 +164,7 @@ bool ProfileStore::deserialize(const std::string &text, std::string *error) {
     std::vector<iptv::Profile> loaded;
     for (const auto &o: root["profiles"].items()) {
         iptv::Profile p;
-        p.id = o["id"].asString();
-        // version 1 has no source type: every profile was an Xtream one
-        if (version >= 2 && !iptv::sourceTypeFromKey(o["sourceType"].asString(), p.type)) {
-            continue;   // a source type this version does not know
-        }
-        p.name = o["name"].asString();
-        p.server = o["server"].asString();
-        p.username = o["username"].asString();
-        p.password = o["password"].asString();
-        p.playlistUrl = o["playlistUrl"].asString();
-        p.userAgent = o["userAgent"].asString();
-        p.playlistChannels = (int) o["playlistChannels"].asInt(-1);
-        p.mac = p.type == iptv::SourceType::Stalker ? o["mac"].asString() : "";
-        p.createdAt = o["createdAt"].asInt(0);
-        p.lastUsedAt = o["lastUsedAt"].asInt(0);
-        p.lastStatus = o["lastStatus"].asString();
-        if (p.id.empty() || !complete(p)) {
+        if (!entryFrom(o, version, p)) {
             continue;
         }
         registerSecrets(p);
@@ -113,6 +172,7 @@ bool ProfileStore::deserialize(const std::string &text, std::string *error) {
     }
     items = std::move(loaded);
     loadedVersion = (int) version;
+    writtenWithMarker = root.has(MARKER);
     activeProfileId = root["activeProfileId"].asString();
     if (find(activeProfileId) == nullptr) {
         activeProfileId = items.empty() ? "" : items.front().id;
@@ -130,6 +190,7 @@ bool ProfileStore::load(std::string *warning) {
     }
     if (fs::readFile(path(), text, MAX_FILE_BYTES, &err) && deserialize(text, &err)) {
         keepOriginal(text);
+        afterLoad(warning);
         return true;
     }
     std::string first = err;
@@ -137,6 +198,7 @@ bool ProfileStore::load(std::string *warning) {
         if (warning) {
             *warning = "profiles.json unreadable (" + first + "), restored the previous copy";
         }
+        afterLoad(warning);
         return true;
     }
     if (warning) {
@@ -159,9 +221,35 @@ void ProfileStore::keepOriginal(const std::string &text) {
     }
 }
 
+void ProfileStore::afterLoad(std::string *warning) {
+    // profiles.json last written by an older build (no marker): it dropped the Stalker sources it could not read;
+    // the sidecar written by this build still has them
+    std::string side;
+    if (writtenWithMarker || !fs::exists(sidecarPath()) || !fs::readFile(sidecarPath(), side, MAX_FILE_BYTES)) {
+        return;
+    }
+    int restored = restoreFromSidecar(side);
+    if (restored > 0 && warning) {
+        *warning += std::string(warning->empty() ? "" : "; ") + std::to_string(restored)
+                    + " Stalker source(s) restored (an older version saved the source list without them)";
+    }
+}
+
 bool ProfileStore::save(std::string *error) {
     if (!fs::ensureDir(dir, error)) {
         return false;
+    }
+    // the sidecar first: profiles.json then names it (marker), so a crash in between never loses a source
+    bool anyStalker = false;
+    for (const auto &p: items) {
+        anyStalker |= p.isStalker();
+    }
+    if (anyStalker) {
+        if (!fs::writeFileAtomic(sidecarPath(), serializeSidecar(), error)) {
+            return false;
+        }
+    } else if (fs::exists(sidecarPath())) {
+        fs::removeFile(sidecarPath());   // every Stalker source was deleted here: nothing to bring back
     }
     return fs::writeFileAtomic(path(), serialize(), error);
 }

@@ -130,13 +130,10 @@ namespace {
         void showRoots() {
             root = nullptr;
             folder.clear();
+            positions.clear();
             roots.clear();
             rows.clear();
-            for (const auto &r: localmedia::candidateRoots()) {
-                if (localmedia::available(r)) {
-                    roots.push_back(r);
-                }
-            }
+            roots = localmedia::detectRoots();
             for (size_t i = 0; i < roots.size(); i++) {
                 Item it;
                 it.kind = roots[i].usb ? "USB" : tr("localmedia.kind_storage");   // i18n-exempt: USB is a proper name

@@ -9,8 +9,14 @@
 //
 // Stalker / MAG sources are an additive extension of schema 2: sourceType "stalker" with "server" (portal address)
 // and "mac". The version stays 2 on purpose: Xtream and M3U entries are written exactly as before, and an older
-// build reading the file skips the entries whose source type it does not know (it was written to do so) instead
-// of rejecting the whole file.
+// build reading the file skips the entries whose source type it does not know (v0.3.0 does: its own test reads a
+// "stalker" entry and skips it) instead of rejecting the whole file. A version 3 file would make v0.3.0 reject the
+// file and its .bak copy and start without any source (its next save would then overwrite them all).
+//
+// Downgrade round trip: v0.3.0 saves profiles.json at every sign-in and would drop the Stalker entries. This build
+// therefore also writes them to profiles.stalker.json and marks profiles.json ("stalkerSidecar"); a profiles.json
+// without the marker was written by an older build, and the Stalker sources it lost come back from the sidecar
+// (an id the older build reused for a new source gets a new id).
 
 #ifndef PS4IPTV_STORAGE_PROFILE_STORE_H
 #define PS4IPTV_STORAGE_PROFILE_STORE_H
@@ -59,7 +65,16 @@ public:
     // schema version of the file last loaded (0 = none)
     int loadedFormat() const { return loadedVersion; }
 
+    std::string sidecarPath() const;
+
+    std::string serializeSidecar() const;
+
+    // adds the sidecar's Stalker sources that are missing; returns how many (exposed for tests)
+    int restoreFromSidecar(const std::string &text);
+
 private:
+
+    void afterLoad(std::string *warning);
 
     void keepOriginal(const std::string &text);
 
@@ -68,6 +83,7 @@ private:
     std::string activeProfileId;
     int nextIdHint = 1;
     int loadedVersion = 0;
+    bool writtenWithMarker = false;   // the file loaded last was written by a Stalker-aware build
 
     std::string newId();
 };

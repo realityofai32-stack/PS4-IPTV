@@ -207,6 +207,7 @@ private:
     Session currentSession;
     InputManager input;
     PhysicalKeyboard keyboard;
+    std::vector<kbd::Event> heldKeys;   // keys waiting for the screen a previous key opened
     void *ownPad = nullptr;          // pad opened by us when libcross2d had none at startup
     double nextPadProbe = 0;
     bool clockChecked = false;

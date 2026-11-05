@@ -17,6 +17,24 @@ namespace stalker {
 
     namespace {
 
+        // portal numbers: digits only, clamped (never undefined for out-of-range text, unlike atoi / atof)
+        int toInt(const std::string &text) {
+            const char *b = text.c_str();
+            char *e = nullptr;
+            long v = std::strtol(b, &e, 10);
+            if (e == b) {
+                return 0;
+            }
+            return v > 1000000000L ? 1000000000 : v < -1000000000L ? -1000000000 : (int) v;
+        }
+
+        double toDouble(const std::string &text) {
+            const char *b = text.c_str();
+            char *e = nullptr;
+            double v = std::strtod(b, &e);
+            return e == b || !(v == v) ? 0.0 : v;   // no number, or NaN
+        }
+
         bool startsWith(const std::string &s, const char *p) {
             return s.compare(0, std::char_traits<char>::length(p), p) == 0;
         }
@@ -36,7 +54,7 @@ namespace stalker {
 
         float ratingOf(const json::Value &o) {
             for (const char *k: {"rating_imdb", "rating_kinopoisk", "rating"}) {
-                double r = std::atof(o[k].asString().c_str());
+                double r = toDouble(o[k].asString());
                 if (r > 0 && r <= 10) {
                     return (float) r;
                 }
@@ -426,7 +444,7 @@ namespace stalker {
         m.name = e.name.empty() ? e.id : e.name;
         int fromName = 0;
         xtream::splitTitleYear(m.name, m.title, fromName);
-        m.year = std::atoi(e.year.substr(0, 4).c_str());
+        m.year = toInt(e.year.substr(0, 4));
         if (m.year < 1900 || m.year > 2100) {
             m.year = fromName;
         }
@@ -444,7 +462,7 @@ namespace stalker {
         s.name = e.name.empty() ? e.id : e.name;
         int fromName = 0;
         xtream::splitTitleYear(s.name, s.title, fromName);
-        s.year = std::atoi(e.year.substr(0, 4).c_str());
+        s.year = toInt(e.year.substr(0, 4));
         if (s.year < 1900 || s.year > 2100) {
             s.year = fromName;
         }
@@ -528,13 +546,13 @@ namespace stalker {
             if (n <= 0) {
                 size_t colon = s.id.rfind(':');
                 if (colon != std::string::npos) {
-                    n = std::atoi(s.id.c_str() + colon + 1);
+                    n = toInt(s.id.substr(colon + 1));
                 }
             }
             if (n <= 0) {
                 for (size_t i = 0; i < s.name.size(); i++) {
                     if (std::isdigit((unsigned char) s.name[i])) {
-                        n = std::atoi(s.name.c_str() + i);
+                        n = toInt(s.name.substr(i));
                         break;
                     }
                 }
@@ -686,7 +704,7 @@ namespace stalker {
             size_t start = 0;
             while (start < s.size()) {
                 size_t comma = s.find(',', start);
-                int n = std::atoi(s.substr(start, comma == std::string::npos ? std::string::npos : comma - start).c_str());
+                int n = toInt(s.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
                 if (n > 0) {
                     out.push_back(n);
                 }

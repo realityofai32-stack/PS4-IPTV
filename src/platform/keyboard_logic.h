@@ -10,7 +10,9 @@
 #ifndef PS4IPTV_PLATFORM_KEYBOARD_LOGIC_H
 #define PS4IPTV_PLATFORM_KEYBOARD_LOGIC_H
 
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -92,6 +94,74 @@ namespace kbd {
         int repeats = 0;
         bool locksSeen = false;   // the keyboard reports Caps Lock itself; until then Caps Lock is tracked here
         bool ownCaps = false;
+    };
+
+    // ------------------------------------------------------------------ the console's state snapshot
+    // sceKeyboardReadState fills OrbisKeyboardData (OpenOrbis keyboard sample, reverse-engineered):
+    //   0 timestamp u32 | 4 padding[12] | 16 unk1 i32 | 20 nkeys i32 | 24 locks u32 | 28 mods u32 | 32 keycodes u16[32]
+    // It is read into a larger zeroed buffer (BUFFER) and decoded field by field from these offsets
+    // (platform/keyboard.cpp checks them against the OpenOrbis structure at compile time).
+    constexpr size_t STATE_NKEYS = 20, STATE_LOCKS = 24, STATE_MODS = 28, STATE_KEYS = 32, STATE_MAX_KEYS = 32;
+    constexpr size_t STATE_SIZE = STATE_KEYS + 2 * STATE_MAX_KEYS;   // 96
+
+    struct State {
+        int count = 0;               // valid entries in keys (0..STATE_MAX_KEYS)
+        uint32_t locks = 0;
+        uint32_t mods = 0;
+        uint16_t keys[STATE_MAX_KEYS] = {};
+    };
+
+    // false (and an empty state) when `size` cannot hold the structure; nkeys is clamped to 0..STATE_MAX_KEYS
+    // (a negative or huge count never reads past the key array)
+    bool parseState(const unsigned char *raw, size_t size, State &out);
+
+    // Keyboard connection over a device (the console's libSceKeyboard on the PS4, a fake one in the tests):
+    // opens the keyboard (again every OPEN_RETRY seconds until one is there), reads one state per frame into a
+    // zeroed BUFFER, closes after READ_FAILURES consecutive read errors (unplugged) and forgets held keys.
+    class Session {
+
+    public:
+
+        static constexpr double OPEN_RETRY = 3.0;
+        static constexpr int READ_FAILURES = 30;
+        static constexpr size_t BUFFER = 512;
+
+        struct Device {
+            std::function<int()> open;                                    // handle >= 0, or < 0
+            std::function<int(int, unsigned char *, size_t)> read;        // < 0 on error; fills at most `size` bytes
+            std::function<void(int)> close;
+        };
+
+        enum class Change {
+            None,
+            Opened,
+            Disconnected
+        };
+
+        explicit Session(Device device) : dev(std::move(device)) {}
+
+        // key events of this frame
+        const std::vector<Event> &poll(double now);
+
+        // what poll() just did to the connection (for the log)
+        Change change() const { return lastChange; }
+
+        int lastError() const { return error; }
+
+        bool connected() const { return handle >= 0; }
+
+        Decoder &decoder() { return keys; }
+
+    private:
+
+        Device dev;
+        Decoder keys;
+        std::vector<Event> events;
+        int handle = -1;
+        double nextOpen = 0;
+        int failures = 0;
+        int error = 0;
+        Change lastChange = Change::None;
     };
 }
 
