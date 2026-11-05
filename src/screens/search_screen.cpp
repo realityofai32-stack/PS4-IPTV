@@ -246,6 +246,41 @@ namespace {
         }
 
         // ------------------------------------------------------------------ input
+        // physical keyboard: typing always edits the query (searching as you go); Enter shows the results, and in
+        // the results opens the selected one (Cross)
+        bool handleKey(const kbd::Event &k) override {
+            switch (k.key) {
+                case kbd::Key::Char:
+                    if (keyboard.typeText(k.text)) {
+                        edited();
+                    }
+                    return true;
+                case kbd::Key::Backspace:
+                    keyboard.backspace();
+                    edited();
+                    return true;
+                case kbd::Key::Delete:
+                    if (!k.repeat) {
+                        keyboard.clear();
+                        edited();
+                    }
+                    return true;
+                case kbd::Key::Enter:
+                    if (zone == 1) {
+                        return false;   // Cross: open the selected result
+                    }
+                    if (!k.repeat) {
+                        flush();
+                        if (!shown.empty()) {
+                            setZone(1);
+                        }
+                    }
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         void handleInput(const InputEvent &e) override {
             switch (e.button) {
                 case PadButton::L1:

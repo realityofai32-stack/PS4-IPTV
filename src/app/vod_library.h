@@ -15,7 +15,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "xtream_service.h"
+#include "source_service.h"
 #include "../images/lru_cache.h"
 #include "../iptv/catalog.h"
 
@@ -42,9 +42,9 @@ class VodLibrary {
 
 public:
 
-    static const int64_t REFRESH_AFTER = 6 * 3600;   // seconds
+    static const int64_t REFRESH_AFTER = 6 * 3600;   // seconds (Xtream; see SourceService::refreshAfter)
 
-    VodLibrary(XtreamService &xtream, std::string dataDir);
+    VodLibrary(SourceService &sources, std::string dataDir);
 
     // a new sign-in: forget the previous profile's catalogs and details
     void reset();
@@ -87,6 +87,9 @@ public:
     // changes whenever a catalog or a detail arrives
     unsigned generation() const { return gen; }
 
+    // entries read so far by the first download of a paged (Stalker) list, 0 otherwise
+    int loadingProgress(const iptv::Profile &profile, bool movies) const { return xtream.progress(profile, movies); }
+
 private:
 
     template<typename Catalog>
@@ -98,7 +101,7 @@ private:
 
     void store(std::shared_ptr<iptv::SeriesCatalog> c) { seriesCatalog = std::move(c); }
 
-    XtreamService &xtream;
+    SourceService &xtream;   // routes to the Xtream or the Stalker service by the profile's source type
     std::string dir;
     std::shared_ptr<iptv::MovieCatalog> movieCatalog = std::make_shared<iptv::MovieCatalog>();
     std::shared_ptr<iptv::SeriesCatalog> seriesCatalog = std::make_shared<iptv::SeriesCatalog>();

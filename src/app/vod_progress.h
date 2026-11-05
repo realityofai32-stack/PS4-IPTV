@@ -7,6 +7,7 @@
 //              position queried from mpv right before stopping, so the last seconds since the periodic
 //              sample are never lost. During a seek the requested target is the position.
 //   due()      periodic updates: the store every MEMORY_EVERY seconds, history.json every DISK_EVERY
+// Local Media items (VodItem::localMedia) are never recorded: begin() returns 0, due() None, record() false.
 
 #ifndef PS4IPTV_APP_VOD_PROGRESS_H
 #define PS4IPTV_APP_VOD_PROGRESS_H

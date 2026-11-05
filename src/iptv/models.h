@@ -12,17 +12,19 @@ namespace iptv {
     // Kind of IPTV source a profile signs in to (profiles.json schema 2: "sourceType").
     enum class SourceType {
         Xtream,     // Xtream Codes API: Live TV, Movies, Series
-        M3u         // M3U / M3U8 channel playlist: Live TV only (no Movies / Series guessing)
+        M3u,        // M3U / M3U8 channel playlist: Live TV only (no Movies / Series guessing)
+        Stalker     // Stalker / MAG middleware portal signed in with a MAC address: Live TV, Movies, Series
     };
 
-    // "xtream" / "m3u" (profiles.json values)
+    // "xtream" / "m3u" / "stalker" (profiles.json values)
     const char *sourceTypeKey(SourceType type);
 
     // false for unknown values
     bool sourceTypeFromKey(const std::string &key, SourceType &out);
 
     // One source (profile). Xtream sources use server/username/password; playlist sources use playlistUrl
-    // (http(s):// URL, or a file under /data/PS4IPTV/playlists/) and an optional User-Agent.
+    // (http(s):// URL, or a file under /data/PS4IPTV/playlists/) and an optional User-Agent; Stalker / MAG sources
+    // use server (the portal address as entered, e.g. http://host:8080/c/) and mac.
     struct Profile {
         std::string id;
         SourceType type = SourceType::Xtream;
@@ -33,11 +35,20 @@ namespace iptv {
         std::string playlistUrl;   // M3U: as entered (may contain credentials / tokens: never shown or logged)
         std::string userAgent;     // M3U: custom User-Agent for the playlist and its streams ("" = default)
         int playlistChannels = -1; // M3U: channels in the last playlist loaded (-1 = never loaded)
+        std::string mac;           // Stalker: MAC address "00:1A:79:XX:XX:XX" (an identity: never shown in full or logged)
         int64_t createdAt = 0;
         int64_t lastUsedAt = 0;
         std::string lastStatus; // short user-facing status of the last connection attempt
 
         bool isPlaylist() const { return type == SourceType::M3u; }
+
+        bool isStalker() const { return type == SourceType::Stalker; }
+
+        // Movies and Series sections exist (Xtream, Stalker)
+        bool hasVod() const { return type != SourceType::M3u; }
+
+        // offline downloads: Xtream only (a playlist has no movies; a portal's links are single-use tokens)
+        bool supportsDownloads() const { return type == SourceType::Xtream; }
     };
 
     enum class ContentType {
@@ -64,6 +75,7 @@ namespace iptv {
         std::string epgId;       // Xtream epg_channel_id / playlist tvg-id
         std::string url;         // playlist channels only ("" for Xtream)
         std::string userAgent;   // playlist #EXTVLCOPT:http-user-agent ("" = the source default)
+        std::string cmd;         // Stalker: the portal's play command, turned into a URL by create_link at play time
         int64_t added = 0;
         int num = 0;             // channel number (Xtream num / playlist tvg-chno), 0 = none
         bool archive = false;
@@ -179,6 +191,9 @@ namespace iptv {
         int durationSeconds = 0;
         float rating = 0;
         MediaSummary media;
+        // Stalker: the play command for create_link and its "series" parameter (episode number, 0 = none)
+        std::string cmd;
+        int linkSeries = 0;
     };
 
     struct Season {

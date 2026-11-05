@@ -26,6 +26,10 @@ namespace redact {
     // Registers a literal secret (e.g. a profile password) to be masked everywhere (>= 3 chars).
     void addSecret(const std::string &secret);
 
+    // Registers a MAC address (Stalker / MAG identity) in every spelling it can appear in: 00:1A:79:..,
+    // lower case, with dashes, without separators and percent-encoded (00%3A1A..).
+    void addMac(const std::string &mac);
+
     // Removes every registered secret.
     void clearSecrets();
 

@@ -1,6 +1,6 @@
 // Home: top navigation, one cinematic hero for the most meaningful action, and rails of landscape cards.
 //
-//   navigation   [V7 IPTV]  Home  Live TV  Movies  Series ........ (search)(favorites)(downloads)(settings)  clock
+//   navigation   [V7 IPTV]  Home  Live TV  Movies  Series  Local Media ... (search)(favorites)(downloads)(settings)  clock
 //   hero         the most recent Continue Watching item: eyebrow, title, episode, progress, Resume / Details, all
 //                over one full-bleed layer made from its poster (no separate poster tile). Without one: "What
 //                would you like to watch?" with the sections as buttons.
@@ -63,6 +63,7 @@ namespace {
         NAV_LIVE,
         NAV_MOVIES,
         NAV_SERIES,
+        NAV_LOCAL,
         NAV_SEARCH,
         NAV_FAVORITES,
         NAV_DOWNLOADS,
@@ -159,6 +160,8 @@ namespace {
                 navIds.push_back(NAV_MOVIES);
                 navIds.push_back(NAV_SERIES);
             }
+            sections.push_back(tr("home.local_media"));   // the console's own files, whatever the source
+            navIds.push_back(NAV_LOCAL);
             for (int id: {NAV_SEARCH, NAV_FAVORITES, NAV_DOWNLOADS, NAV_SETTINGS}) {
                 navIds.push_back(id);
             }
@@ -955,6 +958,9 @@ namespace {
                     return;
                 case NAV_SERIES:
                     app.push(screens::makeSeries(app));
+                    return;
+                case NAV_LOCAL:
+                    app.push(screens::makeLocalMedia(app));
                     return;
                 case NAV_SEARCH:
                     app.push(screens::makeSearch(app));

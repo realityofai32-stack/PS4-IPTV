@@ -125,6 +125,21 @@ void KeyboardModel::insert(const std::string &s) {
     }
 }
 
+bool KeyboardModel::typeText(const std::string &text) {
+    std::string clean;
+    for (unsigned char c: text) {
+        if (c >= 0x20 && c != 0x7F) {
+            clean += (char) c;
+        }
+    }
+    if (clean.empty()) {
+        return false;
+    }
+    size_t before = value.size();
+    insert(clean);
+    return value.size() != before;
+}
+
 void KeyboardModel::backspace() {
     utf8::popBack(value);
 }

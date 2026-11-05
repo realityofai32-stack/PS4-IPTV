@@ -71,6 +71,39 @@ namespace {
 
         const char *name() const override { return "keyboard"; }
 
+        // physical keyboard: types into the field; Enter confirms, Escape cancels, arrows move the on-screen focus
+        bool handleKey(const kbd::Event &k) override {
+            switch (k.key) {
+                case kbd::Key::Char:
+                    model.typeText(k.text);
+                    break;
+                case kbd::Key::Backspace:
+                    model.backspace();
+                    break;
+                case kbd::Key::Delete:
+                    if (!k.repeat) {
+                        model.clear();
+                    }
+                    break;
+                case kbd::Key::Enter:
+                    if (!k.repeat) {
+                        finish(true);
+                    }
+                    return true;
+                case kbd::Key::Escape:
+                    if (!k.repeat) {
+                        finish(false);
+                    }
+                    return true;
+                case kbd::Key::Tab:
+                    return true;
+                default:
+                    return false;
+            }
+            refresh();
+            return true;
+        }
+
         void handleInput(const InputEvent &e) override {
             switch (e.button) {
                 case PadButton::Up:

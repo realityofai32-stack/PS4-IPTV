@@ -29,8 +29,10 @@ enum class PlaybackError {
     Http403,          // provider refused (often: previous connection still counted)
     HttpClient,       // 401 / 404: retrying does not help
     HttpOther,        // other HTTP errors (5xx...)
-    HttpsUnsupported,
+    HttpsUnsupported,     // https:// with a playback backend that has no TLS (not the case with the rebuilt FFmpeg)
     UnsupportedProtocol,  // rtsp://, mms://, srt://...: not in this FFmpeg build
+    TlsCertificate,       // HTTPS: the server certificate could not be verified against the CA bundle
+    Tls,                  // HTTPS: handshake failed (protocol version / cipher / alert / reset)
     Network,          // DNS / connect / timeout
     Demux,
     UnsupportedCodec,
@@ -64,7 +66,8 @@ class Playback {
 public:
 
     // Creates pPlay's Mpv (needs the GL context). Returns false with initError() on failure.
-    bool init(const std::string &configDir);
+    // caBundle: the packaged PEM bundle; HTTPS streams are verified against it (tls-verify, tls-ca-file).
+    bool init(const std::string &configDir, const std::string &caBundle);
 
     void shutdown();
 
@@ -93,8 +96,8 @@ public:
     // `format` is shown in the info overlay ("TS", "HLS", "mkv"...). URL is never logged unredacted.
     void open(const std::string &url, const std::string &format, const OpenOptions &options);
 
-    // Media protocols the linked FFmpeg 5.0 build can open (audited in its protocol table: file, ftp, http,
-    // rtmp, rtp, tcp, udp; no https / tls). Returns false with the user-facing reason otherwise.
+    // Media protocols the linked FFmpeg 5.0 build can open (player/protocols.h: file, ftp, http, rtmp, rtp, tcp,
+    // udp, and https when the build has TLS). Returns false with the user-facing reason otherwise.
     static bool protocolSupported(const std::string &url, std::string *why = nullptr);
 
     // HTTP User-Agent for the next open() (mpv's "user-agent" option). "" restores mpv's own default, which
@@ -102,6 +105,13 @@ public:
     void setUserAgent(const std::string &userAgent);
 
     void open(const std::string &url, const std::string &format);   // Live TV: no start, no subtitles
+
+    // The source resolves the address first (Stalker create_link): the current file stops and the state is
+    // Opening (with the open timer running) until open() or failBeforeOpen().
+    void prepare(const std::string &format);
+
+    // the address could not be resolved: Error with a user-facing message (retryable: the recovery may try again)
+    void failBeforeOpen(const std::string &message, const std::string &detail, bool retryable);
 
     void stop();
 
@@ -176,6 +186,8 @@ private:
     void onEndFile(const mpv_event_end_file *ef);
 
     void fail(PlaybackError e, const std::string &message, const std::string &detail);
+
+    void resetForOpen(const std::string &format);
 
     void pollStats();
 

@@ -16,6 +16,8 @@ The same component versions as the Windows toolchain (`scripts/setup-toolchain.p
 | `host-bin/` | `create-fself` (OpenOrbis 1.2 binaries), `create-gp4` (built from source with `toolchain/go`), `PkgTool.Core` (Linux build) | `create-fself-1.2-binaries.tar.gz`, `create-gp4-bf8e66e.zip`, `openorbis-toolchain-v0.5.3-llvm-12.zip` |
 | `openssl-1.1.1/` | OpenSSL 1.1.1w shared libraries, **only** for `PkgTool.Core` | `openssl-1.1.1w.tar.gz` |
 | `go/` | Go 1.27.1 (host tools: builds `create-gp4` from source) | `go1.27.1.linux-amd64.tar.gz` |
+| `nasm/` | NASM 3.01 (x86 SIMD of the FFmpeg rebuild), extracted from the distribution package: `apt-get download nasm; dpkg-deb -x nasm_*.deb toolchain/nasm` | `nasm_3.01-1_amd64.deb` |
+| `ffmpeg-5.0-tls/` | FFmpeg 5.0 static libraries **with HTTPS** (built by `scripts/build-ffmpeg-tls.sh`, linked instead of the sysroot's) | `ffmpeg-5.0.tar.xz` (sha256 `51e919f7...7298`) |
 
 `PkgTool.Core` is a .NET Core 3 single-file application that loads OpenSSL **1.1** at run time; current
 distributions ship only OpenSSL 3, so `cmake/ps4-linux.cmake` runs it with
@@ -38,9 +40,22 @@ git -C external/pplay-reference checkout --recurse-submodules 039954636c1f2ef20b
 Release check 8 compares the PKG's linked system modules with a pPlay reference ELF in
 `build/pplay-ps4-linux/pplay` (or `build/pplay-ps4/pplay`); without one it reports WARN.
 
+## FFmpeg with HTTPS (`scripts/build-ffmpeg-tls.sh`)
+
+The sysroot's FFmpeg 5.0 (PacBrew `ps4-openorbis-ffmpeg` 5.0-5) was configured with
+`--enable-protocol=file,http,ftp,tcp,udp,rtmp`: no TLS, so mpv could not open `https://` streams. The script rebuilds
+it from the same recipe (PKGBUILD sha256 `c37f761b...b31e6`, the configure line embedded in `libavutil.a`) with three
+changes only: `https,tls` added to the protocol list, `--enable-mbedtls` (the sysroot's Mbed TLS 2.16.6, already
+linked for libcurl) and `--enable-version3` (required by FFmpeg for Mbed TLS). The result is checked against the
+original: identical object lists except `tls.o` / `tls_mbedtls.o`, identical exported symbols in libavcodec /
+libavfilter. Host paths are removed from the embedded configure line, so the PKG carries no build-machine path.
+CMakeLists.txt links `toolchain/ffmpeg-5.0-tls/lib/*.a` and stops with a hint when they are missing. libmpv 0.34.1 is
+not rebuilt: it already passes `tls-verify` / `tls-ca-file` / `user-agent` to FFmpeg, including nested HLS opens.
+
 ## Commands
 
 ```bash
+scripts/build-ffmpeg-tls.sh [--force]                 # FFmpeg 5.0 + HTTPS -> toolchain/ffmpeg-5.0-tls (once)
 scripts/build-ps4iptv.sh [Release|Debug] [--clean]   # PKG -> build/ps4iptv-release/IV0001-IPTV00002_00-IPTV000020002000.pkg
 scripts/test-host.sh                                  # host unit tests with g++ -Wall -Wextra -Werror
 scripts/test-download-integration.sh                  # libcurl transport, downloads, M3U service vs a local server

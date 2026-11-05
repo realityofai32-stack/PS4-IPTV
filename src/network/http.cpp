@@ -101,8 +101,19 @@ namespace http {
         if (!g_caBundle.empty()) {
             curl_easy_setopt(c, CURLOPT_CAINFO, g_caBundle.c_str());
         }
+        struct curl_slist *headers = nullptr;
+        for (const auto &h: req.headers) {
+            headers = curl_slist_append(headers, h.c_str());
+        }
+        if (headers != nullptr) {
+            curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
+        }
 
         CURLcode rc = curl_easy_perform(c);
+        if (headers != nullptr) {
+            curl_easy_setopt(c, CURLOPT_HTTPHEADER, nullptr);   // the handle is reused by the next request
+            curl_slist_free_all(headers);
+        }
         curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &r.status);
         char *ct = nullptr;
         if (curl_easy_getinfo(c, CURLINFO_CONTENT_TYPE, &ct) == CURLE_OK && ct) {

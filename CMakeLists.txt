@@ -34,6 +34,17 @@ add_subdirectory("${PPLAY_DIR}/libcross2d" "${CMAKE_BINARY_DIR}/libcross2d")
 list(APPEND CMAKE_MODULE_PATH "${PPLAY_DIR}/cmake")
 find_package(BZip2 REQUIRED)
 find_package(MPV REQUIRED)
+# FFmpeg 5.0 with HTTPS: PacBrew's recipe rebuilt with the https/tls protocols over mbedTLS
+# (scripts/build-ffmpeg-tls.sh -> toolchain/ffmpeg-5.0-tls). Same version and options otherwise, so the prebuilt
+# libmpv 0.34.1 links against it unchanged. Its libraries are found first (Findffmpeg keeps preset cache values).
+set(PS4IPTV_FFMPEG_TLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/toolchain/ffmpeg-5.0-tls" CACHE PATH "FFmpeg 5.0 + TLS prefix")
+if (NOT EXISTS "${PS4IPTV_FFMPEG_TLS_DIR}/lib/libavformat.a")
+    message(FATAL_ERROR "FFmpeg with HTTPS not found at ${PS4IPTV_FFMPEG_TLS_DIR} - run scripts/build-ffmpeg-tls.sh")
+endif ()
+foreach (_comp avfilter avcodec avformat avutil swscale swresample)
+    set(${_comp}_INCLUDE_DIR "${PS4IPTV_FFMPEG_TLS_DIR}/include" CACHE PATH "" FORCE)
+    set(${_comp}_LIBRARY "${PS4IPTV_FFMPEG_TLS_DIR}/lib/lib${_comp}.a" CACHE FILEPATH "" FORCE)
+endforeach ()
 find_package(ffmpeg COMPONENTS avfilter avcodec avformat avutil swscale swresample)
 find_package(ass REQUIRED)
 # FreeType (font coverage for the fallback fonts) and FriBidi (right-to-left text): already linked for libass

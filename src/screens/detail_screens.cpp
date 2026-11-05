@@ -492,7 +492,8 @@ namespace {
                 addButton(Action::DeleteDownload, tr("download.delete"));
             } else if (hasDownload) {
                 addButton(Action::DownloadActions, "\xE2\x86\x93  " + downloadLabel(d, app.downloads().live()));
-            } else {
+            } else if (app.session().profile.supportsDownloads()) {
+                // (Stalker portals: single-use play links, no downloads)
                 addButton(Action::Download, "\xE2\x86\x93  " + tr("download.download"));
             }
             addButton(Action::Favorite, fav ? "\xE2\x98\x85  " + tr("favorites.in_favorites")
@@ -803,7 +804,7 @@ namespace {
                     return;
                 case PadButton::Square:
                     if (!e.repeat) {
-                        if (focus == 2 && count() > 0) {
+                        if (focus == 2 && count() > 0 && app.session().profile.supportsDownloads()) {
                             episodeDownload(seasonIndex, episodes->selected());   // download / pause / resume
                         } else {
                             activate(Action::Favorite);
@@ -887,6 +888,8 @@ namespace {
             it.season = ep.season;
             it.episode = ep.number;
             it.durationHint = ep.durationSeconds;
+            it.cmd = ep.cmd;
+            it.linkSeries = ep.linkSeries;
             offline::preferLocal(app.downloads(), it, app.session().profile.id);   // a downloaded episode
             return it;
         }
@@ -944,7 +947,10 @@ namespace {
             acts.push_back([this, season, index] { playEpisode(season, index, true); });
             std::string key = hasDl ? d.key : "";
             std::string name = fmt::episodeCode(ep.season, ep.number);
-            if (!hasDl) {
+            bool downloadable = app.session().profile.supportsDownloads();
+            if (!downloadable) {
+                // a Stalker portal: play only
+            } else if (!hasDl) {
                 names.push_back(tr("download.download_episode"));
                 acts.push_back([this, season, index] { episodeDownload(season, index); });
             } else if (local) {
@@ -979,10 +985,12 @@ namespace {
                 acts.push_back([this, key] { app.downloads().cancel(key); });
             }
             const Season &s = info->seasons[(size_t) season];
-            names.push_back(tr("download.download_season", {std::to_string(s.number)}));
-            acts.push_back([this, season] { confirmSeasonDownload(season); });
-            names.push_back(tr("downloads.open"));
-            acts.push_back([this] { app.push(screens::makeDownloads(app)); });
+            if (downloadable) {
+                names.push_back(tr("download.download_season", {std::to_string(s.number)}));
+                acts.push_back([this, season] { confirmSeasonDownload(season); });
+                names.push_back(tr("downloads.open"));
+                acts.push_back([this] { app.push(screens::makeDownloads(app)); });
+            }
             std::weak_ptr<bool> w = aliveToken;
             app.push(screens::makeMenu(app, name + "  " + (ep.title.empty() ? tr("episode.number", {std::to_string(ep.number)})
                                                                             : ep.title),
@@ -1098,7 +1106,9 @@ namespace {
             buildChips();
             requestImages();   // stills of the episodes now on screen
             if (focus == 2) {
-                hints->setHints({{ui::Glyph::Cross, tr("common.play")}, {ui::Glyph::Square, tr("download.download")},
+                hints->setHints({{ui::Glyph::Cross, tr("common.play")},
+                                 {ui::Glyph::Square, tr(app.session().profile.supportsDownloads() ? "download.download"
+                                                                                                  : "common.favorite")},
                                  {ui::Glyph::Options, tr("detail.episode_options")}, {ui::Glyph::L1, ""},
                                  {ui::Glyph::R1, tr("detail.season")}, {ui::Glyph::Circle, tr("common.back")}});
             } else {

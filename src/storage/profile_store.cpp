@@ -5,7 +5,8 @@
 
 namespace {
     // 1: Xtream profiles only (Checkpoints 1 - 3.1)
-    // 2: "sourceType" per profile ("xtream" / "m3u") + playlist fields; version 1 files load as Xtream
+    // 2: "sourceType" per profile ("xtream" / "m3u") + playlist fields; version 1 files load as Xtream.
+    //    Additive: "stalker" sources (server + mac), which older builds skip.
     const int FORMAT_VERSION = 2;
     const size_t MAX_FILE_BYTES = 1024 * 1024;
 
@@ -14,6 +15,20 @@ namespace {
         redact::addSecret(p.username);
         if (!p.playlistUrl.empty()) {
             redact::addUrl(p.playlistUrl);   // get.php?username=..&password=.., tokens, user:pass@
+        }
+        if (!p.mac.empty()) {
+            redact::addMac(p.mac);           // every spelling a portal or a log line could carry
+        }
+    }
+
+    bool complete(const iptv::Profile &p) {
+        switch (p.type) {
+            case iptv::SourceType::Xtream:
+                return !p.server.empty();
+            case iptv::SourceType::M3u:
+                return !p.playlistUrl.empty();
+            default:
+                return !p.server.empty() && !p.mac.empty();
         }
     }
 }
@@ -38,6 +53,9 @@ std::string ProfileStore::serialize() const {
             o.set("server", json::Value::makeString(p.server));
             o.set("username", json::Value::makeString(p.username));
             o.set("password", json::Value::makeString(p.password));
+        } else if (p.type == iptv::SourceType::Stalker) {
+            o.set("server", json::Value::makeString(p.server));
+            o.set("mac", json::Value::makeString(p.mac));
         } else {
             o.set("playlistUrl", json::Value::makeString(p.playlistUrl));
             o.set("userAgent", json::Value::makeString(p.userAgent));
@@ -83,10 +101,11 @@ bool ProfileStore::deserialize(const std::string &text, std::string *error) {
         p.playlistUrl = o["playlistUrl"].asString();
         p.userAgent = o["userAgent"].asString();
         p.playlistChannels = (int) o["playlistChannels"].asInt(-1);
+        p.mac = p.type == iptv::SourceType::Stalker ? o["mac"].asString() : "";
         p.createdAt = o["createdAt"].asInt(0);
         p.lastUsedAt = o["lastUsedAt"].asInt(0);
         p.lastStatus = o["lastStatus"].asString();
-        if (p.id.empty() || (p.type == iptv::SourceType::Xtream ? p.server.empty() : p.playlistUrl.empty())) {
+        if (p.id.empty() || !complete(p)) {
             continue;
         }
         registerSecrets(p);

@@ -1,5 +1,5 @@
 // Sign-in and initial loading: account, then Live categories + streams. Movies and Series are loaded lazily when
-// their section opens.
+// their section opens. Xtream and Stalker / MAG sources share this flow (App::sources routes by source type).
 //
 // When the provider cannot be reached (no network, server down, expired account...), "Continue offline" opens
 // Home with the saved channel / movie / series lists and the Downloads section: completed downloads play
@@ -182,7 +182,7 @@ namespace {
             }
             setStep(0, State::Running, tr("connect.signing_in"));
             // the token is canceled in the destructor, so the callback never runs after this screen is gone
-            token = app.xtream().authenticate(profile, [this](const XtreamService::AuthOutcome &o) {
+            token = app.sources().authenticate(profile, [this](const XtreamService::AuthOutcome &o) {
                 onAuth(o);
             });
         }
@@ -236,7 +236,7 @@ namespace {
 
         void loadLive(bool cacheOnly) {
             setStep(1, State::Running, tr(cacheOnly ? "connect.loading_saved" : "connect.loading_channels"));
-            token = app.xtream().loadLive(profile, APP_DATA_DIR, [this](XtreamService::LiveOutcome &o) {
+            token = app.sources().loadLive(profile, APP_DATA_DIR, [this](XtreamService::LiveOutcome &o) {
                 Session &s = app.session();
                 if (o.ok) {
                     s.categories[0] = o.categories;

@@ -11,6 +11,10 @@ double VodProgress::begin(const screens::VodItem &item, bool resumeWanted, doubl
     lastMemory = now;
     lastDisk = now;
     start = 0;
+    if (item.localMedia) {
+        lastPosition = 0;
+        return 0;   // Local Media belongs to no source: nothing is remembered or resumed
+    }
     const HistoryEntry *p = store.progressOf(item.type, item.id);
     if (resumeWanted && p != nullptr && progress::inProgress(p->position, p->duration, p->watched)) {
         start = p->position;   // exactly where playback stopped
@@ -55,7 +59,7 @@ void VodProgress::seekCommitted(double target, double now) {
 }
 
 VodProgress::Due VodProgress::due(double now) const {
-    if (!hadFrame) {
+    if (!hadFrame || current.localMedia) {
         return Due::None;
     }
     if (now - lastDisk >= DISK_EVERY) {
@@ -71,6 +75,9 @@ double VodProgress::position() const {
 bool VodProgress::record(double now, double finalPosition, bool atEnd) {
     lastMemory = now;
     lastDisk = now;
+    if (current.localMedia) {
+        return false;   // never in the progress store, history or Continue Watching
+    }
     double pos;
     if (atEnd) {
         pos = knownDuration > 0 ? knownDuration : lastPosition;

@@ -4,6 +4,7 @@
 #include "common.h"
 #include "../core/format.h"
 #include "../core/url.h"
+#include "../iptv/stalker.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
 #include "../storage/catalog_cache.h"
@@ -34,13 +35,18 @@ namespace {
             s->setMaxWidth(980);
             s->setMaxLines(3);
             s->setAlign(ui::Align::Center, theme::SCREEN_W);
-            // downloads stay playable when every profile was deleted: they are reachable from here too
+            // downloads stay playable when every profile was deleted: they are reachable from here too; Local Media
+            // needs no source at all
             hasDownloads = !app.downloads().items().empty();
-            float bw = 460;
-            float bx = hasDownloads ? cx - bw - 12 : cx - bw / 2;
+            buttonCount = hasDownloads ? 3 : 2;
+            float bw = 420;
+            float gap = 24;
+            float bx = cx - (buttonCount * bw + (buttonCount - 1) * gap) / 2;
             button = new ui::Button(tr("onboarding.add_source"), FloatRect(bx, 640, bw, 88), true);
             add(button);
-            downloadsButton = new ui::Button(tr("home.downloads"), FloatRect(cx + 12, 640, bw, 88));
+            localButton = new ui::Button(tr("home.local_media"), FloatRect(bx + bw + gap, 640, bw, 88));
+            add(localButton);
+            downloadsButton = new ui::Button(tr("home.downloads"), FloatRect(bx + 2 * (bw + gap), 640, bw, 88));
             downloadsButton->setVisibility(hasDownloads ? Visibility::Visible : Visibility::Hidden);
             add(downloadsButton);
             screens::hintBar(this, {{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("common.exit")}});
@@ -50,12 +56,14 @@ namespace {
         const char *name() const override { return "onboarding"; }
 
         void handleInput(const InputEvent &e) override {
-            if ((e.button == PadButton::Left || e.button == PadButton::Right) && hasDownloads) {
-                focus = e.button == PadButton::Right ? 1 : 0;
+            if (e.button == PadButton::Left || e.button == PadButton::Right) {
+                focus = e.button == PadButton::Right ? std::min(buttonCount - 1, focus + 1) : std::max(0, focus - 1);
                 refresh();
             } else if (e.button == PadButton::Cross && !e.repeat) {
-                if (focus == 1) {
+                if (focus == 2) {
                     app.push(screens::makeDownloads(app));
+                } else if (focus == 1) {
+                    app.push(screens::makeLocalMedia(app));
                 } else {
                     app.push(screens::makeSourceChooser(app));
                 }
@@ -72,11 +80,14 @@ namespace {
     private:
         void refresh() {
             button->setFocused(focus == 0);
-            downloadsButton->setFocused(focus == 1);
+            localButton->setFocused(focus == 1);
+            downloadsButton->setFocused(focus == 2);
         }
 
         ui::Button *button;
+        ui::Button *localButton;
         ui::Button *downloadsButton;
+        int buttonCount = 2;
         bool hasDownloads = false;
         int focus = 0;
     };
@@ -265,6 +276,8 @@ namespace {
             });
             names.push_back(tr("profiles.add"));
             acts.push_back([this] { app.push(screens::makeSourceChooser(app)); });
+            names.push_back(tr("home.local_media"));
+            acts.push_back([this] { app.push(screens::makeLocalMedia(app)); });
             app.push(screens::makeMenu(app, p.name, names, -1, whileAlive([acts](int c) {
                 if (c >= 0 && c < (int) acts.size()) {
                     acts[(size_t) c]();
@@ -350,6 +363,9 @@ namespace {
             if (p.isPlaylist()) {
                 body += tr("playlist.url") + "\n" + screens::sourceLocation(p) + "\n\n" + tr("playlist.user_agent")
                         + "\n" + (p.userAgent.empty() ? tr("playlist.user_agent_default") : p.userAgent);
+            } else if (p.isStalker()) {
+                body += tr("stalker.portal_url") + "\n" + screens::hostOf(p.server) + "\n\n" + tr("stalker.mac") + "\n"
+                        + stalker::maskedMac(p.mac);
             } else {
                 body += tr("profile.server") + "\n" + screens::hostOf(p.server) + "\n\n" + tr("profile.username")
                         + "\n" + p.username + "\n\n" + tr("profile.password") + "\n" + screens::mask(p.password);
@@ -377,26 +393,34 @@ namespace {
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Xtream Codes (name, server, username, password) and Stalker / MAG (name, portal address, MAC address) sources:
+    // the same form, tested with the source's own sign-in before it is saved
     class ProfileEditScreen : public Screen {
     public:
         ProfileEditScreen(App &a, const Profile &p) : Screen(a), profile(p) {
             isNew = p.id.empty();
+            portal = p.isStalker();
+            fieldCount = portal ? 3 : 4;
             if (!isNew) {
                 serverInput = p.server;
             }
+            macInput = p.mac;
             ui::background(this);
-            screens::header(this, tr(isNew ? "profile.add_title" : "profile.edit_title"), tr("profile.subtitle"));
-            const char *captions[] = {"profile.name", "profile.server_url", "profile.username", "profile.password"};
-            for (int i = 0; i < 4; i++) {
+            screens::header(this, tr(portal ? (isNew ? "stalker.add_title" : "stalker.edit_title")
+                                            : (isNew ? "profile.add_title" : "profile.edit_title")),
+                            tr(portal ? "stalker.subtitle" : "profile.subtitle"));
+            const char *xtreamCaptions[] = {"profile.name", "profile.server_url", "profile.username", "profile.password"};
+            const char *portalCaptions[] = {"profile.name", "stalker.portal_url", "stalker.mac"};
+            for (int i = 0; i < fieldCount; i++) {
                 fields[i] = new screens::FieldRow(FloatRect(theme::SAFE_X, 230 + (float) i * 104, 1000, 88),
-                                                  tr(captions[i]));
+                                                  tr(portal ? portalCaptions[i] : xtreamCaptions[i]));
                 add(fields[i]);
             }
             const char *labels[] = {"profile.test", "profile.save_connect", "common.cancel"};
             float x = theme::SAFE_X;
             for (int i = 0; i < 3; i++) {
                 float w = i == 2 ? 220.0f : 340.0f;
-                buttons[i] = new ui::Button(tr(labels[i]), FloatRect(x, 690, w, 84), i == 1);
+                buttons[i] = new ui::Button(tr(labels[i]), FloatRect(x, portal ? 586.0f : 690.0f, w, 84), i == 1);
                 add(buttons[i]);
                 x += w + 24;
             }
@@ -428,27 +452,38 @@ namespace {
             }
         }
 
+        // physical keyboard: typing on a focused field opens its editor with what was typed
+        bool handleKey(const kbd::Event &k) override {
+            if (k.key != kbd::Key::Char || focus >= fieldCount || testing) {
+                return false;
+            }
+            seed = k.text;
+            activate();
+            return true;
+        }
+
         void handleInput(const InputEvent &e) override {
+            const int firstButton = fieldCount;
             switch (e.button) {
                 case PadButton::Up:
-                    if (focus >= 4) {
-                        focus = 3;
+                    if (focus >= firstButton) {
+                        focus = firstButton - 1;
                     } else if (focus > 0) {
                         focus--;
                     }
                     break;
                 case PadButton::Down:
-                    if (focus < 4) {
+                    if (focus < firstButton) {
                         focus++;
                     }
                     break;
                 case PadButton::Left:
-                    if (focus > 4) {
+                    if (focus > firstButton) {
                         focus--;
                     }
                     break;
                 case PadButton::Right:
-                    if (focus >= 4 && focus < 6) {
+                    if (focus >= firstButton && focus < firstButton + 2) {
                         focus++;
                     }
                     break;
@@ -469,6 +504,28 @@ namespace {
     private:
 
         void activate() {
+            if (portal) {
+                switch (focus) {
+                    case 0:
+                        edit(tr("profile.name"), profile.name, false, [this](const std::string &v) { profile.name = v; });
+                        return;
+                    case 1:
+                        edit(tr("stalker.portal_url"), serverInput, false, [this](const std::string &v) { serverInput = v; });
+                        return;
+                    case 2:
+                        edit(tr("stalker.mac"), macInput, false, [this](const std::string &v) { macInput = v; });
+                        return;
+                    case 3:
+                        test(false);
+                        return;
+                    case 4:
+                        test(true);
+                        return;
+                    default:
+                        app.pop();
+                        return;
+                }
+            }
             switch (focus) {
                 case 0:
                     edit(tr("profile.name"), profile.name, false, [this](const std::string &v) { profile.name = v; });
@@ -495,7 +552,9 @@ namespace {
         }
 
         void edit(const std::string &title, const std::string &value, bool secret, std::function<void(const std::string &)> set) {
-            app.push(screens::makeKeyboard(app, title, value, secret, [this, set](const std::string &v) {
+            std::string initial = value + seed;   // a character typed on a physical keyboard opened the editor
+            seed.clear();
+            app.push(screens::makeKeyboard(app, title, initial, secret, [this, set](const std::string &v) {
                 set(v);
                 tested = false;
                 refresh();
@@ -504,6 +563,28 @@ namespace {
 
         // validates the form into `profile`; returns an error message or ""
         std::string validate() {
+            if (portal) {
+                stalker::Portal pt = stalker::portalFor(serverInput);
+                if (!pt.ok) {
+                    return tr(pt.error.c_str());
+                }
+                std::string mac;
+                if (!stalker::normalizeMac(macInput, mac)) {
+                    return tr("stalker.error.mac");
+                }
+                std::string server = url::trim(serverInput);
+                if (url::lower(server).find("://") == std::string::npos) {
+                    server = "http://" + server;   // i18n-exempt: technical value
+                }
+                profile.type = SourceType::Stalker;
+                profile.server = server;
+                profile.mac = mac;
+                macInput = mac;
+                if (url::trim(profile.name).empty()) {
+                    profile.name = screens::hostOf(pt.origin);
+                }
+                return "";
+            }
             url::Server s = url::normalizeServer(serverInput);
             if (!s.ok) {
                 return s.error;
@@ -541,7 +622,7 @@ namespace {
             setStatus("", theme::textSecondary());
             statusTitle->setText(tr("profile.testing"));
             LOG_I("profiles", "testing connection to %s", screens::hostOf(profile.server).c_str());
-            testToken = app.xtream().authenticate(profile, [this, thenSave](const XtreamService::AuthOutcome &o) {
+            testToken = app.sources().authenticate(profile, [this, thenSave](const XtreamService::AuthOutcome &o) {
                 testing = false;
                 spinner->setVisibility(Visibility::Hidden);
                 statusTitle->setText(tr("profile.connection"));
@@ -596,26 +677,36 @@ namespace {
 
         void refresh() {
             fields[0]->setValue(profile.name.empty() ? tr("profile.name_placeholder") : profile.name, profile.name.empty());
-            fields[1]->setValue(serverInput.empty() ? "http://example.com:8080" : serverInput, serverInput.empty());
-            fields[2]->setValue(profile.username.empty() ? tr("profile.required") : profile.username, profile.username.empty());
-            fields[3]->setValue(profile.password.empty() ? tr("profile.required") : screens::mask(profile.password),
-                                profile.password.empty());
-            for (int i = 0; i < 4; i++) {
+            if (portal) {
+                fields[1]->setValue(serverInput.empty() ? "http://example.com:8080/c/" : serverInput, serverInput.empty());   // i18n-exempt: technical value
+                fields[2]->setValue(macInput.empty() ? "00:1A:79:00:00:00" : macInput, macInput.empty());
+            } else {
+                fields[1]->setValue(serverInput.empty() ? "http://example.com:8080" : serverInput, serverInput.empty());
+                fields[2]->setValue(profile.username.empty() ? tr("profile.required") : profile.username,
+                                    profile.username.empty());
+                fields[3]->setValue(profile.password.empty() ? tr("profile.required") : screens::mask(profile.password),
+                                    profile.password.empty());
+            }
+            for (int i = 0; i < fieldCount; i++) {
                 fields[i]->setFocused(focus == i);
             }
             for (int i = 0; i < 3; i++) {
-                buttons[i]->setFocused(focus == 4 + i);
+                buttons[i]->setFocused(focus == fieldCount + i);
                 buttons[i]->setEnabled(!testing || i == 2);
             }
         }
 
         Profile profile;
         std::string serverInput;
+        std::string macInput;
+        std::string seed;          // character typed on a physical keyboard that opened the field's editor
         bool isNew;
+        bool portal = false;       // Stalker / MAG source
+        int fieldCount = 4;
         bool tested = false;
         bool testing = false;
         int focus = 0;
-        screens::FieldRow *fields[4];
+        screens::FieldRow *fields[4] = {};
         ui::Button *buttons[3];
         RectangleShape *status;
         ui::Label *statusTitle;

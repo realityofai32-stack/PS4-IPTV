@@ -49,6 +49,10 @@ public:
 
     Result press();
 
+    // text typed on a physical keyboard (UTF-8): control characters are dropped, the length limit applies.
+    // Returns false when nothing was inserted.
+    bool typeText(const std::string &text);
+
     // controller shortcuts
     void backspace();
 

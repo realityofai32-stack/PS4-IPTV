@@ -9,7 +9,7 @@ Native, open-source IPTV and media client for jailbroken PlayStation 4 consoles,
 </p>
 
 <p align="center">
-  <strong>Xtream Codes · M3U / M3U8 · Live TV · Movies · Series · Offline Downloads</strong>
+  <strong>Xtream Codes · M3U / M3U8 · Stalker / MAG · Live TV · Movies · Series · Local Media · Offline Downloads</strong>
 </p>
 
 <p align="center">
@@ -99,7 +99,10 @@ not distributed with V7 IPTV.</sub>
 
 ## Features
 
-- **Sources**: Xtream Codes accounts and M3U / M3U8 playlists, with multiple sources
+- **Sources**: Xtream Codes accounts, M3U / M3U8 playlists and Stalker / MAG portals (MAC address), with multiple
+  sources
+- **HTTP and HTTPS streams**, including HTTPS HLS with HTTPS segments and redirects; certificates are verified
+- **Local Media**: browse the console's storage (`/data`, USB drives) and play video and audio files
 - **Live TV** with categories, channel logos, favorites, fast zapping and MPEG-TS / HLS fallback
 - **Movies & Series** with poster grids, sorting, metadata, seasons and episodes
 - **Search** across Live TV, Movies and Series, including tolerant matching for small typos
@@ -111,6 +114,7 @@ not distributed with V7 IPTV.</sub>
 - **Next Episode** countdown and auto-play for series episodes
 - **English and Turkish UI**, plus Unicode fallback fonts for international titles and channel names
 - **DualShock 4 navigation** designed for the TV, with accelerated hold-to-scroll and an on-screen keyboard
+- **USB / Bluetooth keyboard** for typing (search, addresses, MAC, passwords) and navigation, US or Turkish Q layout
 
 ### Next Episode
 
@@ -128,23 +132,44 @@ already be downloaded.
 
 ### What each source type supports
 
-| | Xtream Codes | M3U / M3U8 playlist |
-|---|---|---|
-| Live TV, categories, logos | ✓ | ✓ (`group-title`, `tvg-logo`) |
-| Movies, Series | ✓ | – (entries are always treated as live channels) |
-| Search, Favorites, Recently Watched | ✓ | ✓ |
-| Continue Watching, offline downloads | ✓ (Movies, episodes) | – |
-| Account status and expiry | ✓ | – |
+| | Xtream Codes | M3U / M3U8 playlist | Stalker / MAG portal |
+|---|---|---|---|
+| Live TV, categories, logos | ✓ | ✓ (`group-title`, `tvg-logo`) | ✓ (genres) |
+| Movies, Series | ✓ | – (entries are always treated as live channels) | ✓ (when the portal offers them) |
+| Search, Favorites, Recently Watched | ✓ | ✓ | ✓ |
+| Continue Watching | ✓ (Movies, episodes) | – | ✓ (Movies, episodes) |
+| Offline downloads | ✓ | – | – (single-use play links) |
+| Account status and expiry | ✓ | – | expiry when the portal reports it |
 
-Playlist entries are never guessed to be movies or series. Use an Xtream Codes source for Movies, Series,
-Continue Watching and downloads.
+Playlist entries are never guessed to be movies or series. Use an Xtream Codes or Stalker / MAG source for Movies,
+Series and Continue Watching.
+
+### Stalker / MAG portals
+
+*Add Source › Stalker / MAG Portal*: a name, the portal address (for example `http://example.com:8080/c/`) and the
+MAC address registered with your provider. The app signs in like a MAG 250 box (handshake, token, profile), loads
+Live TV, Movies and Series, and asks the portal for a fresh stream address for every playback. Movies and Series
+lists are paged on portals: the first load reads them page by page (progress is shown) and keeps a saved copy,
+refreshed in the background once a day. Portals that require a login and password for the box are not supported;
+an incompatible portal is reported, never guessed. The MAC address, tokens and device identifiers never appear in
+the log.
+
+### Local Media
+
+*Local Media* (Home navigation, also from the first screen and Sources) lists the storage the app can open:
+internal storage (`/data`, for example files copied to `/data/PS4IPTV/media/` over FTP) and USB drives
+(`/mnt/usb0` ... `/mnt/usb7`, when the console's environment gives the app access). Folders first, then the video and
+audio files the player can open (MKV, MP4, TS / M2TS, AVI, MOV, WebM, MP3, FLAC...). Files play in the movie player
+with the same audio / subtitle tracks, subtitle style, aspect ratio, crop and zoom; they are not added to history,
+Continue Watching, favorites or search.
 
 ## Requirements
 
 - A **jailbroken PS4** or another compatible homebrew environment that can install fake-signed PKG files.
   V7 IPTV does not include or describe any exploit.
-- **Your own source**: an Xtream Codes compatible service (server address, username, password) and/or the address
-  of an M3U / M3U8 playlist you are entitled to use. The project provides no content, accounts or playlists.
+- **Your own source**: an Xtream Codes compatible service (server address, username, password), the address of an
+  M3U / M3U8 playlist and/or a Stalker / MAG portal (address and registered MAC address) you are entitled to use.
+  The project provides no content, accounts or playlists.
 - Network access for streaming; downloaded content plays offline.
 
 ## Quick Start
@@ -153,7 +178,7 @@ Continue Watching and downloads.
 2. Install it with the PS4 package installer of your homebrew environment.
 3. Launch **V7 IPTV**.
 4. Choose **Add Source**.
-5. Select **Xtream Codes** or **M3U / M3U8 Playlist**.
+5. Select **Xtream Codes**, **M3U / M3U8 Playlist** or **Stalker / MAG Portal**.
 6. Enter your own valid source information and start watching.
 
 ## Installing
@@ -216,9 +241,8 @@ the playlist address, for example `https://example.com/list.m3u`.
 - **Saved copy and refresh**: the playlist is kept on the console and refreshed in the background when it is
   older than 12 hours (*Options › Refresh Playlist* refreshes now). A failed download never empties the list.
   *Options › Playlist Info* shows channel, group and logo counts and skipped entries, never the address.
-- **Playback**: each channel's own URL (MPEG-TS, HLS and other HTTP streams) on the same player as Xtream
-  channels. Channels with **HTTPS stream URLs cannot be played** in this version (see *Known limitations*); they
-  show a clear message and Playlist Info counts them.
+- **Playback**: each channel's own URL (MPEG-TS, HLS and other HTTP / HTTPS streams) on the same player as Xtream
+  channels. Addresses the player cannot open (RTSP, MMS...) show a clear message.
 
 ## Offline downloads
 
@@ -243,9 +267,10 @@ control.
 
 ## Known limitations
 
-- **HTTPS media streams are not supported.** The bundled FFmpeg playback build has no TLS protocol, so streams are
-  played over HTTP (also RTMP / UDP / RTP). This affects HTTPS entries in M3U playlists and HTTPS stream URLs in
-  general. The Xtream API, playlist downloads, images and offline downloads use libcurl and do work over HTTPS.
+- **HTTPS streams** use Mbed TLS 2.16 inside FFmpeg: TLS 1.2 (servers that only accept TLS 1.3 cannot be played),
+  certificates checked against the bundled CA list. Streams with an untrusted or expired certificate are refused.
+- **Stalker / MAG**: portals that require a login / password for the box, catch-up / archive and EPG are not
+  supported; very large VOD catalogs are read up to 1,500 pages (about 21,000 entries) per section.
 - **M3U / M3U8 sources are Live TV only**: no movie / series detection, Continue Watching or downloads.
 - No EPG / programme guide, recording or timeshift.
 - Video is decoded in software; very high bitrates or 4K may not play smoothly.
@@ -267,6 +292,11 @@ The toolchain reproduces [pPlay](https://github.com/Cpasjuste/pplay)'s PS4 build
 FFmpeg 5.0, libcurl 7.80 + Mbed TLS, ...) and the **OpenOrbis** tools (`create-fself`, `create-gp4`) plus
 **LibOrbisPkg** `PkgTool.Core` for the PKG. Everything lives in `toolchain\` / `toolchain/` inside the repository
 (git-ignored); nothing is installed system-wide.
+
+**HTTPS playback** needs FFmpeg 5.0 rebuilt with TLS: `scripts/build-ffmpeg-tls.sh` reproduces PacBrew's FFmpeg
+recipe exactly and adds only the `https` / `tls` protocols over the sysroot's Mbed TLS (into
+`toolchain/ffmpeg-5.0-tls/`, about two minutes; it needs `nasm`, see docs/linux-build.md). `scripts/build-ps4iptv.sh`
+runs it when needed. The prebuilt libmpv 0.34.1 is linked unchanged.
 
 Both workflows need the pPlay checkout in `external/pplay-reference` at the pinned commit
 `039954636c1f2ef20b5ec188226e7ed245cbb763`: V7 IPTV compiles libcross2d and two pPlay sources from it and copies
@@ -294,6 +324,7 @@ scripts/verify-ps4iptv.sh Release                # full release validation
 
 ### Windows 11
 
+The Windows scripts were not updated for the HTTPS FFmpeg rebuild: build `toolchain/ffmpeg-5.0-tls` on Linux first.
 Builds run natively with PowerShell (no WSL, VM or Docker). `scripts\setup-toolchain.ps1` downloads every
 component, checks each against a pinned SHA-256 and unpacks it into `toolchain\`; only LLVM's official installer
 needs one administrator (UAC) prompt. Prerequisites: Windows 11, PowerShell 5.1, Git, Python 3, the .NET runtime

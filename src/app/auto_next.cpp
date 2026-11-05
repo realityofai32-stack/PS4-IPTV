@@ -29,6 +29,10 @@ namespace autonext {
                     if (ep.id == current.id) {
                         position = (int) q.size();
                         q.push_back(current);   // exactly as given: resume, local copy, owner profile
+                        if (q.back().cmd.empty()) {
+                            q.back().cmd = ep.cmd;   // Stalker: the play command from the episode list
+                            q.back().linkSeries = ep.linkSeries;
+                        }
                         continue;
                     }
                     screens::VodItem it;
@@ -43,6 +47,8 @@ namespace autonext {
                     it.season = ep.season;
                     it.episode = ep.number;
                     it.durationHint = ep.durationSeconds;
+                    it.cmd = ep.cmd;
+                    it.linkSeries = ep.linkSeries;
                     q.push_back(it);
                 }
             }

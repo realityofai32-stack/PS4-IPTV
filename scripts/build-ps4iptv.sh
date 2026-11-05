@@ -25,6 +25,9 @@ for f in "$tc/cmake/bin/cmake" "$tc/ninja/ninja"; do
     [[ -x "$f" ]] || { echo "missing $f (see docs/linux-build.md)" >&2; exit 1; }
 done
 
+# FFmpeg 5.0 with HTTPS (built once into toolchain/ffmpeg-5.0-tls; a no-op when it is up to date)
+"$repo/scripts/build-ffmpeg-tls.sh"
+
 export OPENORBIS="$tc/pacbrew/opt/pacbrew/ps4/openorbis"
 export OO_PS4_TOOLCHAIN="$OPENORBIS"
 cmake="$tc/cmake/bin/cmake"

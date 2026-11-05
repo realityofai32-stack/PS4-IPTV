@@ -63,6 +63,13 @@ namespace screens {
         // download belongs to (its progress is kept there). Both "" when streaming in the signed-in profile.
         std::string localPath;
         std::string profileId;
+        // Stalker episodes: the play command and its "series" number for create_link ("" / 0 otherwise; when an
+        // entry point does not have them, the player takes them from the series' episode list)
+        std::string cmd;
+        int linkSeries = 0;
+        // Local Media: a file from the console's storage, played with the same player and options but outside any
+        // source (no progress, history, favorites or next episode); localPath holds the file
+        bool localMedia = false;
     };
 
     // categories + poster grid; opening loads the catalog lazily (saved copy first)
@@ -78,6 +85,9 @@ namespace screens {
     // is offered as "next episode". onExit(id of the item playing last) runs when the user leaves.
     Screen *makeVodPlayer(App &app, const std::vector<VodItem> &queue, int index, bool resume,
                           std::function<void(const std::string &)> onExit = nullptr);
+
+    // Local Media: folders and media files on the console's storage (/data, USB), played in the movie player
+    Screen *makeLocalMedia(App &app);
 
     // favorites of all types (Live channels, Movies, Series)
     Screen *makeFavorites(App &app);

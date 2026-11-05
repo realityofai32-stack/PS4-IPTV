@@ -24,6 +24,10 @@
 //     mpv path; tracks, video geometry, resume and progress work identically. Progress is kept in the download's
 //     profile (the library switches to it while the player is open)
 //   - downloads pause while the player is open (App::setPlaybackActive): decoding comes first
+//   - Stalker / MAG sources: every open asks the portal for a fresh address (create_link) and plays it with the MAG
+//     User-Agent; an episode without its play command waits for the series' episode list
+//   - Local Media (VodItem::localMedia): a file from the console's storage, same player and Options panel, but no
+//     progress, history, favorites or next episode (it belongs to no source)
 
 #include <cctype>
 #include <cmath>
@@ -116,7 +120,9 @@ namespace {
         }
 
         ~VodPlayerScreen() override {
+            linkToken.cancel();
             app.playback().stop();
+            app.playback().setUserAgent("");
             app.setPlaybackActive(false);
             if (!previousProfile.empty()) {
                 app.library().setProfile(previousProfile);   // back to the signed-in profile
@@ -175,6 +181,7 @@ namespace {
                 app.toast(tr("player.subtitles_unsupported"), ToastKind::Error);
             }
             completeQueue();
+            retryAwaitingInfo();
             if (!finished && updateCountdown()) {
                 advance("countdown");   // log reason i18n-exempt
                 return;
@@ -286,7 +293,7 @@ namespace {
                     }
                     return;
                 case PadButton::Square:
-                    if (!e.repeat) {
+                    if (!e.repeat && !item().localMedia) {   // a local file is nobody's favorite
                         const VodItem &it = item();
                         ContentType t = isEpisode() ? ContentType::Series : ContentType::Movie;
                         const std::string &id = isEpisode() ? it.seriesId : it.id;
@@ -353,19 +360,104 @@ namespace {
             pb.applyOptions({{"hr-seek", "default"}});
             pb.applyOptions(display::mpvOptions(geometry, (int) theme::SCREEN_W, (int) theme::SCREEN_H));
             const VodItem &it = item();
-            // a downloaded copy plays from the disk (same backend, no provider request)
-            std::string url = !it.localPath.empty() ? it.localPath
-                              : isEpisode() ? xtream::seriesUrl(app.session().profile, it.id, it.extension)
-                                            : xtream::movieUrl(app.session().profile, it.id, it.extension);
-            Playback::OpenOptions o;
-            o.start = start;
-            o.chooseTracks = [this](const std::vector<tracks::Track> &list) { return chooseTracks(list); };
             std::string container = it.extension.empty() ? "VOD" : it.extension;
             for (auto &c: container) {
                 c = (char) toupper((unsigned char) c);
             }
-            pb.open(url, container, o);
+            linkToken.cancel();
+            awaitingInfoStart = -1;
+            if (it.localPath.empty() && !it.localMedia && app.session().profile.isStalker()) {
+                openStalker(start, container);
+                video->resetFrameStats();
+                return;
+            }
+            pb.setUserAgent("");
+            // a downloaded copy / a local file plays from the disk (same backend, no provider request)
+            std::string url = !it.localPath.empty() ? it.localPath
+                              : isEpisode() ? xtream::seriesUrl(app.session().profile, it.id, it.extension)
+                                            : xtream::movieUrl(app.session().profile, it.id, it.extension);
+            pb.open(url, container, openOptions(start));
             video->resetFrameStats();
+        }
+
+        Playback::OpenOptions openOptions(double start) {
+            Playback::OpenOptions o;
+            o.start = start;
+            o.chooseTracks = [this](const std::vector<tracks::Track> &list) { return chooseTracks(list); };
+            return o;
+        }
+
+        // Stalker: the portal creates the address (single-use play token) for every open
+        void openStalker(double start, const std::string &container) {
+            Playback &pb = app.playback();
+            pb.prepare(container);
+            const VodItem &it = item();
+            int at = index;
+            std::string id = it.id;
+            auto done = [this, at, id, start, container](const sources::LinkOutcome &r) {
+                if (index != at || item().id != id) {
+                    return;   // another item started meanwhile
+                }
+                Playback &p = app.playback();
+                if (!r.ok) {
+                    p.failBeforeOpen(r.message, "create_link failed", true);   // i18n-exempt: technical value
+                    refresh(app.now());
+                    return;
+                }
+                p.setUserAgent(r.userAgent);
+                p.open(r.url, container, openOptions(start));
+                refresh(app.now());
+            };
+            if (!isEpisode()) {
+                linkToken = app.stalker().resolveMovie(app.session().profile, it.id, done);
+                return;
+            }
+            std::string cmd = it.cmd;
+            int series = it.linkSeries;
+            if (cmd.empty()) {
+                // an entry point without the episode list (Continue Watching right after start): take the command
+                // from the series' episodes, asking for them once
+                if (auto info = app.vod().seriesInfo(it.seriesId)) {
+                    for (const auto &season: info->seasons) {
+                        for (const auto &ep: season.episodes) {
+                            if (ep.id == it.id) {
+                                cmd = ep.cmd;
+                                series = ep.linkSeries;
+                            }
+                        }
+                    }
+                }
+            }
+            if (cmd.empty()) {
+                if (awaitingInfoFor != it.seriesId) {
+                    awaitingInfoFor = it.seriesId;
+                    app.vod().requestSeriesInfo(app.session().profile, it.seriesId);
+                    awaitingInfoStart = start;
+                    awaitingInfoGen = app.vod().generation();
+                    LOG_I("player", "episode %s: waiting for the series' episode list (play command)", it.id.c_str());
+                    return;
+                }
+                pb.failBeforeOpen(tr("stalker.link.unknown"), "episode play command unknown", false);   // i18n-exempt: technical value
+                return;
+            }
+            linkToken = app.stalker().resolveEpisode(app.session().profile, cmd, series, done);
+        }
+
+        // Stalker: the episode list asked for by openStalker() arrived (or failed)
+        void retryAwaitingInfo() {
+            if (awaitingInfoStart < 0 || app.vod().generation() == awaitingInfoGen) {
+                return;
+            }
+            awaitingInfoGen = app.vod().generation();
+            const VodItem &it = item();
+            if (app.vod().seriesInfo(it.seriesId)) {
+                double start = awaitingInfoStart;
+                awaitingInfoStart = -1;
+                open(start);
+            } else if (!app.vod().detailError("s" + it.seriesId).empty()) {
+                awaitingInfoStart = -1;
+                app.playback().failBeforeOpen(app.vod().detailError("s" + it.seriesId), "series info failed", true);   // i18n-exempt: technical value
+            }
         }
 
         // automatic choice from Settings; a choice made in the Options panel wins for this playback
@@ -824,14 +916,15 @@ namespace {
             Playback &pb = app.playback();
             const VodItem &it = item();
             const StreamInfo &si = pb.info();
-            std::string source = it.localPath.empty() ? "" : "   \xC2\xB7   " + tr("player.offline_copy");
+            std::string copy = tr(it.localMedia ? "player.local_file" : "player.offline_copy");
+            std::string source = it.localPath.empty() ? "" : "   \xC2\xB7   " + copy;
             if (isEpisode()) {
                 title->setText(it.seriesName);
                 subtitle->setText(fmt::episodeCode(it.season, it.episode) + "  \xE2\x80\x94  " + episodeTitle(it) + source);
             } else {
                 title->setText(it.title);
                 std::string year = it.year > 0 ? std::to_string(it.year) : "";
-                subtitle->setText(!year.empty() ? year + source : it.localPath.empty() ? "" : tr("player.offline_copy"));
+                subtitle->setText(!year.empty() ? year + source : it.localPath.empty() ? "" : copy);
             }
             clock->setText(clockx::localTime());
 
@@ -910,7 +1003,7 @@ namespace {
                 std::string reason = recovery.reasonText();
                 std::vector<std::pair<const char *, std::string>> lines = {
                         {"info.container", si.format},
-                        {"info.source", tr(it.localPath.empty() ? "info.source_stream" : "info.source_file")},
+                        {"info.source", tr(it.localMedia ? "info.source_local" : it.localPath.empty() ? "info.source_stream" : "info.source_file")},
                         {"info.resolution", si.width > 0 ? std::to_string(si.width) + " x " + std::to_string(si.height) : "-"},
                         {"info.frame_rate", si.fps > 0 ? diag::format("%.2f fps", si.fps) : "-"},
                         {"info.video_codec", si.videoCodec.empty() ? "-" : si.videoCodec},
@@ -1420,6 +1513,10 @@ namespace {
         bool catalogWanted = false;        // waiting for the series' catalog to complete the queue
         unsigned vodGen = 0;
         std::string catalogRequested;      // asked once per series while the player is open
+        CancelToken linkToken;             // Stalker: the create_link request of the current open
+        double awaitingInfoStart = -1;     // Stalker: open() waits for the episode list (resume position)
+        unsigned awaitingInfoGen = 0;
+        std::string awaitingInfoFor;
         int nextShownSeconds = -1;
         RectangleShape *nextPanel = nullptr;
         ui::Label *nextText = nullptr;

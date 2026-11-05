@@ -8,7 +8,10 @@
 //
 // Playlist (M3U) channels play their media URL as-is through the same backend: no Xtream URL, no TS / HLS
 // format fallback (the playlist decides the format), the entry's #EXTVLCOPT User-Agent or the source's custom
-// one. URLs the FFmpeg build cannot open (https, rtsp...) fail at once with a localized reason.
+// one. URLs the FFmpeg build cannot open (rtsp, mms...) fail at once with a localized reason.
+//
+// Stalker / MAG channels: every open (first open, zap, reconnect) asks the portal for a fresh address
+// (create_link, single-use play token) and plays it with the MAG User-Agent; the portal decides the format.
 
 #include <cmath>
 
@@ -185,6 +188,7 @@ namespace {
         }
 
         ~LivePlayerScreen() override {
+            linkToken.cancel();
             app.playback().stop();
             app.playback().setUserAgent("");
             app.setPlaybackActive(false);
@@ -312,6 +316,9 @@ namespace {
                 // the playlist's URL is the stream: no alternative format to fall back to
                 plan = stability::FormatPlan();
                 plan.first = playlistFormat(channel(index).url) == "HLS" ? "m3u8" : "ts";
+            } else if (app.session().profile.isStalker()) {
+                plan = stability::FormatPlan();   // the portal's link decides the format
+                plan.first = "ts";
             } else {
                 plan = stability::planFormats(formatSetting(s.streamFormat), app.session().account.outputFormats,
                                               app.session().learnedLiveFormat);
@@ -335,9 +342,27 @@ namespace {
             pb.applyOptions(display::mpvOptions(app.settings().get().defaultGeometry(), (int) theme::SCREEN_W,
                                                 (int) theme::SCREEN_H));
             const LiveChannel &c = channel(index);
+            linkToken.cancel();
             if (c.isPlaylist()) {
                 pb.setUserAgent(c.userAgent.empty() ? app.session().profile.userAgent : c.userAgent);
                 pb.open(c.url, playlistFormat(c.url));
+            } else if (app.session().profile.isStalker()) {
+                // a fresh single-use address from the portal for every open
+                pb.prepare("");
+                std::string id = c.id;
+                linkToken = app.stalker().resolveLive(app.session().profile, c, [this, id](const sources::LinkOutcome &o) {
+                    if (channel(index).id != id) {
+                        return;   // zapped meanwhile
+                    }
+                    Playback &p = app.playback();
+                    if (!o.ok) {
+                        p.failBeforeOpen(o.message, "create_link failed", true);   // i18n-exempt: technical value
+                    } else {
+                        p.setUserAgent(o.userAgent);
+                        p.open(o.url, playlistFormat(o.url));
+                    }
+                    refresh(app.now());
+                });
             } else {
                 pb.setUserAgent("");
                 std::string url = xtream::liveUrl(app.session().profile, c.id, format);
@@ -541,6 +566,7 @@ namespace {
         int pendingIndex = -1;
         double zapAt = 0;
         std::string format = "ts";
+        CancelToken linkToken;   // Stalker: the create_link request of the current open
         stability::FormatPlan plan;
         StabilityPreset preset = StabilityPreset::Balanced;
         stability::Recovery recovery;

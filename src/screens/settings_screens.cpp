@@ -1046,6 +1046,21 @@ namespace {
             };
             language.describe = [] { return tr("settings.language.desc"); };
             items.push_back(language);
+
+            // a physical USB / Bluetooth keyboard: which characters its keys type
+            SettingItem layout;
+            layout.kind = Kind::Choice;
+            layout.caption = tr("settings.keyboard_layout");
+            layout.options = {tr("settings.keyboard_layout.auto"), tr("settings.keyboard_layout.us"),
+                              tr("settings.keyboard_layout.tr")};
+            layout.choice = [&s] { return s.keyboardLayout == "us" ? 1 : s.keyboardLayout == "tr" ? 2 : 0; };   // i18n-exempt: technical value
+            layout.setChoice = [this, &s](int i) {
+                s.keyboardLayout = i == 1 ? "us" : i == 2 ? "tr" : "auto";   // i18n-exempt: technical value
+                save();
+                app.applyKeyboardLayout();
+            };
+            layout.describe = [] { return tr("settings.keyboard_layout.desc"); };
+            items.push_back(layout);
         }
 
         void buildDiagnostics(std::vector<SettingItem> &items) {

@@ -1,0 +1,54 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-NEXT-FEATURES: HTTPS, KEYBOARD, STALKER / MAG, LOCAL MEDIA
+==========================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file.
+Install OVER the existing V7 IPTV (same title ID): profiles, settings, history and downloads are kept.
+Afterwards copy /data/PS4IPTV/logs/log.txt over FTP. Useful lines:
+  [player] FFmpeg protocols: ... https ... tls ...; HTTPS playback available (certificate verification on, CA bundle set)
+  [player] open https stream at https://<host> (<format>)          [player] TLS: ...   (only on failures)
+  [keyboard] keyboard library ready / physical keyboard opened / first key press received
+             (or: keyboard module not loaded ... controller input only)
+  [stalker] session started with <origin>/<api path>   signed in ...   live: N genres, M channels
+  [stalker] movies: ... pages in ...s   series (series module|VOD list): ...   itv|vod link created: <origin>
+  [localmedia] N playable extensions ...   N storage location(s) available   playing a local <ext> file
+
+Needed: an HTTP stream that worked in v0.3.0, an HTTPS direct stream (MP4/TS), an HTTPS HLS stream (.m3u8 whose
+segments are HTTPS too), a USB keyboard (and/or Bluetooth), a Stalker / MAG test portal + its registered MAC, a USB
+drive or FTP access to /data with an MKV and an MP4 that have several audio tracks / embedded subtitles.
+
+ 1. EXISTING HTTP STREAM: open an Xtream or M3U channel that played in v0.3.0. Same start time and behaviour as
+    before (zap, reconnect, Triangle info shows the same format).
+ 2. HTTPS DIRECT STREAM: an M3U entry with an https:// MP4 or TS address. It plays (no "HTTPS not supported").
+    Seek works for an MP4. Log: "open https stream at https://...". If it fails, note the TLS line.
+ 3. HTTPS HLS: an https:// .m3u8 (live and, if available, VOD) with HTTPS segments. Plays continuously > 2 min
+    (segments keep loading). An http:// address that redirects to https:// also plays.
+    Optional: a site with an expired / self-signed certificate is refused with "certificate could not be verified".
+ 4. KEYBOARD IN SEARCH: connect the keyboard (before or after starting the app). Search: type letters, digits,
+    space, Backspace (hold: repeats), Delete clears; results update while typing; Enter jumps to results, Enter
+    again opens one. Arrows / Esc navigate. Settings > Language > Keyboard layout: Turkish Q types ı ş ğ ü ö ç İ
+    (Shift+i key area), US types @ / : ? &. The DualShock 4 still works at the same time everywhere.
+ 5. KEYBOARD IN ADD SOURCE: Add Source > each type. On a focused field just start typing: the editor opens with
+    the typed character. Type a URL (http://host:8080/c/), a MAC (00:1A:79:...), a password (shown as dots).
+    Enter = OK, Esc = Cancel. Uppercase / lowercase via Shift and Caps Lock.
+ 6. STALKER LOGIN: Add Source > Stalker / MAG Portal: name, portal URL, MAC. Test: "Connected" + expiry if the
+    portal reports one. Save & Connect -> Home. Wrong MAC: a clear refusal message, no crash. Wrong address:
+    "No compatible Stalker / MAG portal answered". The MAC never appears in log.txt (search for its last bytes).
+ 7. STALKER LIVE TV: genres as categories, logos, channel numbers. Play several channels, zap with L1/R1 (or
+    Up/Down), leave and reopen (a new link each time). Favorite a channel; it appears in Favorites and Search.
+ 8. STALKER VOD / SERIES (if the portal has them): Movies opens with a progress line on the first load
+    ("N items loaded so far"), then posters / categories; play a movie, stop, Continue Watching resumes it.
+    Series: open one, seasons and episodes list, play an episode, Next Episode countdown to the next one. Close the
+    app, restart, resume the episode from Continue Watching. No Download buttons on portal content.
+ 9. LOCAL MEDIA BROWSING: Home > Local Media (also on the first screen and in Sources > Options). Internal storage
+    is listed; a USB drive appears as "USB storage 1" when plugged in (Triangle re-checks). Open folders, Circle
+    goes back up to the storage list. Only folders and media files are shown (no .txt/.jpg/.srt).
+10. LOCAL MKV / MP4: play an MKV and an MP4 from USB or /data. Pause, seek (Left/Right, L2/R2), resume. Leave:
+    the file is NOT in Continue Watching / Recently Watched.
+11. LOCAL TRACKS / SUBTITLES: OPTIONS in the player: switch audio tracks and embedded subtitles; subtitle size /
+    position / shadow; Video: aspect ratio, crop / fill, zoom. Optional: a same-name .srt next to the file appears
+    as a subtitle track.
+12. XTREAM REGRESSION: sign in to the Xtream source. Live TV, a movie (resume), a series episode with the 45 s Next
+    Episode countdown across a season boundary, audio / subtitle selection, video geometry, an offline download
+    (start + play offline), themes / accent, search, favorites, hold-to-scroll, English / Turkish switch.
+
+Report per step: OK / not OK + a photo or screenshot of anything wrong, and log.txt.

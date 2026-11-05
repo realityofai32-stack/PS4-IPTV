@@ -7,7 +7,7 @@
 
 using namespace iptv;
 
-VodLibrary::VodLibrary(XtreamService &x, std::string dataDir) : xtream(x), dir(std::move(dataDir)) {}
+VodLibrary::VodLibrary(SourceService &x, std::string dataDir) : xtream(x), dir(std::move(dataDir)) {}
 
 void VodLibrary::reset() {
     (*epoch)++;
@@ -45,7 +45,7 @@ void VodLibrary::refreshSeries(const Profile &profile) {
 
 template<typename Catalog>
 void VodLibrary::open(const Profile &profile, bool movies) {
-    if (profile.isPlaylist()) {
+    if (!profile.hasVod()) {
         return;   // playlist sources have no Movies / Series (never guessed from channel names)
     }
     SectionStatus &st = movies ? movieState : seriesState;
@@ -58,7 +58,7 @@ void VodLibrary::open(const Profile &profile, bool movies) {
     int myEpoch = *epoch;
     std::weak_ptr<int> alive = epoch;
     Profile p = profile;
-    auto done = [this, alive, myEpoch, movies, p](XtreamService::CatalogOutcome<Catalog> &o) {
+    auto done = [this, alive, myEpoch, movies, p](sources::CatalogOutcome<Catalog> &o) {
         auto e = alive.lock();
         if (!e || *e != myEpoch) {
             return;   // signed in again meanwhile
@@ -70,7 +70,7 @@ void VodLibrary::open(const Profile &profile, bool movies) {
             s.fromCache = true;
             s.savedAt = o.savedAt;
             gen++;
-            if (clockx::unixNow() - o.savedAt > REFRESH_AFTER && !offlineMode) {
+            if (clockx::unixNow() - o.savedAt > SourceService::refreshAfter(p) && !offlineMode) {
                 refresh(p, movies);   // show the saved list now, newer one in the background
             }
         } else if (offlineMode) {
@@ -82,14 +82,14 @@ void VodLibrary::open(const Profile &profile, bool movies) {
         }
     };
     if constexpr (std::is_same<Catalog, MovieCatalog>::value) {
-        xtream.loadMovies(profile, dir, XtreamService::Source::Cache, done);
+        xtream.loadMovies(profile, dir, sources::Source::Cache, done);
     } else {
-        xtream.loadSeriesList(profile, dir, XtreamService::Source::Cache, done);
+        xtream.loadSeriesList(profile, dir, sources::Source::Cache, done);
     }
 }
 
 void VodLibrary::refresh(const Profile &profile, bool movies) {
-    if (profile.isPlaylist()) {
+    if (!profile.hasVod()) {
         return;
     }
     SectionStatus &st = movies ? movieState : seriesState;
@@ -141,8 +141,8 @@ void VodLibrary::refresh(const Profile &profile, bool movies) {
         return ok;
     };
     if (movies) {
-        xtream.loadMovies(profile, dir, XtreamService::Source::Network,
-                          [this, apply](XtreamService::MoviesOutcome &o) {
+        xtream.loadMovies(profile, dir, sources::Source::Network,
+                          [this, apply](sources::MoviesOutcome &o) {
                               if (o.ok && apply(true, "", o.savedAt)) {
                                   movieCatalog = o.catalog;
                               } else if (!o.ok) {
@@ -150,8 +150,8 @@ void VodLibrary::refresh(const Profile &profile, bool movies) {
                               }
                           });
     } else {
-        xtream.loadSeriesList(profile, dir, XtreamService::Source::Network,
-                              [this, apply](XtreamService::SeriesListOutcome &o) {
+        xtream.loadSeriesList(profile, dir, sources::Source::Network,
+                              [this, apply](sources::SeriesListOutcome &o) {
                                   if (o.ok && apply(true, "", o.savedAt)) {
                                       seriesCatalog = o.catalog;
                                   } else if (!o.ok) {
@@ -163,7 +163,7 @@ void VodLibrary::refresh(const Profile &profile, bool movies) {
 
 void VodLibrary::requestMovieInfo(const Profile &profile, const std::string &streamId) {
     std::string key = "m" + streamId;
-    if (streamId.empty() || profile.isPlaylist() || movieInfos.contains(streamId) || inFlight.count(key)) {
+    if (streamId.empty() || !profile.hasVod() || movieInfos.contains(streamId) || inFlight.count(key)) {
         return;
     }
     if (offlineMode) {
@@ -179,7 +179,7 @@ void VodLibrary::requestMovieInfo(const Profile &profile, const std::string &str
     int myEpoch = *epoch;
     std::weak_ptr<int> alive = epoch;
     xtream.loadMovieInfo(profile, streamId, [this, alive, myEpoch, key, streamId](
-            XtreamService::InfoOutcome<MovieInfo> &o) {
+            sources::InfoOutcome<MovieInfo> &o) {
         auto e = alive.lock();
         if (!e || *e != myEpoch) {
             return;
@@ -203,7 +203,7 @@ std::shared_ptr<const MovieInfo> VodLibrary::movieInfo(const std::string &stream
 
 void VodLibrary::requestSeriesInfo(const Profile &profile, const std::string &seriesId, bool force) {
     std::string key = "s" + seriesId;
-    if (seriesId.empty() || profile.isPlaylist() || inFlight.count(key) || (!force && seriesInfos.contains(seriesId))) {
+    if (seriesId.empty() || !profile.hasVod() || inFlight.count(key) || (!force && seriesInfos.contains(seriesId))) {
         return;
     }
     if (offlineMode) {
@@ -219,7 +219,7 @@ void VodLibrary::requestSeriesInfo(const Profile &profile, const std::string &se
     int myEpoch = *epoch;
     std::weak_ptr<int> alive = epoch;
     xtream.loadSeriesInfo(profile, seriesId, [this, alive, myEpoch, key, seriesId](
-            XtreamService::InfoOutcome<SeriesInfo> &o) {
+            sources::InfoOutcome<SeriesInfo> &o) {
         auto e = alive.lock();
         if (!e || *e != myEpoch) {
             return;

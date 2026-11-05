@@ -10,6 +10,8 @@
 
 #include "cross2d/c2d.h"
 #include "m3u_service.h"
+#include "source_service.h"
+#include "stalker_service.h"
 #include "screen.h"
 #include "vod_library.h"
 #include "xtream_service.h"
@@ -20,6 +22,7 @@
 #include "../iptv/models.h"
 #include "../network/jobs.h"
 #include "../platform/input.h"
+#include "../platform/keyboard.h"
 #include "../player/playback.h"
 #include "../storage/library_store.h"
 #include "../storage/profile_store.h"
@@ -107,6 +110,11 @@ public:
 
     XtreamService &xtream() { return xtreamService; }
 
+    // sign-in, Live TV, Movies / Series of the source's type (Xtream or Stalker / MAG)
+    SourceService &sources() { return sourceService; }
+
+    StalkerService &stalker() { return stalkerService; }
+
     M3uService &m3u() { return m3uService; }
 
     // Movies / Series catalogs (lazy) and their detail caches
@@ -150,6 +158,9 @@ public:
     // when shapes are created), back in Settings > Appearance
     void applyAccent(bool rebuildScreens);
 
+    // Settings > Language > Keyboard layout (physical keyboard); "auto" follows the UI language
+    void applyKeyboardLayout();
+
     // persists favorites/history; logs and toasts on failure
     void saveLibrary();
 
@@ -169,6 +180,8 @@ private:
 
     void applyPendingPlaylist();
 
+    void onKey(const kbd::Event &event);
+
     bool running = true;
     bool inDrawPass = false;
     bool dirty = true;
@@ -181,6 +194,8 @@ private:
     ProfileStore profileStore;
     SettingsStore settingsStore;
     XtreamService xtreamService;
+    StalkerService stalkerService;
+    SourceService sourceService;
     M3uService m3uService;
     CancelToken playlistToken;
     VodLibrary vodLibrary;
@@ -191,6 +206,7 @@ private:
     std::unique_ptr<dl::DownloadManager> downloadManager;
     Session currentSession;
     InputManager input;
+    PhysicalKeyboard keyboard;
     void *ownPad = nullptr;          // pad opened by us when libcross2d had none at startup
     double nextPadProbe = 0;
     bool clockChecked = false;

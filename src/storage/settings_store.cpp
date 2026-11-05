@@ -101,6 +101,8 @@ std::string SettingsStore::serialize() const {
     root.set("retryDownloads", json::Value::makeBool(settings.retryDownloads));
     root.set("resumeDownloadsOnStart", json::Value::makeBool(settings.resumeDownloadsOnStart));
     root.set("language", json::Value::makeString(settings.language == "tr" ? "tr" : "en"));
+    root.set("keyboardLayout", json::Value::makeString(settings.keyboardLayout == "us" || settings.keyboardLayout == "tr"
+                                                       ? settings.keyboardLayout : "auto"));
     int accent = palette::accentIndex(settings.accentColor.c_str());
     root.set("accentColor", json::Value::makeString(palette::ACCENTS[accent < 0 ? palette::DEFAULT_ACCENT : accent].key));
     json::Value orders = json::Value::makeObject();
@@ -151,6 +153,8 @@ bool SettingsStore::deserialize(const std::string &text, std::string *error) {
     // the language is only honoured from files written since the Language setting exists (version 2)
     std::string lang = root["version"].asInt(1) >= 2 ? root["language"].asString("en") : "en";
     s.language = lang == "tr" ? "tr" : "en";
+    std::string layout = root["keyboardLayout"].asString("auto");
+    s.keyboardLayout = layout == "us" || layout == "tr" ? layout : "auto";
     // optional (added with V7 IPTV): missing or unknown -> the default accent
     int accent = palette::accentIndex(root["accentColor"].asString("").c_str());
     s.accentColor = palette::ACCENTS[accent < 0 ? palette::DEFAULT_ACCENT : accent].key;

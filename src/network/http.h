@@ -8,6 +8,7 @@
 #include <atomic>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace http {
 
@@ -21,6 +22,8 @@ namespace http {
         size_t maxBytes = 64u * 1024 * 1024;
         CancelFlag cancel;
         std::string userAgent;          // "" = the app's (globalInit)
+        // extra request header lines ("Name: value"), e.g. a portal's Cookie / Authorization. Never logged.
+        std::vector<std::string> headers;
     };
 
     enum class Error {

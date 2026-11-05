@@ -8,6 +8,7 @@
 
 #include "cross2d/c2d.h"
 #include "../platform/input.h"
+#include "../platform/keyboard_logic.h"
 
 class App;
 
@@ -30,6 +31,14 @@ public:
     virtual void onAppExit() {}  // the app is closing (every screen on the stack, top first)
 
     virtual void handleInput(const InputEvent &event) = 0;
+
+    // A physical keyboard key. Text entry screens take characters and editing keys and return true; anything a
+    // screen does not take is turned into the matching controller button (App::onKey): arrows move, Enter is
+    // Cross, Escape / Backspace are Circle, Page Up / Down are L2 / R2.
+    virtual bool handleKey(const kbd::Event &event) {
+        (void) event;
+        return false;
+    }
 
     // every logic frame while this screen is on top
     virtual void tick(double now) { (void) now; }

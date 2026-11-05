@@ -257,6 +257,13 @@ namespace {
             if (spinner->isVisible() && spinner->tick(now)) {
                 redraw();
             }
+            if (spinner->isVisible() && now - lastProgressCheck >= 0.5) {
+                lastProgressCheck = now;
+                if (app.vod().loadingProgress(app.session().profile, Traits::TYPE == ContentType::Movie) != shownProgress) {
+                    refreshState();
+                    redraw();
+                }
+            }
             if (prefetchPending && now - lastMoveAt >= PREFETCH_PAUSE) {
                 prefetchPending = false;
                 requestImages(true);
@@ -640,8 +647,11 @@ namespace {
             bool loading = st.status == CatalogStatus::Loading || st.status == CatalogStatus::NotLoaded;
             std::string text;
             if (loading && cat.empty()) {
+                // a portal's paged list: how far the first download is
+                shownProgress = app.vod().loadingProgress(app.session().profile, Traits::TYPE == ContentType::Movie);
                 text = tr(Traits::loadingKey())
-                       + (st.status == CatalogStatus::Loading ? "\n" + tr("browse.first_time") : "");
+                       + (st.status == CatalogStatus::Loading ? "\n" + tr("browse.first_time") : "")
+                       + (shownProgress > 0 ? "\n" + i18n::count("browse.loaded_so_far", shownProgress) : "");
             } else if (st.status == CatalogStatus::Failed) {
                 text = tr(Traits::failedKey(), {st.message}) + "\n" + tr("browse.press_x_retry");
             } else if (visible.empty()) {
@@ -866,6 +876,8 @@ namespace {
         size_t catalogSize = (size_t) -1;
         int64_t catalogSavedAt = -1;
         unsigned vodGeneration = 0;
+        int shownProgress = 0;          // entries of a paged (Stalker) list read so far, as shown
+        double lastProgressCheck = 0;
         unsigned imageGeneration = 0;
         double lastMoveAt = 0;
         bool prefetchPending = true;

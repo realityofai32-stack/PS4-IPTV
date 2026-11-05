@@ -12,6 +12,7 @@
 #include "../iptv/m3u.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
+#include "../player/protocols.h"
 #include "../storage/catalog_cache.h"
 
 using namespace c2d;
@@ -33,7 +34,7 @@ namespace {
         if (st.skipped() > 0) {
             s += "\n" + tr("playlist.skipped", {fmt::number(st.skipped())});
         }
-        if (st.https > 0) {
+        if (st.https > 0 && !protocols::httpsPlayable()) {
             s += "\n\n" + i18n::count("playlist.https_warning", st.https);
         }
         return s;
@@ -100,6 +101,16 @@ namespace {
             }
         }
 
+        // physical keyboard: typing on a focused field opens its editor with what was typed
+        bool handleKey(const kbd::Event &k) override {
+            if (k.key != kbd::Key::Char || focus >= FIELDS || testing) {
+                return false;
+            }
+            seed = k.text;
+            activate();
+            return true;
+        }
+
         void handleInput(const InputEvent &e) override {
             switch (e.button) {
                 case PadButton::Up:
@@ -138,6 +149,8 @@ namespace {
         static constexpr int FIELDS = 3;
         static constexpr int BUTTONS = 3;
 
+        std::string seed;   // character typed on a physical keyboard that opened a field's editor
+
         void activate() {
             switch (focus) {
                 case 0:
@@ -162,7 +175,9 @@ namespace {
         }
 
         void edit(const std::string &title, const std::string &value, std::function<void(const std::string &)> set) {
-            app.push(screens::makeKeyboard(app, title, value, false, [this, set](const std::string &v) {
+            std::string initial = value + seed;   // a character typed on a physical keyboard opened the editor
+            seed.clear();
+            app.push(screens::makeKeyboard(app, title, initial, false, [this, set](const std::string &v) {
                 set(v);
                 tested.reset();
                 refresh();
@@ -225,7 +240,8 @@ namespace {
                 if (o.ok) {
                     tested = o.body;
                     testedChannels = (int) o.catalog->channels().size();
-                    setStatus(testSummary(o.info), o.info.stats.https > 0 ? theme::warning() : theme::success());
+                    setStatus(testSummary(o.info), o.info.stats.https > 0 && !protocols::httpsPlayable() ? theme::warning()
+                                                                                                    : theme::success());
                     if (thenSave) {
                         save();
                     }
@@ -378,8 +394,8 @@ namespace {
                 captions[i]->setText(i < (int) rows.size() ? rows[(size_t) i].first : "");
                 values[i]->setText(i < (int) rows.size() ? rows[(size_t) i].second : "");
             }
-            // HTTPS streams cannot play in this version: flagged, not hidden
-            values[9]->setColor(st.https > 0 ? theme::warning() : theme::textPrimary());
+            // HTTPS streams play when the backend has TLS; without it they are flagged, not hidden
+            values[9]->setColor(st.https > 0 && !protocols::httpsPlayable() ? theme::warning() : theme::textPrimary());
             values[6]->setColor(st.skipped() > 0 ? theme::warning() : theme::textPrimary());
         }
 
@@ -392,22 +408,25 @@ namespace {
 
 namespace {
 
-    // Add Source: two large, self-explaining choices side by side over the dimmed screen
+    // Add Source: three large, self-explaining choices side by side over the dimmed screen
     class SourceChooserScreen : public Screen {
     public:
+        static constexpr int CARDS = 3;
+
         explicit SourceChooserScreen(App &a) : Screen(a, true) {
-            const float cardW = 660;
-            const float cardH = 340;
-            const float gap = 48;
-            const float x0 = (theme::SCREEN_W - 2 * cardW - gap) / 2;
+            const float cardW = 548;
+            const float cardH = 360;
+            const float gap = 36;
+            const float x0 = (theme::SCREEN_W - CARDS * cardW - (CARDS - 1) * gap) / 2;
             const float y0 = 360;
             auto *title = ui::label(this, tr("source.add_title"), theme::TITLE, 0, 220, ui::Weight::SemiBold,
                                     theme::textStrong());
             title->setAlign(ui::Align::Center, theme::SCREEN_W);
-            const char *names[2] = {"source.type_xtream", "source.type_m3u"};
-            const char *details[2] = {"source.type_xtream_detail", "source.type_m3u_detail"};
-            const char *provides[2] = {"source.provides_xtream", "source.provides_m3u"};
-            for (int i = 0; i < 2; i++) {
+            const char *names[CARDS] = {"source.type_xtream", "source.type_m3u", "source.type_stalker"};
+            const char *details[CARDS] = {"source.type_xtream_detail", "source.type_m3u_detail",
+                                          "source.type_stalker_detail"};
+            const char *provides[CARDS] = {"source.provides_xtream", "source.provides_m3u", "source.provides_stalker"};
+            for (int i = 0; i < CARDS; i++) {
                 Card &c = cards[i];
                 c.bg = ui::box(this, FloatRect(x0 + (float) i * (cardW + gap), y0, cardW, cardH), theme::card(),
                                theme::RADIUS_LARGE);
@@ -417,7 +436,7 @@ namespace {
                 c.name->setMaxWidth(cardW - 96);
                 auto *d = ui::label(c.bg, tr(details[i]), theme::BODY, 48, 150, ui::Weight::Regular, theme::textSecondary());
                 d->setMaxWidth(cardW - 96);
-                d->setMaxLines(3);
+                d->setMaxLines(4);
                 auto *pv = ui::label(c.bg, tr(provides[i]), theme::LABEL, 48, cardH - 72, ui::Weight::SemiBold,
                                      theme::accentText());
                 pv->setMaxWidth(cardW - 96);
@@ -430,7 +449,7 @@ namespace {
 
         void handleInput(const InputEvent &e) override {
             if (e.button == PadButton::Left || e.button == PadButton::Right) {
-                focus = e.button == PadButton::Right ? 1 : 0;
+                focus = e.button == PadButton::Right ? std::min(CARDS - 1, focus + 1) : std::max(0, focus - 1);
                 refresh();
             } else if (e.button == PadButton::Cross && !e.repeat) {
                 int choice = focus;
@@ -438,10 +457,14 @@ namespace {
                 a.pop();
                 if (choice == 0) {
                     a.push(screens::makeProfileEdit(a, Profile()));
-                } else {
+                } else if (choice == 1) {
                     Profile p;
                     p.type = SourceType::M3u;
                     a.push(screens::makePlaylistEdit(a, p));
+                } else {
+                    Profile p;
+                    p.type = SourceType::Stalker;
+                    a.push(screens::makeProfileEdit(a, p));
                 }
             } else if (e.button == PadButton::Circle && !e.repeat) {
                 app.pop();
@@ -456,7 +479,7 @@ namespace {
         };
 
         void refresh() {
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i < CARDS; i++) {
                 bool f = i == focus;
                 cards[i].bg->setFillColor(f ? theme::cardHover() : theme::card());
                 cards[i].bg->setOutlineThickness(f ? theme::FOCUS_BORDER : 0);
@@ -464,7 +487,7 @@ namespace {
             }
         }
 
-        Card cards[2];
+        Card cards[CARDS];
         int focus = 0;
     };
 }

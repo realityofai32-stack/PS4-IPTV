@@ -17,7 +17,9 @@ namespace {
     // signed / tokenized URLs M3U playlists often contain).
     const char *const QUERY_KEYS[] = {"username=", "password=", "user=", "pass=", "token=", "auth=", "key=",
                                       "apikey=", "api_key=", "access_token=", "signature=", "sig=", "hash=",
-                                      "session=", "secret=", "passwd=", "pwd=", "login="};
+                                      "session=", "secret=", "passwd=", "pwd=", "login=",
+                                      // Stalker / MAG portals: identity and per-play tokens
+                                      "mac=", "play_token=", "sn=", "device_id=", "device_id2=", "stb_token="};
 
     std::mutex g_mutex;
     std::vector<std::string> g_secrets;  // sorted longest first
@@ -240,6 +242,33 @@ namespace redact {
     void addSecret(const std::string &secret) {
         std::lock_guard<std::mutex> lock(g_mutex);
         addSecretLocked(secret);
+    }
+
+    void addMac(const std::string &mac) {
+        std::string hex;
+        for (char c: mac) {
+            if (std::isxdigit((unsigned char) c)) {
+                hex += (char) std::toupper((unsigned char) c);
+            }
+        }
+        if (hex.size() != 12) {
+            addSecret(mac);
+            return;
+        }
+        std::vector<std::string> forms;
+        for (const char *sep: {":", "-", "%3A", "%3a", ""}) {
+            std::string f;
+            for (size_t i = 0; i < 12; i += 2) {
+                f += (i ? sep : "") + hex.substr(i, 2);
+            }
+            forms.push_back(f);
+            forms.push_back(toLower(f));
+        }
+        std::lock_guard<std::mutex> lock(g_mutex);
+        addSecretLocked(mac);
+        for (const auto &f: forms) {
+            addSecretLocked(f);
+        }
     }
 
     void clearSecrets() {

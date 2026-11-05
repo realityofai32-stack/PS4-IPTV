@@ -2,7 +2,12 @@
 #include <cmath>
 #include <cstring>
 
+extern "C" {
+#include <libavformat/avio.h>
+}
+
 #include "playback.h"
+#include "protocols.h"
 #include "../i18n/i18n.h"
 #include "../platform/log.h"
 #include "../platform/redact.h"
@@ -74,7 +79,7 @@ const char *Playback::stateText(PlaybackState s) {
     }
 }
 
-bool Playback::init(const std::string &configDir) {
+bool Playback::init(const std::string &configDir, const std::string &caBundle) {
     // pPlay: Player() -> new Mpv(<data>/mpv, true)
     mpv = new Mpv(configDir, true);
     if (!mpv->isAvailable()) {
@@ -95,40 +100,43 @@ bool Playback::init(const std::string &configDir) {
     char *ua = mpv_get_property_string(h, "user-agent");
     defaultUserAgent = ua ? ua : "";
     mpv_free(ua);
+
+    // HTTPS: what the linked FFmpeg can open (scripts/build-ffmpeg-tls.sh adds https + tls over mbedTLS)
+    std::vector<std::string> names;
+    std::string list;
+    void *opaque = nullptr;
+    while (const char *name = avio_enum_protocols(&opaque, 0)) {
+        names.emplace_back(name);
+        list += (list.empty() ? "" : " ") + std::string(name);
+    }
+    protocols::setAvailable(names);
+    // Certificates are verified for every HTTPS request FFmpeg makes for mpv: the stream, redirects, HLS playlists,
+    // segments and keys (mpv 0.34.1 passes tls_verify / ca_file to nested opens: demuxer-lavf-propagate-opts).
+    // Without a CA bundle nothing could be verified: HTTPS then fails with a certificate error, it is never
+    // downgraded to an unverified connection.
+    int verify = mpv_set_option_string(h, "tls-verify", "yes");
+    int ca = caBundle.empty() ? -1 : mpv_set_option_string(h, "tls-ca-file", caBundle.c_str());
+    LOG_I("player", "FFmpeg protocols: %s; HTTPS playback %s (certificate verification %s, CA bundle %s)",
+          list.c_str(), protocols::httpsPlayable() ? "available" : "NOT available", verify >= 0 ? "on" : "not set",
+          ca >= 0 ? "set" : "missing");
     return true;
 }
 
 bool Playback::protocolSupported(const std::string &url, std::string *why) {
-    std::string scheme;
-    size_t sep = url.find("://");
-    if (sep != std::string::npos) {
-        for (size_t i = 0; i < sep; i++) {
-            scheme += (char) std::tolower((unsigned char) url[i]);
-        }
-    }
-    if (scheme == "https") {
-        if (why) {
-            *why = i18n::tr("player.https_unsupported");
-        }
-        return false;
-    }
-    static const char *const SUPPORTED[] = {"http", "rtmp", "rtp", "udp", "tcp", "ftp", "file"};
-    if (sep == std::string::npos && !url.empty() && url[0] == '/') {
-        return true;   // a local file (downloads)
-    }
-    for (const char *s: SUPPORTED) {
-        if (scheme == s) {
+    switch (protocols::check(url, protocols::httpsPlayable())) {
+        case protocols::Verdict::Ok:
             return true;
-        }
+        case protocols::Verdict::HttpsUnavailable:
+            if (why) {
+                *why = i18n::tr("player.https_unsupported");
+            }
+            return false;
+        default:
+            if (why) {
+                *why = i18n::tr("player.protocol_unsupported", {protocols::shownScheme(url)});
+            }
+            return false;
     }
-    if (why) {
-        std::string shown = scheme.empty() ? "?" : scheme;
-        for (char &c: shown) {
-            c = (char) std::toupper((unsigned char) c);
-        }
-        *why = i18n::tr("player.protocol_unsupported", {shown});
-    }
-    return false;
 }
 
 void Playback::setUserAgent(const std::string &userAgent) {
@@ -165,6 +173,47 @@ void Playback::open(const std::string &url, const std::string &format) {
     open(url, format, OpenOptions());
 }
 
+void Playback::resetForOpen(const std::string &format) {
+    si = StreamInfo();
+    si.format = format;
+    err = PlaybackError::None;
+    errMsg.clear();
+    errDetail.clear();
+    entryId = -1;
+    stopRequested = false;
+    openedAt = now;
+    firstFrameAt = -1;
+    lastStats = 0;
+    lastProgress = -1;
+    lastPos = -1;
+    lastFrames = 0;
+    cachePaused = false;
+    firstNetworkError.clear();
+    trackItems.clear();
+    subtitleRenderFailed = false;
+}
+
+void Playback::prepare(const std::string &format) {
+    if (!available()) {
+        fail(PlaybackError::Other, i18n::tr("player.init_failed_short"), initError());
+        return;
+    }
+    if (st != PlaybackState::Idle && st != PlaybackState::Error && st != PlaybackState::Ended) {
+        stopRequested = true;
+        mpv->stop();   // the previous file must not play on while the next address is resolved
+    }
+    resetForOpen(format);
+    chooser = nullptr;
+    st = PlaybackState::Opening;
+}
+
+void Playback::failBeforeOpen(const std::string &message, const std::string &detail, bool retryable) {
+    if (st == PlaybackState::Error) {
+        err = PlaybackError::None;   // a new attempt: report this one
+    }
+    fail(retryable ? PlaybackError::Network : PlaybackError::HttpClient, message, detail);
+}
+
 void Playback::open(const std::string &url, const std::string &format, const OpenOptions &options) {
     if (!available()) {
         fail(PlaybackError::Other, i18n::tr("player.init_failed_short"), initError());
@@ -192,12 +241,14 @@ void Playback::open(const std::string &url, const std::string &format, const Ope
 
     std::string why;
     if (!protocolSupported(url, &why)) {
-        // pPlay's FFmpeg build has no https/tls protocol (verified: file ftp http rtmp rtp tcp udp)
-        bool https = url.compare(0, 8, "https://") == 0;
+        bool https = protocols::scheme(url) == "https";
         fail(https ? PlaybackError::HttpsUnsupported : PlaybackError::UnsupportedProtocol, why,
-             https ? "https URL" : "unsupported protocol");
+             https ? "https URL, no TLS in the playback backend" : "unsupported protocol");
         return;
     }
+    // the origin only (scheme, host, port): never the path, query or user information
+    LOG_I("player", "open %s stream at %s (%s)", protocols::scheme(url).c_str(), protocols::origin(url).c_str(),
+          format.c_str());
 
     mpv_handle *h = mpv->getHandle();
     // pPlay Player::load() turns subtitles off unless slang is configured. Here they always start off: for
@@ -282,6 +333,7 @@ stability::FailKind Playback::failKind() const {
         case PlaybackError::HttpClient:
         case PlaybackError::HttpsUnsupported:
         case PlaybackError::UnsupportedProtocol:
+        case PlaybackError::TlsCertificate:
         case PlaybackError::UnsupportedCodec:
         case PlaybackError::Renderer:
         case PlaybackError::Audio:
@@ -535,10 +587,21 @@ void Playback::onLog(const mpv_event_log_message *msg) {
     if (level != diag::Level::Error) {
         return;
     }
-    if (prefix == "ffmpeg" && (contains(text, "Failed to resolve hostname") || contains(text, "Connection to"))) {
+    // HTTPS: FFmpeg's mbedTLS layer explains a failed connection in one error line (no URL in it)
+    protocols::TlsFailure tls = startsWith(prefix, "ffmpeg") ? protocols::classifyTls(text) : protocols::TlsFailure::None;
+    if (tls == protocols::TlsFailure::Certificate || tls == protocols::TlsFailure::CaBundle) {
+        LOG_W("player", "TLS: certificate check failed (%s)", tls == protocols::TlsFailure::CaBundle
+                                                               ? "CA bundle unreadable" : "server certificate not trusted");
+        fail(PlaybackError::TlsCertificate, i18n::tr("player.tls_certificate"), text);
+    } else if (tls == protocols::TlsFailure::Handshake) {
+        LOG_W("player", "TLS: secure connection failed during the handshake");
+        fail(PlaybackError::Tls, i18n::tr("player.tls_failed"), text);
+    } else if (prefix == "ffmpeg" && (contains(text, "Failed to resolve hostname") || contains(text, "Connection to"))) {
         fail(PlaybackError::Network, i18n::tr("player.network"), text);
     } else if (contains(text, "Protocol not found")) {
-        fail(PlaybackError::HttpsUnsupported, i18n::tr("player.https_unsupported"), text);
+        bool https = contains(text, "https") || contains(text, "tls");
+        fail(https ? PlaybackError::HttpsUnsupported : PlaybackError::UnsupportedProtocol,
+             https ? i18n::tr("player.https_unsupported") : i18n::tr("player.protocol_unsupported", {"?"}), text);
     } else if (contains(text, "Could not open/initialize audio device")) {
         fail(PlaybackError::Audio, i18n::tr("player.audio_failed"), text);
     } else if (startsWith(prefix, "vd") && contains(text, "Could not open codec")) {

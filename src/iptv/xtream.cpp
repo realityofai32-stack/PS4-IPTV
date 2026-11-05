@@ -22,7 +22,7 @@ namespace iptv {
     }
 
     const char *sourceTypeKey(SourceType type) {
-        return type == SourceType::M3u ? "m3u" : "xtream";
+        return type == SourceType::M3u ? "m3u" : type == SourceType::Stalker ? "stalker" : "xtream";
     }
 
     bool sourceTypeFromKey(const std::string &key, SourceType &out) {
@@ -32,6 +32,10 @@ namespace iptv {
         }
         if (key == "m3u") {
             out = SourceType::M3u;
+            return true;
+        }
+        if (key == "stalker") {
+            out = SourceType::Stalker;
             return true;
         }
         return false;

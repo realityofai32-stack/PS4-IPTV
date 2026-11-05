@@ -42,8 +42,9 @@ void Screen::redraw() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
-             profileStore(APP_DATA_DIR), settingsStore(APP_DATA_DIR), xtreamService(jobSystem), m3uService(jobSystem),
-             vodLibrary(xtreamService, APP_DATA_DIR),
+             profileStore(APP_DATA_DIR), settingsStore(APP_DATA_DIR), xtreamService(jobSystem),
+             stalkerService(jobSystem, APP_DATA_DIR), sourceService(xtreamService, stalkerService), m3uService(jobSystem),
+             vodLibrary(sourceService, APP_DATA_DIR),
              libraryStore(APP_DATA_DIR), imageLoader(jobSystem, APP_DATA_DIR "cache/images") {
     LOG_I("app", "renderer: %s", available ? "OK (SDL2 + OpenGL ES 2 / Piglet)" : "FAILED");
     romfsPath = getIo()->getRomFsPath();
@@ -76,6 +77,9 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     i18n::setLanguage(i18n::fromCode(settingsStore.get().language));
     LOG_I("app", "UI language: %s", i18n::code(i18n::language()));
     applyAccent(false);   // before any screen exists: every shape is built with the saved accent
+    // a USB / Bluetooth keyboard next to the controller (optional: without the module, controller only)
+    keyboard.init();
+    applyKeyboardLayout();
     LOG_I("storage", "%d profile(s), active '%s'", (int) profileStore.profiles().size(),
           profileStore.activeId().c_str());
     warning.clear();
@@ -139,7 +143,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
             }
         }
     }
-    if (!player.init(mpvDir)) {
+    if (!player.init(mpvDir, http::caBundle())) {
         LOG_E("app", "%s", player.initError().c_str());
     }
     forceContinuousRedraw = fs::exists(std::string(APP_DATA_DIR) + "force_redraw");
@@ -290,8 +294,8 @@ void App::refreshPlaylist(bool manual) {
 void App::syncDownloadProfiles() {
     std::vector<dl::Credentials> creds;
     for (const auto &p: profileStore.profiles()) {
-        if (p.isPlaylist()) {
-            continue;   // downloads come from Xtream sources only
+        if (!p.supportsDownloads()) {
+            continue;   // downloads come from Xtream sources only (playlists have no movies, portals single-use links)
         }
         dl::Credentials c;
         c.profileId = p.id;
@@ -308,8 +312,13 @@ void App::setPlaybackActive(bool active) {
     downloadManager->setPlaybackActive(active);
 }
 
+void App::applyKeyboardLayout() {
+    keyboard.setLayout(kbd::layoutFor(settingsStore.get().keyboardLayout, settingsStore.get().language));
+}
+
 void App::applyLanguage(bool rebuildScreens) {
     i18n::setLanguage(i18n::fromCode(settingsStore.get().language));
+    applyKeyboardLayout();   // "auto" follows the language
     LOG_I("app", "UI language changed to %s", i18n::code(i18n::language()));
     if (rebuildScreens) {
         // every screen builds its labels when it is created: start over at the root, back in Settings
@@ -460,6 +469,11 @@ void App::logic() {
         }
         requestRedraw();
     }
+    // the physical keyboard after the controller; both always work
+    for (const auto &k: keyboard.poll(t)) {
+        onKey(k);
+        requestRedraw();
+    }
 
     if (jobSystem.pump() > 0) {
         requestRedraw();
@@ -477,6 +491,52 @@ void App::logic() {
         requestRedraw();
     }
     applyNavigation();
+}
+
+void App::onKey(const kbd::Event &k) {
+    Screen *s = top();
+    if (s == nullptr || s->handleKey(k)) {
+        return;
+    }
+    // not taken by the screen: the controller button that means the same (navigation everywhere)
+    InputEvent e;
+    e.repeat = k.repeat;
+    e.repeatCount = k.repeatCount;
+    switch (k.key) {
+        case kbd::Key::Up:
+            e.button = PadButton::Up;
+            break;
+        case kbd::Key::Down:
+            e.button = PadButton::Down;
+            break;
+        case kbd::Key::Left:
+            e.button = PadButton::Left;
+            break;
+        case kbd::Key::Right:
+            e.button = PadButton::Right;
+            break;
+        case kbd::Key::Enter:
+            e.button = PadButton::Cross;
+            break;
+        case kbd::Key::Escape:
+            e.button = PadButton::Circle;
+            break;
+        case kbd::Key::Backspace:
+            if (k.repeat) {
+                return;   // holding Backspace never leaves several screens
+            }
+            e.button = PadButton::Circle;
+            break;
+        case kbd::Key::PageUp:
+            e.button = PadButton::L2;
+            break;
+        case kbd::Key::PageDown:
+            e.button = PadButton::R2;
+            break;
+        default:
+            return;   // characters outside a text field, Tab, Home / End, Delete: nothing
+    }
+    s->handleInput(e);
 }
 
 void App::run() {

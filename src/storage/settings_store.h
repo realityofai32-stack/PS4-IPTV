@@ -52,6 +52,9 @@ struct Settings {
     // Settings > Appearance > Accent color: a palette::ACCENTS key. Files without it (written before V7 IPTV)
     // and unknown values get the default, V7 Blue; nothing else in the file changes meaning.
     std::string accentColor = "blue";
+    // Settings > Language > Keyboard layout of a physical USB / Bluetooth keyboard: "auto" (Turkish Q when the UI
+    // is Turkish, else US), "us" or "tr". Files without it get "auto".
+    std::string keyboardLayout = "auto";
     // Movies / Series grid order, per profile: "<profileId>/movies" -> sort key ("az", "added_desc"...)
     std::map<std::string, std::string> sortOrders;
 

@@ -180,7 +180,8 @@ namespace screens {
     }
 
     std::string sourceTypeName(iptv::SourceType type) {
-        return tr(type == iptv::SourceType::M3u ? "source.type_m3u_short" : "source.type_xtream");
+        return tr(type == iptv::SourceType::M3u ? "source.type_m3u_short"
+                  : type == iptv::SourceType::Stalker ? "source.type_stalker_short" : "source.type_xtream");
     }
 
     std::string sourceLocation(const iptv::Profile &p) {

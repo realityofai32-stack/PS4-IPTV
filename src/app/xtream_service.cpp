@@ -8,6 +8,7 @@
 #include "../storage/catalog_cache.h"
 #include "../core/url.h"
 #include "../i18n/i18n.h"
+#include "../player/protocols.h"
 
 using namespace iptv;
 
@@ -38,7 +39,8 @@ CancelToken XtreamService::authenticate(const Profile &profile, AuthCallback cal
         out->result = xtream::parseAuth(resp.status, resp.body, clockx::unixNow());
         out->message = xtream::authStatusText(out->result.status);
         bool httpsServer = p.server.compare(0, 8, "https://") == 0;
-        out->httpsWarning = out->result.status == AuthStatus::Ok
+        // only a playback backend without TLS has to warn (the rebuilt FFmpeg plays HTTPS)
+        out->httpsWarning = out->result.status == AuthStatus::Ok && !protocols::httpsPlayable()
                             && (httpsServer || out->result.account.serverProtocol == "https" || resp.redirectedToHttps);
         LOG_I("xtream", "auth %s: HTTP %ld in %.2fs, %s (%s), max %d / active %d connections%s", host(p).c_str(),
               resp.status, resp.seconds, out->message.c_str(), out->result.detail.c_str(),

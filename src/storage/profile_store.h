@@ -6,6 +6,11 @@
 // migrated on load: every profile becomes sourceType xtream with all its fields unchanged (lossless); loading
 // and saving again changes nothing (idempotent). The original version 1 file is kept once as
 // profiles.v1.json.
+//
+// Stalker / MAG sources are an additive extension of schema 2: sourceType "stalker" with "server" (portal address)
+// and "mac". The version stays 2 on purpose: Xtream and M3U entries are written exactly as before, and an older
+// build reading the file skips the entries whose source type it does not know (it was written to do so) instead
+// of rejecting the whole file.
 
 #ifndef PS4IPTV_STORAGE_PROFILE_STORE_H
 #define PS4IPTV_STORAGE_PROFILE_STORE_H
