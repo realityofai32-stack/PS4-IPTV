@@ -453,3 +453,36 @@ TEST(stalker_profiles_survive_a_downgrade_round_trip) {
     ProfileStore l2(legacy);
     CHECK(l2.load() && l2.profiles().size() == 1);
 }
+
+// found by fuzzing: numbers far outside int64 / int (portal or provider text) are clamped, never undefined
+TEST(stalker_and_json_huge_numbers_are_clamped) {
+    json::Value v;
+    CHECK(json::parse(R"({"a":333333333333333333333333333333314,"b":-1e400,"c":1e400,"d":"12.9","e":"nan","f":9223372036854775807})", v));
+    CHECK_EQ(v["a"].asInt(0), INT64_MAX);
+    CHECK_EQ(v["b"].asInt(0), INT64_MIN);
+    CHECK_EQ(v["c"].asInt(0), INT64_MAX);
+    CHECK_EQ(v["d"].asInt(0), (int64_t) 12);
+    CHECK_EQ(v["e"].asInt(7), (int64_t) 7);
+    CHECK_EQ(v["f"].asInt(0), INT64_MAX);
+    std::vector<stalker::VodEntry> entries;
+    stalker::Page page;
+    std::string err;
+    CHECK(stalker::parseVodPage(R"({"js":{"total_items":1e30,"max_page_items":-5e40,"data":[{"id":"1","time":"99999999999",)"
+                                R"("series":[1e20,-3,2,4000000000]}]}})", "", entries, page, err));
+    CHECK(page.totalItems == 10000000 && page.perPage == 0);
+    CHECK(entries.size() == 1 && entries[0].minutes == 100000);
+    CHECK((entries[0].episodes == std::vector<int>{1000000, 2, 1000000}));
+    CHECK(stalker::toMovieInfo(entries[0]).durationSeconds == 6000000);
+    std::vector<Episode> eps;
+    CHECK(stalker::parseEpisodes(R"({"js":{"data":[{"id":"e","cmd":"c","series_number":1e99,"time":1e99}]}})", "", 1, eps,
+                                 page, err));
+    CHECK(eps.size() == 1 && eps[0].number == 1000000 && eps[0].durationSeconds == 6000000);
+    // a hostile episode list stays bounded
+    std::string many = R"({"js":{"data":[{"id":"9","is_series":1,"series":[)";
+    for (int i = 1; i <= 20000; i++) {
+        many += std::to_string(i) + (i < 20000 ? "," : "");
+    }
+    many += "]}]}}";
+    entries.clear();
+    CHECK(stalker::parseVodPage(many, "", entries, page, err) && entries[0].episodes.size() == 5000);
+}

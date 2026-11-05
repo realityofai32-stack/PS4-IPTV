@@ -110,6 +110,10 @@ Bugs found and fixed:
 4. Stalker parsing used `atoi` / `atof` on portal text (undefined for out-of-range values): clamped `strtol` / `strtod`.
 5. Source editor: caption array and field count came from two members (clang-analyzer); one source now.
 6. JSON parser: `cp` initialized (GCC `-O1` maybe-uninitialized, a false positive, now warning-free).
+7. JSON parser (found by fuzzing): a number outside int64 (`3.3e32`, `1e400`) was converted with a plain cast in
+   `Value::asInt` - undefined behaviour, reachable from any provider or portal answer. Clamped now.
+8. Stalker parsing (found while fixing 7): portal numbers feeding arithmetic (page sizes / totals, durations x 60,
+   episode numbers) are clamped, and one entry's episode list is capped at 5,000.
 
 Made testable without behaviour change: the keyboard state buffer parser and the connect / read / disconnect state
 machine (`kbd::parseState`, `kbd::Session`; the PS4 file only resolves the library and `static_assert`s the

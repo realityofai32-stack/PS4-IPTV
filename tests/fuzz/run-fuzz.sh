@@ -49,6 +49,12 @@ for t in fuzz_stalker:seeds-stalker fuzz_redact:seeds-redact fuzz_keyboard: fuzz
     corpus="$OUT/corpus-$name"; mkdir -p "$corpus"
     args=("$corpus")
     [[ -n "$seed" ]] && args+=("$OUT/$seed")
+    # inputs that once failed (tests/fuzz/regressions/<target>-*) are replayed every run
+    short="${name#fuzz_}"
+    reg="$OUT/regressions-$name"
+    rm -rf "$reg"; mkdir -p "$reg"
+    cp "$REPO/tests/fuzz/regressions/$short"-* "$reg/" 2>/dev/null || true
+    args+=("$reg")
     log="$OUT/$name.log"
     if "$OUT/$name" "${args[@]}" -max_total_time="$SECONDS_EACH" -max_len=8192 -print_final_stats=1 \
         -artifact_prefix="$OUT/crash-$name-" > "$log" 2>&1 \

@@ -47,6 +47,10 @@ namespace stalker {
             return url::trim(s);
         }
 
+        int clampInt(int64_t v, int lo, int hi) {
+            return v < lo ? lo : v > hi ? hi : (int) v;
+        }
+
         // id fields come as numbers or strings
         std::string idOf(const json::Value &v) {
             return trimmed(v.asString());
@@ -66,9 +70,12 @@ namespace stalker {
             std::vector<int> out;
             if (v.isArray()) {
                 for (const auto &x: v.items()) {
-                    int n = (int) x.asInt(0);
+                    int n = clampInt(x.asInt(0), 0, 1000000);
                     if (n > 0) {
                         out.push_back(n);
+                    }
+                    if (out.size() >= 5000) {
+                        break;   // a series never lists more episodes in one entry (a hostile list stays small)
                     }
                 }
             }
@@ -87,8 +94,9 @@ namespace stalker {
                 return nullptr;
             }
             if (page) {
-                page->totalItems = js.has("total_items") ? (int) js["total_items"].asInt(-1) : -1;
-                page->perPage = (int) js["max_page_items"].asInt(0);
+                // portal numbers are clamped: they feed page arithmetic
+                page->totalItems = js.has("total_items") ? clampInt(js["total_items"].asInt(-1), -1, 10000000) : -1;
+                page->perPage = clampInt(js["max_page_items"].asInt(0), 0, 100000);
                 page->count = (int) js["data"].size();
             }
             return &js["data"];
@@ -392,7 +400,7 @@ namespace stalker {
             ch.categoryId = idOf(o["tv_genre_id"]);
             ch.icon = resolveImage(origin, o["logo"].asString());
             ch.epgId = trimmed(o["xmltv_id"].asString());
-            ch.num = (int) o["number"].asInt(0);
+            ch.num = clampInt(o["number"].asInt(0), 0, 1000000000);
             ch.archive = o["archive"].asInt(0) == 1 || o["tv_archive"].asInt(0) == 1;
             ch.cmd = cmd;
             out.push_back(ch);
@@ -429,7 +437,7 @@ namespace stalker {
             e.genre = xtream::cleanText(firstOf(o, {"genres_str", "genre"}));
             e.year = trimmed(o["year"].asString());
             e.rating = ratingOf(o);
-            e.minutes = (int) o["time"].asInt(0);
+            e.minutes = clampInt(o["time"].asInt(0), 0, 100000);   // minutes (x 60 later)
             e.added = parseDateTime(o["added"].asString());
             e.episodes = intList(o["series"]);
             e.isSeries = o["is_series"].asInt(0) == 1 || !e.episodes.empty();
@@ -542,7 +550,7 @@ namespace stalker {
             s.cmd = trimmed(o["cmd"].asString());
             s.episodes = intList(o["series"]);
             // "season_number", else "<series>:<n>" ids, else the digits of the name ("Season 3")
-            int n = (int) o["season_number"].asInt(0);
+            int n = clampInt(o["season_number"].asInt(0), 0, 100000);
             if (n <= 0) {
                 size_t colon = s.id.rfind(':');
                 if (colon != std::string::npos) {
@@ -584,14 +592,14 @@ namespace stalker {
                 continue;
             }
             ep.season = season;
-            ep.number = (int) o["series_number"].asInt(0);
+            ep.number = clampInt(o["series_number"].asInt(0), 0, 1000000);
             if (ep.number <= 0) {
-                ep.number = (int) o["episode_number"].asInt((int64_t) out.size() + 1);
+                ep.number = clampInt(o["episode_number"].asInt((int64_t) out.size() + 1), 0, 1000000);
             }
             ep.title = xtream::cleanText(o["name"].asString());
             ep.plot = xtream::cleanText(o["description"].asString());
             ep.image = resolveImage(origin, firstOf(o, {"screenshot_uri", "cover"}));
-            ep.durationSeconds = (int) o["time"].asInt(0) * 60;
+            ep.durationSeconds = clampInt(o["time"].asInt(0), 0, 100000) * 60;
             ep.cmd = cmd;
             ep.linkSeries = ep.number;
             ep.extension = extensionOf(urlOfCmd(cmd));

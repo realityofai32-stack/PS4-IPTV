@@ -30,7 +30,16 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         redact::addUrl(url);
         redact::addUrl(nested);
         for (const std::string &line: {url, nested, "Opening '" + url + "' for reading", in + url}) {
-            REQUIRE(redact::apply(line).find(secret) == std::string::npos);
+            // the mask text itself ("[REDACTED]") may contain the letters of a short secret: look outside it
+            std::string masked = redact::apply(line);
+            std::string rest;
+            size_t at = 0, m;
+            while ((m = masked.find("[REDACTED]", at)) != std::string::npos) {
+                rest += masked.substr(at, m - at) + "|";
+                at = m + 10;
+            }
+            rest += masked.substr(at);
+            REQUIRE(rest.find(secret) == std::string::npos);
         }
     }
     return 0;

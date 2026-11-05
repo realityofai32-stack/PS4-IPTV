@@ -1,4 +1,5 @@
 #include <cerrno>
+#include <cstdint>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -122,14 +123,27 @@ namespace json {
         char *end = nullptr;
         errno = 0;
         long long v = strtoll(s, &end, 10);
+        // a double outside int64_t (huge, inf, nan) is clamped: the plain cast would be undefined behaviour
+        auto fromDouble = [def](double d) -> int64_t {
+            if (d != d) {
+                return def;
+            }
+            if (d >= 9.2e18) {
+                return INT64_MAX;
+            }
+            if (d <= -9.2e18) {
+                return INT64_MIN;
+            }
+            return (int64_t) d;
+        };
         if (end == s || errno == ERANGE) {
             // "12.0" or "1e3": go through double
             char *dend = nullptr;
             double d = strtod(s, &dend);
-            return dend == s ? def : (int64_t) d;
+            return dend == s ? def : fromDouble(d);
         }
         if (*end == '.' || *end == 'e' || *end == 'E') {
-            return (int64_t) strtod(s, nullptr);
+            return fromDouble(strtod(s, nullptr));
         }
         return (int64_t) v;
     }

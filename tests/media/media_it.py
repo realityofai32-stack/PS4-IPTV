@@ -4,17 +4,22 @@ tests/media/media_probe (the app's format list + path acceptance + FFmpeg 5.0 op
 run of the system mpv (a newer mpv than the PS4's 0.34.1: track listing, the same-name external .srt, seeking and
 pausing; labelled as reference, not as the console's player).
 
-usage: media_it.py <media_probe> <work dir>
+usage: media_it.py <media_probe> <work dir> [<mpv_options tool> <mpv 0.34.1 source dir>]
 """
 
 import json
 import os
+import re
 import shutil
+import socket
 import subprocess
 import sys
+import time
 
 PROBE = sys.argv[1]
 WORK = os.path.abspath(sys.argv[2])
+OPTIONS_TOOL = sys.argv[3] if len(sys.argv) > 3 else None
+MPV034 = sys.argv[4] if len(sys.argv) > 4 else None
 MEDIA = os.path.join(WORK, "Local Media Test Çocuk Özel")
 os.makedirs(MEDIA, exist_ok=True)
 
@@ -117,6 +122,7 @@ def main():
 
     # reference: the system mpv (not the console's 0.34.1) - same-name external subtitle, tracks, seek, pause
     mpv = shutil.which("mpv")
+    path = os.path.join(MEDIA, "Film \u0130ki Ses.mkv")
     if mpv:
         ver = subprocess.run([mpv, "--version"], capture_output=True, text=True).stdout.splitlines()[0]
         path = os.path.join(MEDIA, "Film İki Ses.mkv")
@@ -129,8 +135,104 @@ def main():
         check(ext, "reference mpv: the same-name .srt is loaded as an external subtitle track (sub-auto=exact)")
         check(text.count("Audio --aid") >= 2 or text.count("--aid=") >= 2, "reference mpv: two audio tracks offered")
         check(p.returncode == 0, "reference mpv: plays from 5 s (seek) and ends cleanly")
+    app_options = []
+    if OPTIONS_TOOL:
+        for line in subprocess.run([OPTIONS_TOOL], check=True, capture_output=True, text=True).stdout.splitlines():
+            app_options.append(json.loads(line))
+        names = sorted({k for opts in app_options for k, _ in opts})
+        # every option name the player sets exists in the console's mpv 0.34.1 (its options table)
+        if MPV034 and os.path.isdir(MPV034):
+            table = ""
+            for root, _, files in os.walk(MPV034):
+                for f in files:
+                    if f.endswith(".c"):
+                        table += open(os.path.join(root, f), errors="replace").read()
+            # "sub-<x>" may also be "<x>" of the subtitle style struct mounted as {"sub", OPT_SUBSTRUCT(sub_style, ...)}
+            substruct = '{"sub", OPT_SUBSTRUCT(sub_style' in table
+            missing = [n for n in names if '{"%s"' % n not in table
+                       and not (substruct and n.startswith("sub-") and '{"%s"' % n[4:] in table)]
+            check(not missing, "all %d geometry / subtitle-style option names exist in mpv 0.34.1 %s" % (len(names), missing))
+        if mpv:
+            check(ipc_session(mpv, path, app_options), "reference mpv over IPC: pause / resume, seek, audio and "
+                                                       "external subtitle switch, every geometry and subtitle-style value")
     print("%d failure(s)" % failures)
     return 1 if failures else 0
+
+
+def ipc_session(mpv, path, app_options):
+    """Drives a reference mpv like the player does: set pause, seek, aid / sid and the app's option values."""
+    sock_path = os.path.join(WORK, "mpv.sock")
+    if os.path.exists(sock_path):
+        os.remove(sock_path)
+    proc = subprocess.Popen([mpv, "--no-config", "--vo=null", "--ao=null", "--idle=no", "--keep-open=yes",
+                             "--input-ipc-server=" + sock_path, path], stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+    ok = True
+    try:
+        for _ in range(100):
+            if os.path.exists(sock_path):
+                break
+            time.sleep(0.05)
+        s = socket.socket(socket.AF_UNIX)
+        s.connect(sock_path)
+        f = s.makefile("rwb")
+        rid = [0]
+
+        def cmd(*args):
+            rid[0] += 1
+            f.write((json.dumps({"command": list(args), "request_id": rid[0]}) + "\n").encode())
+            f.flush()
+            while True:
+                r = json.loads(f.readline())
+                if r.get("request_id") == rid[0]:
+                    return r
+
+        def prop(name):
+            return cmd("get_property", name).get("data")
+
+        for _ in range(100):
+            if prop("duration"):
+                break
+            time.sleep(0.05)
+        # pause / resume
+        ok &= cmd("set_property", "pause", True)["error"] == "success"
+        t1 = prop("time-pos")
+        time.sleep(0.5)
+        t2 = prop("time-pos")
+        ok &= t1 is not None and abs(t2 - t1) < 0.05
+        ok &= cmd("set_property", "pause", False)["error"] == "success" and prop("pause") is False
+        # seek (Playback::seekTo: absolute+keyframes)
+        ok &= cmd("seek", "6.0", "absolute+keyframes")["error"] == "success"
+        time.sleep(0.3)
+        ok &= abs((prop("time-pos") or 0) - 6.0) < 1.5
+        # tracks: two audio tracks, embedded + external subtitles; switch at runtime (aid / sid)
+        tl = prop("track-list") or []
+        audio = [t for t in tl if t["type"] == "audio"]
+        subs = [t for t in tl if t["type"] == "sub"]
+        external = [t for t in subs if t.get("external")]
+        ok &= len(audio) == 2 and len(subs) == 3 and len(external) == 1
+        ok &= cmd("set_property", "aid", 2)["error"] == "success" and prop("aid") == 2
+        ok &= cmd("set_property", "sid", external[0]["id"] if external else 1)["error"] == "success"
+        ok &= cmd("set_property", "sid", "no")["error"] == "success"
+        # every geometry / subtitle-style value the app can apply
+        rejected = []
+        for opts in app_options:
+            for k, v in opts:
+                if cmd("set_property", k, v)["error"] != "success":
+                    rejected.append("%s=%s" % (k, v))
+        if rejected:
+            print("      rejected: %s" % rejected[:6])
+        ok &= not rejected
+        cmd("quit")
+    except Exception as e:   # noqa: BLE001
+        print("      IPC session failed: %s" % e)
+        ok = False
+    finally:
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    return bool(ok)
 
 
 if __name__ == "__main__":
