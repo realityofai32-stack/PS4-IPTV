@@ -41,7 +41,7 @@ cmd /c "$vcvars >nul && $cl /Fe`"$Out\download_it.exe`" /Fo`"$obj\\`" $src /link
 if ($LASTEXITCODE -ne 0) { throw 'download_it build failed' }
 
 # M3U playlist sources: M3uService + the app's libcurl HTTP client against the same server
-$m3uSources = @("$h\test_main.cpp", "$h\m3u_it.cpp", "$s\app\m3u_service.cpp", "$s\network\http.cpp",
+$m3uSources = @("$h\test_main.cpp", "$h\m3u_it.cpp", "$s\app\m3u_service.cpp", "$s\network\http.cpp", "$s\network\http_policy.cpp",
     "$s\network\jobs.cpp", "$s\iptv\m3u.cpp", "$s\iptv\catalog.cpp", "$s\iptv\search_index.cpp", "$s\iptv\xtream.cpp",
     "$s\storage\catalog_cache.cpp", "$s\platform\fs.cpp", "$s\platform\log.cpp", "$s\platform\redact.cpp",
     "$s\platform\clock.cpp", "$s\core\json.cpp", "$s\core\utf8.cpp", "$s\core\url.cpp", "$s\i18n\i18n.cpp",

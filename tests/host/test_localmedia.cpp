@@ -2,6 +2,8 @@
 // folder listing (folders first, natural order, hidden / unsupported / symbolic links left out), and local files
 // never entering the progress store.
 
+#include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #ifndef _WIN32
 #include <unistd.h>
@@ -326,6 +328,29 @@ TEST(localmedia_large_folders) {
     for (size_t i = 1; i < b.entries.size(); i++) {
         CHECK(!localmedia::naturalLess(b.entries[i].name, b.entries[i - 1].name));
     }
+}
+
+TEST(localmedia_huge_folder_scan_is_bounded) {
+    // a USB folder holding tens of thousands of pictures: the listing ends after MAX_SCANNED entries (flagged), and
+    // entries that cannot be shown are skipped without a stat call per file (d_type)
+    std::string base = tree("lm-huge");
+    for (size_t i = 0; i < localmedia::MAX_SCANNED + 2000; i++) {
+        FILE *f = std::fopen((base + "/p" + std::to_string(i) + ".jpg").c_str(), "w");
+        if (f) {
+            std::fclose(f);
+        }
+    }
+    touch(base + "/film.mkv");
+    fs::ensureDir(base + "/Season 1");
+    auto t0 = std::chrono::steady_clock::now();
+    localmedia::Listing l = localmedia::list({base + "/", false, 0}, base, sampleFormats());
+    double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    std::printf("     %zu-entry folder listed in %.1f ms (%zu shown, truncated %d)\n", localmedia::MAX_SCANNED + 2002, ms,
+                l.entries.size(), (int) l.truncated);
+    CHECK(l.ok && l.truncated);
+    CHECK(l.entries.size() <= 2);
+    CHECK(ms < 2000);
+    CHECK(l.skipped <= (int) localmedia::MAX_SCANNED);
 }
 
 TEST(localmedia_symlinks_permissions_and_special_files) {

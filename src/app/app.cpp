@@ -10,6 +10,7 @@
 #include "../platform/fs.h"
 #include "../platform/key_routing.h"
 #include "../platform/log.h"
+#include "../player/subtitle_font.h"
 #include "../ui/text.h"
 #include "../ui/theme.h"
 #include "../ui/widgets.h"
@@ -58,6 +59,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
         LOG_E("app", "UI fonts missing from the package");
     }
     http::globalInit(romfsPath + "assets/cacert.pem", std::string("PS4IPTV/") + APP_VERSION);
+    jobSystem.setWorkerExitHook(http::releaseThreadResources);
     jobSystem.start(4);   // API + catalog downloads + up to 2 image loads, never all blocked by one kind
 
     std::string warning;
@@ -129,19 +131,14 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     fs::ensureDir(mpvDir);
     // Text subtitles are drawn by libass, which has no system fonts on the PS4: mpv 0.34.1 passes
     // <config-dir>/subfont.ttf to libass as the default font (sub/ass_mp.c), like pPlay's data dir does.
-    // The packaged UI font (Latin, Greek, Cyrillic incl. Turkish) is copied there once.
+    // The subtitle font (Inter SemiBold + Arabic / Persian / Hebrew, third_party/fonts-subtitles) is copied there:
+    // libass 0.14 without fontconfig cannot fall back to a second font reliably (GitHub issue #1).
     {
-        std::string src = romfsPath + "assets/fonts/Inter-SemiBold.ttf";
-        std::string dst = fs::join(mpvDir, "subfont.ttf");
-        int64_t size = fs::fileSize(src);
-        if (size > 0 && fs::fileSize(dst) != size) {
-            std::string font;
-            std::string err;
-            if (fs::readFile(src, font, 8u * 1024 * 1024, &err) && fs::writeFileReplace(dst, font, &err)) {
-                LOG_I("app", "subtitle font installed (%lld bytes)", (long long) size);
-            } else {
-                LOG_W("app", "subtitle font not installed: %s", err.c_str());
-            }
+        subfont::Result sf = subfont::install(romfsPath + "assets/fonts/", mpvDir, APP_VERSION);
+        if (sf.installed) {
+            LOG_I("app", "subtitle font installed: %s", sf.source.c_str());
+        } else if (!sf.ok) {
+            LOG_W("app", "subtitle font not installed: %s", sf.error.c_str());
         }
     }
     if (!player.init(mpvDir, http::caBundle())) {
@@ -206,6 +203,26 @@ void App::saveLibrary() {
         LOG_E("storage", "library save failed: %s", err.c_str());
         toast(i18n::tr("library.save_failed"), ToastKind::Error);
     }
+}
+
+void App::saveLibraryInBackground() {
+    auto snap = std::make_shared<LibraryStore::Snapshot>();
+    if (!libraryStore.snapshot(*snap)) {
+        return;   // nothing changed
+    }
+    auto failed = std::make_shared<std::string>();
+    LibraryStore *store = &libraryStore;
+    jobSystem.submit(JobPriority::High, "library-save", [store, snap, failed](const CancelToken &) {   // i18n-exempt
+        std::string err;
+        if (!store->write(*snap, &err)) {
+            *failed = err.empty() ? "write failed" : err;   // i18n-exempt: log detail
+        }
+    }, [this, failed]() {
+        if (!failed->empty()) {
+            LOG_E("storage", "library save failed: %s", failed->c_str());
+            toast(i18n::tr("library.save_failed"), ToastKind::Error);
+        }
+    });
 }
 
 void App::resetSession() {

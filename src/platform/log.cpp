@@ -20,6 +20,9 @@ namespace {
     // Verbose mpv output is capped so a long session cannot fill the disk; errors and warnings
     // are always written.
     const long MAX_LOG_BYTES = 16L * 1024 * 1024;
+    // errors and warnings are written past MAX_LOG_BYTES, but not without end: a flood of them (a damaged stream,
+    // a font search per glyph) must not fill /data and cost a write per line for the rest of the session
+    const long HARD_MAX_LOG_BYTES = 24L * 1024 * 1024;
     const size_t MAX_RECENT_LINES = 400;
     const size_t MAX_LINE_LENGTH = 1500;
 
@@ -27,6 +30,7 @@ namespace {
     FILE *g_file = nullptr;
     long g_bytes = 0;
     bool g_capNoticeWritten = false;
+    bool g_hardCapNoticeWritten = false;
     diag::FileStatus g_status;
     std::deque<std::string> g_recent;
     double g_startTime = 0;
@@ -108,6 +112,8 @@ namespace diag {
             return;
         }
         g_bytes = (long) len;
+        g_capNoticeWritten = false;
+        g_hardCapNoticeWritten = false;
         g_status.ok = true;
         g_status.detail = "writable";
     }
@@ -167,7 +173,13 @@ namespace diag {
                 fputs("# log size cap reached: verbose/info lines are no longer written\n", g_file);
                 g_capNoticeWritten = true;
             }
-            if (!capped || level <= Level::Warn) {
+            bool hardCapped = g_bytes > HARD_MAX_LOG_BYTES;
+            if (hardCapped && !g_hardCapNoticeWritten) {
+                fputs("# hard log size cap reached: nothing more is written in this session\n", g_file);
+                fflush(g_file);
+                g_hardCapNoticeWritten = true;
+            }
+            if (!hardCapped && (!capped || level <= Level::Warn)) {
                 fputs(line.c_str(), g_file);
                 fputc('\n', g_file);
                 fflush(g_file);

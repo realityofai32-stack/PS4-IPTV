@@ -61,7 +61,21 @@ scripts/test-host.sh                                  # host unit tests with g++
 scripts/test-download-integration.sh                  # libcurl transport, downloads, M3U service vs a local server
 scripts/test-credential-guard.sh                      # self-test of the PKG credential guard
 scripts/verify-ps4iptv.sh [Release|Debug]             # release validation (build, tests, PKG checks, scans)
+tests/run-feature-tests.sh [--public] [fuzz seconds]  # every suite (subtitles, network failures, fuzzing, ...)
+scripts/make-subtitle-font.py [--check]               # regenerate / verify third_party/fonts-subtitles/V7Subtitles.ttf
 ```
+
+`make-subtitle-font.py` needs fontTools 4.59.0, unpacked (pure-Python wheel, no pip / venv needed):
+
+```bash
+curl -fsSLo toolchain/downloads/fonttools-4.59.0-py3-none-any.whl \
+  https://files.pythonhosted.org/packages/d0/9c/df0ef2c51845a13043e5088f7bb988ca6cd5bb82d5d4203d6a158aa58cf2/fonttools-4.59.0-py3-none-any.whl
+echo "241313683afd3baacb32a6bd124d0bce7404bc5280e12e291bae1b9bba28711d  toolchain/downloads/fonttools-4.59.0-py3-none-any.whl" | sha256sum -c
+mkdir -p toolchain/fonttools && python3 -I -m zipfile -e toolchain/downloads/fonttools-4.59.0-py3-none-any.whl toolchain/fonttools
+```
+
+The subtitle tests build FreeType 2.10.1, FriBidi 1.0.4 and libass 0.14.0 for the host on first use
+(`tests/subtitles/build-host-ass-stack.sh`, checksums pinned).
 
 Run the scripts with `LC_ALL=C` on systems whose locale uses decimal commas (sorting and number formatting in
 the checks expect the C locale).

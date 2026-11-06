@@ -10,6 +10,8 @@
 
 #include <functional>
 
+#include "mpv_log_filter.h"
+#include "render_timing.h"
 #include "stability.h"
 #include "tracks.h"
 #include "pplay/mpv.h"
@@ -146,6 +148,9 @@ public:
     // called by the video texture owner when frames are rendered
     void setFramesRendered(unsigned long frames);
 
+    // the video texture's render timing (reset with its frame counter): summarised per session in the log
+    void setRenderTiming(const RenderTiming &timing);
+
     PlaybackState state() const { return st; }
 
     PlaybackError error() const { return err; }
@@ -191,6 +196,10 @@ private:
 
     void pollStats();
 
+    // one log line per playback session: render time on the main thread, with / without subtitles on screen, and
+    // what the log filter held back (called when the next file opens and on stop)
+    void endSessionDiagnostics();
+
     Mpv *mpv = nullptr;
     PlaybackState st = PlaybackState::Idle;
     PlaybackError err = PlaybackError::None;
@@ -214,6 +223,22 @@ private:
     bool subtitleRenderFailed = false;
     std::string defaultUserAgent;   // mpv's value at init (restored after a playlist's own User-Agent)
     bool userAgentChanged = false;
+
+    // diagnostics (GitHub issue #1): what reaches the log, and the session's render time
+    mpvlog::Filter logFilter;
+    struct RenderSplit {
+        RenderTiming withSubs;       // render calls while a subtitle line was on screen
+        RenderTiming withoutSubs;
+        RenderTiming last;           // the video texture's counters at the previous call
+        double subsVisibleSeconds = 0;
+        bool subsVisible = false;    // sampled with the stats (4 Hz) from mpv's sub-text
+        bool rtlSeen = false;        // a right-to-left subtitle line was shown (never the text itself)
+        int subtitleId = 0;          // the last subtitle track selected in this session
+        std::string subtitleCodec;
+        std::string subtitleLang;
+        bool subtitleExternal = false;
+        bool active = false;         // a file was opened since the last summary
+    } session;
 
     void readTracks();
 

@@ -9,9 +9,11 @@
 //   - no fade texture (pPlay UI effect)
 //   - the texture quad is only drawn once a frame of the current file has been rendered, so a
 //     previous test's last frame is never shown; mpv rendering itself runs exactly as in pPlay
+//   - the time spent in mpv_render_context_render is measured (diagnostics)
 //
 
 #include "video_texture.h"
+#include "../../platform/clock.h"
 
 using namespace c2d;
 
@@ -21,6 +23,7 @@ VideoTexture::VideoTexture(Mpv *m, const c2d::Vector2f &size) : GLTextureBuffer(
 
 void VideoTexture::resetFrameStats() {
     framesRendered = 0;
+    timing = RenderTiming();
 }
 
 void VideoTexture::onDraw(c2d::Transform &transform, bool draw) {
@@ -41,7 +44,9 @@ void VideoTexture::onDraw(c2d::Transform &transform, bool draw) {
                 {MPV_RENDER_PARAM_INVALID,    nullptr}
         };
 
+        double t0 = clockx::monotonic();
         mpv_render_context_render(mpv->getContext(), r_params);
+        timing.add((clockx::monotonic() - t0) * 1000.0);
         framesRendered++;
     }
 

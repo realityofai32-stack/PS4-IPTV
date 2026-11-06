@@ -561,10 +561,64 @@ bool LibraryStore::load(std::string *warning) {
     return true;
 }
 
-bool LibraryStore::save(std::string *error) {
-    if (!fs::ensureDir(dir, error)) {
+bool LibraryStore::snapshot(Snapshot &out) {
+    out = Snapshot();
+    std::string f = serializeFavorites();
+    std::string h = serializeHistory();
+    bool forceF = writes->favoritesFailed.exchange(false);
+    bool forceH = writes->historyFailed.exchange(false);
+    out.writeFavorites = !snapshotTaken || forceF || f != lastFavorites;
+    out.writeHistory = !snapshotTaken || forceH || h != lastHistory;
+    snapshotTaken = true;
+    if (!out.writeFavorites && !out.writeHistory) {
         return false;
     }
-    return fs::writeFileAtomic(fs::join(dir, "favorites.json"), serializeFavorites(), error)
-           && fs::writeFileAtomic(fs::join(dir, "history.json"), serializeHistory(), error);
+    out.serial = ++nextSerial;
+    if (out.writeFavorites) {
+        lastFavorites = f;
+        out.favorites = std::move(f);
+    }
+    if (out.writeHistory) {
+        lastHistory = h;
+        out.history = std::move(h);
+    }
+    return true;
+}
+
+bool LibraryStore::write(const Snapshot &s, std::string *error) {
+    std::lock_guard<std::mutex> guard(writes->lock);
+    if (!fs::ensureDir(dir, error)) {
+        writes->favoritesFailed = writes->favoritesFailed || s.writeFavorites;
+        writes->historyFailed = writes->historyFailed || s.writeHistory;
+        return false;
+    }
+    bool ok = true;
+    // a newer snapshot of the same file may already be on disk (written by another thread): never go back
+    if (s.writeFavorites && s.serial > writes->favoritesSerial) {
+        if (fs::writeFileAtomic(fs::join(dir, "favorites.json"), s.favorites, error)) {
+            writes->favoritesSerial = s.serial;
+        } else {
+            writes->favoritesFailed = true;
+            ok = false;
+        }
+    }
+    if (ok && s.writeHistory && s.serial > writes->historySerial) {
+        if (fs::writeFileAtomic(fs::join(dir, "history.json"), s.history, error)) {
+            writes->historySerial = s.serial;
+        } else {
+            writes->historyFailed = true;
+            ok = false;
+        }
+    } else if (!ok && s.writeHistory) {
+        writes->historyFailed = true;
+    }
+    return ok;
+}
+
+bool LibraryStore::save(std::string *error) {
+    Snapshot s;
+    if (!snapshot(s)) {
+        return true;   // nothing changed since the last write
+    }
+    return write(s, error);
 }

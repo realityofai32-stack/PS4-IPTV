@@ -1132,6 +1132,8 @@ namespace {
                                "libcurl 7.80 (curl license), Mbed TLS 2.16 (Apache-2.0)\n"
                                "OpenOrbis PS4 Toolchain (GPL-3.0), PacBrew musl (MIT), libc++ (Apache-2.0 WITH LLVM-exception)\n"
                                "Inter (Rasmus Andersson) - SIL Open Font License 1.1\n"
+                               "DejaVu Sans (Bitstream, DejaVu authors) - Bitstream Vera license / public domain\n"
+                               "Droid Sans Fallback (Android Open Source Project) - Apache-2.0\n"
                                "Mozilla CA certificate bundle - MPL-2.0\n\n" + tr("about.notices");
             // i18n-exempt-end
             auto *body = ui::label(this, text, theme::LABEL, theme::SAFE_X, 210, ui::Weight::Regular, theme::textSecondary());

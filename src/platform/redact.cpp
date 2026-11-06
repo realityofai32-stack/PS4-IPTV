@@ -426,4 +426,52 @@ namespace redact {
         info.valid = true;
         return info;
     }
+
+    std::string urlsToOrigins(const std::string &text) {
+        std::string out;
+        out.reserve(text.size());
+        size_t i = 0;
+        while (i < text.size()) {
+            size_t sep = text.find("://", i);
+            if (sep == std::string::npos) {
+                out.append(text, i, std::string::npos);
+                break;
+            }
+            // the scheme: letters, digits, '+', '-', '.' before "://", starting with a letter
+            size_t start = sep;
+            while (start > i && (std::isalnum((unsigned char) text[start - 1]) || text[start - 1] == '+'
+                                 || text[start - 1] == '-' || text[start - 1] == '.')) {
+                start--;
+            }
+            while (start < sep && !std::isalpha((unsigned char) text[start])) {
+                start++;
+            }
+            out.append(text, i, start - i);
+            if (start == sep) {   // "://" without a scheme: keep as it is
+                out.append("://");
+                i = sep + 3;
+                continue;
+            }
+            size_t end = sep + 3;
+            while (end < text.size() && !std::isspace((unsigned char) text[end]) && text[end] != '\''
+                   && text[end] != '"' && text[end] != '>' && text[end] != '<' && text[end] != ')') {
+                end++;
+            }
+            std::string url = text.substr(start, end - start);
+            size_t hostStart = sep + 3 - start;
+            size_t pathStart = url.find_first_of("/?#", hostStart);
+            std::string authority = url.substr(hostStart, pathStart == std::string::npos ? std::string::npos
+                                                                                         : pathStart - hostStart);
+            size_t at = authority.rfind('@');
+            if (at != std::string::npos) {
+                authority = authority.substr(at + 1);
+            }
+            out += toLower(url.substr(0, sep - start)) + "://" + authority;
+            if (pathStart != std::string::npos) {
+                out += "/[...]";
+            }
+            i = end;
+        }
+        return apply(out);
+    }
 }

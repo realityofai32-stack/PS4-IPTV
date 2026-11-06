@@ -2,9 +2,9 @@
 // Created by cpasjuste on 02/04/19.
 //
 // PS4 IPTV: copy (via the hardware-validated playback test, tests/playback-test/src/pplay) of of pPlay src/player/mpv.cpp (Cpasjuste/pplay @ 0399546, GPL-3.0).
-// Changes are diagnostics only: return codes are logged (pPlay ignores or printf()s them, and printed
-// the wrong code for mpv_render_context_create), and the media path is no longer printf()ed in clear
-// text. mpv options, their order and the render context setup are unchanged.
+// Changes: return codes are logged (pPlay ignores or printf()s them, and printed the wrong code for
+// mpv_render_context_create), the media path is no longer printf()ed in clear text, and stop() no longer writes
+// mpv's unused watch-later file. mpv options, their order and the render context setup are unchanged.
 //
 
 #include <SDL_video.h>
@@ -127,7 +127,8 @@ Mpv::~Mpv() {
 }
 
 int Mpv::load(const std::string &file, LoadType loadType, const std::string &options) {
-    LOG_I("mpv", "Mpv::load(%s) options: %s", file.c_str(), options.c_str());
+    // never the address itself (Playback::open logs its origin): paths can carry provider tokens
+    LOG_I("mpv", "Mpv::load options: %s", options.c_str());
     if (handle) {
         stop();
         std::string type = "replace";
@@ -156,9 +157,11 @@ int Mpv::resume() {
 }
 
 int Mpv::stop() {
-    int res = save();
-    LOG_V("mpv", "write-watch-later-config: %d (%s)", res, mpv_error_string(res));
-    res = mpv_command_string(handle, "stop");
+    // pPlay wrote mpv's watch-later file here (write-watch-later-config) before every stop / load. This app
+    // resumes from its own progress store (resume-playback=no): the file was never read, cost a synchronous file
+    // write on the main thread at every open, stop and channel change, and left one file per stream address
+    // in <config-dir>/watch_later/ for ever. Playback::init removes the old files once.
+    int res = mpv_command_string(handle, "stop");
     LOG_I("mpv", "stop command: %d (%s)", res, mpv_error_string(res));
     return res;
 }

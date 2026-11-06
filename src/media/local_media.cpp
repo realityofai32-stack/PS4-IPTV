@@ -248,27 +248,53 @@ namespace localmedia {
             if (name == "." || name == "..") {
                 continue;
             }
-            total++;
+            if (++total > (int) MAX_SCANNED) {
+                out.truncated = true;   // a folder of hundreds of thousands of files: never read to its end
+                break;
+            }
             if (!safeName(name) || name[0] == '.') {
                 continue;   // hidden or unsafe
+            }
+            // the entry's own type from the directory (FreeBSD / Linux d_type: a link is DT_LNK, never its target):
+            // skipped entries cost no lstat; DT_UNKNOWN (some file systems) falls back to lstat
+            bool knownDir = false;
+            bool knownFile = false;
+#ifdef DT_LNK
+            if (de->d_type == DT_LNK || de->d_type == DT_FIFO || de->d_type == DT_SOCK || de->d_type == DT_CHR
+                || de->d_type == DT_BLK) {
+                continue;   // symbolic links are never followed; devices / sockets / pipes are never opened
+            }
+            knownDir = de->d_type == DT_DIR;
+            knownFile = de->d_type == DT_REG;
+#endif
+            if (knownFile && !formats.supported(extensionOf(name))) {
+                continue;   // not playable: no lstat
+            }
+            if ((knownDir || knownFile) && raw.size() >= MAX_ENTRIES) {
+                out.truncated = true;   // only what is shown counts, so a folder of pictures never hides its videos
+                continue;
             }
             Entry e;
             e.name = name;
             e.path = (dir == "/" ? "" : dir) + "/" + name;
-            struct stat st;
-            if (lstat(e.path.c_str(), &st) != 0 || S_ISLNK(st.st_mode)) {
-                continue;   // symbolic links are never followed (they could point outside the root)
-            }
-            if (S_ISDIR(st.st_mode)) {
+            if (knownDir) {
                 e.directory = true;
-            } else if (S_ISREG(st.st_mode) && formats.supported(extensionOf(name))) {
-                e.size = (int64_t) st.st_size;
             } else {
-                continue;   // not playable, or a device / socket / pipe
-            }
-            if (raw.size() >= MAX_ENTRIES) {
-                out.truncated = true;   // only what is shown counts, so a folder of pictures never hides its videos
-                continue;
+                struct stat st;
+                if (lstat(e.path.c_str(), &st) != 0 || S_ISLNK(st.st_mode)) {
+                    continue;   // symbolic links are never followed (they could point outside the root)
+                }
+                if (S_ISDIR(st.st_mode)) {
+                    e.directory = true;
+                } else if (S_ISREG(st.st_mode) && formats.supported(extensionOf(name))) {
+                    e.size = (int64_t) st.st_size;
+                } else {
+                    continue;   // not playable, or a device / socket / pipe
+                }
+                if (raw.size() >= MAX_ENTRIES) {
+                    out.truncated = true;
+                    continue;
+                }
             }
             raw.push_back(std::move(e));
         }
@@ -279,7 +305,10 @@ namespace localmedia {
             return out;
         }
         for (const auto &fe: fs::listDir(dir)) {
-            total++;
+            if (++total > (int) MAX_SCANNED) {
+                out.truncated = true;
+                break;
+            }
             if (!safeName(fe.name) || fe.name[0] == '.' || (!fe.dir && !formats.supported(extensionOf(fe.name)))) {
                 continue;
             }
@@ -296,7 +325,7 @@ namespace localmedia {
         }
 #endif
         out.entries = prepare(std::move(raw), formats);
-        out.skipped = total - (int) out.entries.size();
+        out.skipped = std::min(total, (int) MAX_SCANNED) - (int) out.entries.size();
         out.ok = true;
         return out;
     }

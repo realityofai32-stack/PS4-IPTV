@@ -148,6 +148,7 @@ namespace {
         void tick(double now) override {
             Playback &pb = app.playback();
             pb.setFramesRendered(video->getFramesRendered());
+            pb.setRenderTiming(video->renderTiming());
             if (!finished) {
                 supervise(now);
             }
@@ -783,7 +784,7 @@ namespace {
         // periodic progress of the current item; toDisk: also write history.json
         void saveProgress(bool toDisk) {
             if (tracker.record(app.now()) && toDisk) {
-                app.saveLibrary();
+                app.saveLibraryInBackground();   // every DISK_EVERY s while playing: no fsync on the render thread
             }
         }
 

@@ -125,7 +125,8 @@ namespace {
                 out.fail = r.error == http::Error::Canceled ? Fail::Canceled : Fail::Network;
                 out.response = r;
                 if (r.error == http::Error::Dns || r.error == http::Error::Connect || r.error == http::Error::Tls
-                    || r.error == http::Error::Timeout || r.error == http::Error::Canceled) {
+                    || r.error == http::Error::TlsCertificate || r.error == http::Error::Timeout
+                    || r.error == http::Error::Canceled) {
                     return out;   // the same host for every candidate: no point in trying the others
                 }
                 continue;

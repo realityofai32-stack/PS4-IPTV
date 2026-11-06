@@ -277,8 +277,8 @@ control.
 - **Scripts**: Thai, Devanagari and other Indic scripts, emoji and rare CJK characters are not covered and show a
   box. Arabic and Hebrew are reordered right-to-left with basic Arabic joining (FriBidi), not full OpenType
   shaping; the interface itself stays left-to-right.
-- **Subtitles** are drawn with the interface font: subtitles in scripts other than Latin, Greek and Cyrillic
-  cannot be drawn.
+- **Subtitles** are drawn with the subtitle font (the interface font plus Arabic, Persian and Hebrew): subtitles
+  in other scripts (CJK, Thai, Indic, emoji) show boxes.
 - Provider metadata (titles, channel names, categories, plots) is shown exactly as the provider sends it,
   regardless of the interface language.
 

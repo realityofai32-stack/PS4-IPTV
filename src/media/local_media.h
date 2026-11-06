@@ -93,11 +93,15 @@ namespace localmedia {
     // entries one folder shows at most (folders and playable files; what is skipped does not count)
     constexpr size_t MAX_ENTRIES = 5000;
 
+    // directory entries one listing reads at most (everything included: a folder holding hundreds of thousands of
+    // files must not freeze the screen; the listing is then flagged as truncated)
+    constexpr size_t MAX_SCANNED = 50000;
+
     struct Listing {
         bool ok = false;
         std::vector<Entry> entries;
         int skipped = 0;      // hidden, unsafe, unsupported, symbolic links, special files
-        bool truncated = false;   // more than MAX_ENTRIES entries to show
+        bool truncated = false;   // more than MAX_ENTRIES entries to show, or more than MAX_SCANNED entries
     };
 
     // reads one folder inside `root` (symbolic links are skipped, never followed)

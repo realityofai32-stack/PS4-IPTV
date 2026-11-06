@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstring>
@@ -11,6 +12,8 @@ extern "C" {
 #include "../i18n/i18n.h"
 #include "../platform/log.h"
 #include "../platform/redact.h"
+#include "../core/utf8.h"
+#include "../ui/font_fallback.h"
 
 namespace {
 
@@ -174,6 +177,8 @@ void Playback::open(const std::string &url, const std::string &format) {
 }
 
 void Playback::resetForOpen(const std::string &format) {
+    endSessionDiagnostics();   // the previous file's (nothing is written when it rendered nothing)
+    session.active = true;
     si = StreamInfo();
     si.format = format;
     err = PlaybackError::None;
@@ -219,24 +224,8 @@ void Playback::open(const std::string &url, const std::string &format, const Ope
         fail(PlaybackError::Other, i18n::tr("player.init_failed_short"), initError());
         return;
     }
-    si = StreamInfo();
-    si.format = format;
-    err = PlaybackError::None;
-    errMsg.clear();
-    errDetail.clear();
-    entryId = -1;
-    stopRequested = false;
-    openedAt = now;
-    firstFrameAt = -1;
-    lastStats = 0;
-    lastProgress = -1;
-    lastPos = -1;
-    lastFrames = 0;
-    cachePaused = false;
-    firstNetworkError.clear();
-    trackItems.clear();
+    resetForOpen(format);
     chooser = options.chooseTracks;
-    subtitleRenderFailed = false;
     redact::addUrl(url);
 
     std::string why;
@@ -277,6 +266,7 @@ void Playback::stop() {
     stopRequested = true;
     mpv->stop();  // pPlay: write-watch-later-config + stop
     st = PlaybackState::Idle;
+    endSessionDiagnostics();
 }
 
 void Playback::setPaused(bool paused) {
@@ -424,6 +414,15 @@ void Playback::selectSubtitle(int id) {
     LOG_I("player", "subtitle track %d: %d (%s)", id, res, mpv_error_string(res));
     if (res >= 0) {
         markSelected(tracks::Kind::Subtitle, id);
+        if (const tracks::Track *t = tracks::selected(trackItems, tracks::Kind::Subtitle)) {
+            session.subtitleId = t->id;
+            session.subtitleCodec = t->codec;
+            session.subtitleLang = t->lang;
+            session.subtitleExternal = t->external;
+        }
+        if (id <= 0) {
+            session.subsVisible = false;
+        }
     }
 }
 
@@ -447,7 +446,7 @@ void Playback::fail(PlaybackError e, const std::string &message, const std::stri
     st = PlaybackState::Error;
     err = e;
     errMsg = message;
-    errDetail = redact::apply(detail);
+    errDetail = redact::urlsToOrigins(detail);
     LOG_E("player", "%s (%s)", errMsg.c_str(), errDetail.c_str());
 }
 
@@ -496,6 +495,11 @@ void Playback::update(double t) {
         }
     }
 
+    std::string held = logFilter.takeSummary(now);
+    if (!held.empty()) {
+        LOG_W("player", "%s", held.c_str());
+    }
+
     if (st == PlaybackState::Buffering || st == PlaybackState::Playing) {
         if (now - lastStats >= 0.25) {   // progress / cache state for stall detection
             lastStats = now;
@@ -536,6 +540,70 @@ void Playback::pollStats() {
     if (si.fps <= 0 && mpv_get_property(h, "estimated-vf-fps", MPV_FORMAT_DOUBLE, &d) >= 0) {
         si.fps = d;
     }
+    // is a subtitle line on screen (diagnostics only: the text itself is never stored or logged)
+    bool visible = false;
+    if (tracks::selected(trackItems, tracks::Kind::Subtitle) != nullptr) {
+        char *text = mpv_get_property_string(h, "sub-text");
+        visible = text != nullptr && text[0] != 0;
+        if (visible && !session.rtlSeen) {
+            for (char32_t c: utf8::decode(text)) {
+                if (ui::isRtl(c)) {
+                    session.rtlSeen = true;
+                    break;
+                }
+            }
+        }
+        mpv_free(text);
+    }
+    if (visible) {
+        session.subsVisibleSeconds += 0.25;
+    }
+    session.subsVisible = visible;
+}
+
+void Playback::setRenderTiming(const RenderTiming &t) {
+    RenderTiming &last = session.last;
+    if (t.frames < last.frames) {
+        last = RenderTiming();   // the video texture's counters were reset (new file)
+    }
+    if (t.frames > last.frames) {
+        double ms = (t.totalMs - last.totalMs) / (double) (t.frames - last.frames);
+        RenderTiming &bucket = session.subsVisible ? session.withSubs : session.withoutSubs;
+        for (unsigned long i = last.frames; i < t.frames; i++) {
+            bucket.add(ms);
+        }
+        if (t.maxMs > last.maxMs) {
+            bucket.maxMs = std::max(bucket.maxMs, t.maxMs);   // a new peak belongs to this frame
+        }
+    }
+    last = t;
+}
+
+void Playback::endSessionDiagnostics() {
+    std::string held = logFilter.endSession();
+    if (!held.empty()) {
+        LOG_W("player", "%s", held.c_str());
+    }
+    const RenderTiming &a = session.withSubs;
+    const RenderTiming &b = session.withoutSubs;
+    if (session.active && a.frames + b.frames > 0) {
+        LOG_I("player", "session: video rendered %lu frame(s) on the main thread, %.2f ms mean / %.1f ms max, "
+                        "%lu over %.0f ms; %lld frame(s) dropped by mpv", a.frames + b.frames,
+              (a.totalMs + b.totalMs) / (double) (a.frames + b.frames), std::max(a.maxMs, b.maxMs), a.slow + b.slow,
+              RenderTiming::SLOW_MS, si.droppedFrames);
+        if (session.subtitleId > 0) {
+            LOG_I("player", "session subtitles: track %d (%s, lang '%s'%s) on screen %.0f s%s; render with subtitles "
+                            "%.2f ms mean / %.1f ms max (%lu frames, %lu slow), without %.2f / %.1f ms (%lu, %lu slow)",
+                  session.subtitleId, session.subtitleCodec.c_str(), session.subtitleLang.c_str(),
+                  session.subtitleExternal ? ", external" : "", session.subsVisibleSeconds,
+                  session.rtlSeen ? ", right-to-left text shown" : "",
+                  a.frames ? a.totalMs / (double) a.frames : 0.0, a.maxMs, a.frames, a.slow,
+                  b.frames ? b.totalMs / (double) b.frames : 0.0, b.maxMs, b.frames, b.slow);
+        }
+    }
+    RenderTiming last = session.last;   // the video texture's counters: they reset on their own (new file)
+    session = RenderSplit();
+    session.last = last;
 }
 
 void Playback::onLog(const mpv_event_log_message *msg) {
@@ -547,7 +615,11 @@ void Playback::onLog(const mpv_event_log_message *msg) {
     diag::Level level = msg->log_level <= MPV_LOG_LEVEL_ERROR ? diag::Level::Error
                         : msg->log_level == MPV_LOG_LEVEL_WARN ? diag::Level::Warn
                         : msg->log_level == MPV_LOG_LEVEL_INFO ? diag::Level::Info : diag::Level::Verbose;
-    diag::write(level, "mpv/" + prefix, text);
+    // the log filter limits what is written (font-search and other floods), never what is parsed below
+    if (logFilter.admit(text, level != diag::Level::Verbose || diag::verbose(), now)) {
+        // URLs in mpv / FFmpeg lines ("Playing: <url>", "Opening '<url>' for reading") keep only their origin
+        diag::write(level, "mpv/" + prefix, text.find("://") == std::string::npos ? text : redact::urlsToOrigins(text));
+    }
 
     if (contains(text, "compile_attach_shader: type:")) {
         lastShader = text.substr(text.find("type:"));

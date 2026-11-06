@@ -12,12 +12,17 @@ if (NOT PS4)
     message(FATAL_ERROR "PS4 only: configure with -DCMAKE_TOOLCHAIN_FILE=cmake/ps4-windows.cmake")
 endif ()
 
+# The application version: written here only. Everything else is derived from it - the in-app "v0.3.0" (About,
+# Settings, Diagnostics, log), the User-Agent, and the PS4 APP_VER / VERSION of param.sfo ("XX.YY": MAJOR as two
+# digits, then MINOR and PATCH as one digit each: 0.3.0 -> 00.30, 0.4.0 -> 00.40, 1.2.3 -> 01.23). APP_VER must
+# grow with every release (the console refuses to install an older APP_VER over a newer one).
 set(APP_VERSION "0.3.0")
+include(cmake/app_version.cmake)
+app_pkg_version("${APP_VERSION}" APP_PKG_VERSION)   # 0.3.0 -> 00.30 (v0.3.0 was published with it)
 set(APP_TITLE_ID "IPTV00002")      # unique: not PPLA00001 (pPlay), IPTV00001 (old experiment), IPTT00001 (test)
 # shown on the PS4 home screen. Only the display name changed with the V7 IPTV brand: the Title ID, content ID and
 # /data/PS4IPTV/ stay, so the PKG installs over earlier versions and keeps profiles, settings, history and downloads.
 set(APP_PKG_TITLE "V7 IPTV")
-set(APP_PKG_VERSION "00.30")       # PS4 APP_VER format XX.YY for 0.3.0
 # The content ID's last part stays the one v0.2.0 was published with (IV0001-IPTV00002_00-IPTV000020002000): the
 # release PKG keeps its name and installs over v0.2.0 as an update (same content ID, higher APP_VER). add_pkg would
 # otherwise derive it from APP_PKG_VERSION.
@@ -51,25 +56,25 @@ find_package(ass REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_search_module(FREETYPE2 REQUIRED freetype2)
 
-# build info
-string(TIMESTAMP BUILD_DATE "%Y-%m-%d %H:%M UTC" UTC)
-execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        OUTPUT_VARIABLE BUILD_GIT_HASH OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-execute_process(COMMAND git status --porcelain --untracked-files=no WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        OUTPUT_VARIABLE BUILD_GIT_DIRTY OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-if (NOT BUILD_GIT_HASH)
-    set(BUILD_GIT_HASH "unknown")
-endif ()
-if (BUILD_GIT_DIRTY)
-    string(APPEND BUILD_GIT_HASH "-dirty")
-endif ()
-configure_file(src/build_info.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/build_info.h" @ONLY)
+# build info: regenerated at every build (cmake/build_info.cmake), so the commit shown in About / Diagnostics / the log
+# is always the one compiled - also after a commit without a new CMake configure run
+set(BUILD_INFO_H "${CMAKE_CURRENT_BINARY_DIR}/generated/build_info.h")
+add_custom_target(${PROJECT_NAME}_build_info
+        COMMAND ${CMAKE_COMMAND} "-DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DOUT_FILE=${BUILD_INFO_H}"
+                "-DAPP_VERSION=${APP_VERSION}" "-DAPP_TITLE_ID=${APP_TITLE_ID}" "-DBUILD_TYPE=${CMAKE_BUILD_TYPE}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/build_info.cmake"
+        BYPRODUCTS "${BUILD_INFO_H}"
+        VERBATIM)
+execute_process(COMMAND ${CMAKE_COMMAND} "-DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DOUT_FILE=${BUILD_INFO_H}"
+        "-DAPP_VERSION=${APP_VERSION}" "-DAPP_TITLE_ID=${APP_TITLE_ID}" "-DBUILD_TYPE=${CMAKE_BUILD_TYPE}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/build_info.cmake")
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS src/*.cpp)
 # unmodified pPlay sources needed by the pPlay Mpv wrapper (src/player/pplay)
 set(PPLAY_UNMODIFIED_SOURCES "${PPLAY_DIR}/src/media_info.cpp" "${PPLAY_DIR}/src/utility.cpp")
 
 add_executable(${PROJECT_NAME} ${APP_SOURCES} ${PPLAY_UNMODIFIED_SOURCES})
+add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_build_info)
 set_source_files_properties(${PPLAY_UNMODIFIED_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wno-extra")
 target_include_directories(${PROJECT_NAME} PRIVATE
         src
@@ -117,6 +122,7 @@ add_custom_target(${PROJECT_NAME}_data
                 "${CMAKE_CURRENT_SOURCE_DIR}/third_party/inter/Inter-SemiBold.ttf"
                 "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts-fallback/DejaVuSans.ttf"
                 "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts-fallback/DroidSansFallback.ttf"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts-subtitles/V7Subtitles.ttf"
                 "${PKG_ROMFS}/assets/fonts/"
         COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cacert/cacert.pem" "${PKG_ROMFS}/assets/cacert.pem"
         VERBATIM)

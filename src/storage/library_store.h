@@ -14,7 +14,10 @@
 #ifndef PS4IPTV_STORAGE_LIBRARY_STORE_H
 #define PS4IPTV_STORAGE_LIBRARY_STORE_H
 
+#include <atomic>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <map>
 #include <set>
 #include <string>
@@ -120,7 +123,24 @@ public:
 
     void removeProfile(const std::string &profileId);
 
+    // writes what changed since the last write (a file whose content is unchanged is not rewritten), at once
     bool save(std::string *error = nullptr);
+
+    // Saving in two steps, so periodic progress saves during playback do not write + fsync on the main thread:
+    // snapshot() (main thread) serializes what changed since the last snapshot; write() (any thread) writes it.
+    // Writes are serialized, and a file is never overwritten by an older snapshot than the one already written.
+    struct Snapshot {
+        std::string favorites;            // content to write when writeFavorites
+        std::string history;              // content to write when writeHistory
+        bool writeFavorites = false;
+        bool writeHistory = false;
+        unsigned long serial = 0;
+    };
+
+    // false: nothing changed since the last snapshot
+    bool snapshot(Snapshot &out);
+
+    bool write(const Snapshot &snapshot, std::string *error = nullptr);
 
     // changes whenever favorites, history or progress change (screens rebuild their rows)
     unsigned generation() const { return gen; }
@@ -159,6 +179,20 @@ private:
     std::map<std::string, Favorites> favs;
     std::map<std::string, ProfileData> profiles;
     unsigned gen = 0;
+
+    // save bookkeeping: what the last snapshot contained (main thread), what was written (writer, under the lock)
+    std::string lastFavorites;
+    std::string lastHistory;
+    bool snapshotTaken = false;
+    unsigned long nextSerial = 0;
+    struct WriteState {
+        std::mutex lock;
+        unsigned long favoritesSerial = 0;
+        unsigned long historySerial = 0;
+        std::atomic<bool> favoritesFailed{false};   // the next snapshot writes the file again
+        std::atomic<bool> historyFailed{false};
+    };
+    std::shared_ptr<WriteState> writes = std::make_shared<WriteState>();
 };
 
 #endif // PS4IPTV_STORAGE_LIBRARY_STORE_H

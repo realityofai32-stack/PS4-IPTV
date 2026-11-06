@@ -16,7 +16,7 @@ g++ -std=c++17 -O1 -g -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-f
     ${SANITIZE:-} -I "$s" -I "$inc" -o "$out/stalker_it" "$h/test_main.cpp" "$h/stalker_it.cpp" \
     "$s/app/stalker_service.cpp" "$s/app/xtream_service.cpp" "$s/app/vod_library.cpp" "$s/app/auto_next.cpp" \
     "$s/app/series_plan.cpp" "$s/iptv/stalker.cpp" "$s/iptv/xtream.cpp" "$s/iptv/catalog.cpp" \
-    "$s/iptv/search_index.cpp" "$s/network/http.cpp" "$s/network/jobs.cpp" "$s/storage/catalog_cache.cpp" \
+    "$s/iptv/search_index.cpp" "$s/network/http.cpp" "$s/network/http_policy.cpp" "$s/network/jobs.cpp" "$s/storage/catalog_cache.cpp" \
     "$s/storage/library_store.cpp" "$s/platform/fs.cpp" "$s/platform/log.cpp" "$s/platform/redact.cpp" \
     "$s/platform/clock.cpp" "$s/player/protocols.cpp" "$s/core/json.cpp" "$s/core/utf8.cpp" "$s/core/url.cpp" \
     "$s/core/hash.cpp" "$s/core/format.cpp" "$s/i18n/i18n.cpp" "$s/i18n/strings_en.cpp" "$s/i18n/strings_tr.cpp" "$libcurl"

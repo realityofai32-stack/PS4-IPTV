@@ -3,7 +3,7 @@
 //
 // PS4 IPTV: adapted copy (via the hardware-validated playback test) of pPlay src/player/video_texture.h (Cpasjuste/pplay @ 0399546,
 // GPL-3.0). Changes: takes the Mpv instance directly instead of pPlay's Main, drops the pPlay fade
-// skin texture, and counts rendered frames for diagnostics. See video_texture.cpp.
+// skin texture, and counts rendered frames and their render time for diagnostics. See video_texture.cpp.
 //
 
 #ifndef PPLAY_VIDEO_TEXTURE_H
@@ -11,6 +11,7 @@
 
 #include "cross2d/c2d.h"
 #include "mpv.h"
+#include "../render_timing.h"
 
 class VideoTexture : public c2d::GLTextureBuffer {
 
@@ -23,12 +24,16 @@ public:
 
     unsigned long getFramesRendered() const { return framesRendered; }
 
+    // time spent in mpv_render_context_render since the last resetFrameStats()
+    const RenderTiming &renderTiming() const { return timing; }
+
 private:
 
     void onDraw(c2d::Transform &transform, bool draw = true) override;
 
     Mpv *mpv;
     unsigned long framesRendered = 0;
+    RenderTiming timing;
 };
 
 #endif //PPLAY_VIDEO_TEXTURE_H

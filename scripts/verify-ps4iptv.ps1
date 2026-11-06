@@ -88,7 +88,8 @@ try {
     $uroot = Join-Path $x 'uroot'
     $files = @(Get-ChildItem -Recurse -File $uroot | ForEach-Object { $_.FullName.Substring($uroot.Length + 1) -replace '\\', '/' } | Sort-Object)
     $allowed = @('assets/cacert.pem', 'assets/fonts/Inter-Regular.ttf', 'assets/fonts/Inter-SemiBold.ttf',
-                 'assets/fonts/DejaVuSans.ttf', 'assets/fonts/DroidSansFallback.ttf', 'eboot.bin',
+                 'assets/fonts/DejaVuSans.ttf', 'assets/fonts/DroidSansFallback.ttf', 'assets/fonts/V7Subtitles.ttf',
+                 'eboot.bin',
                  'sce_module/libc.prx', 'sce_module/libSceFios2.prx', 'sce_sys/about/right.sprx', 'sce_sys/keystone')
     $unexpected = @($files | Where-Object { $_ -notin $allowed })
     $missing = @($allowed | Where-Object { $_ -notin $files })
@@ -97,7 +98,7 @@ try {
     # the UI and fallback fonts must be byte-identical to third_party (text renders from them)
     $fontsOk = $true
     foreach ($font in 'inter\Inter-Regular.ttf', 'inter\Inter-SemiBold.ttf', 'fonts-fallback\DejaVuSans.ttf',
-                      'fonts-fallback\DroidSansFallback.ttf') {
+                      'fonts-fallback\DroidSansFallback.ttf', 'fonts-subtitles\V7Subtitles.ttf') {
         $packed = Join-Path $uroot ("assets\fonts\" + (Split-Path -Leaf $font))
         $fontsOk = $fontsOk -and (Test-Path $packed) -and
                 ((Get-FileHash $packed).Hash -eq (Get-FileHash (Join-Path $RepoRoot "third_party\$font")).Hash)

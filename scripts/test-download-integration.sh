@@ -26,7 +26,7 @@ h="$repo/tests/host"
     "$s/downloads/part_file.cpp" "$s/platform/fs.cpp" "$s/platform/log.cpp" "$s/platform/redact.cpp" \
     "$s/core/json.cpp" "$s/core/utf8.cpp" "$s/i18n/i18n.cpp" "$s/i18n/strings_en.cpp" "$s/i18n/strings_tr.cpp" \
     "$libcurl"
-"$cxx" "${flags[@]}" -o "$out/m3u_it" "$h/test_main.cpp" "$h/m3u_it.cpp" "$s/app/m3u_service.cpp" "$s/network/http.cpp" \
+"$cxx" "${flags[@]}" -o "$out/m3u_it" "$h/test_main.cpp" "$h/m3u_it.cpp" "$s/app/m3u_service.cpp" "$s/network/http.cpp" "$s/network/http_policy.cpp" \
     "$s/network/jobs.cpp" "$s/iptv/m3u.cpp" "$s/iptv/catalog.cpp" "$s/iptv/search_index.cpp" "$s/iptv/xtream.cpp" \
     "$s/storage/catalog_cache.cpp" "$s/platform/fs.cpp" "$s/platform/log.cpp" "$s/platform/redact.cpp" \
     "$s/platform/clock.cpp" "$s/core/json.cpp" "$s/core/utf8.cpp" "$s/core/url.cpp" "$s/i18n/i18n.cpp" \

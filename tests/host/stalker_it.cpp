@@ -71,6 +71,7 @@ namespace {
         Env() {
             diag::init(fs::join(dataDir(), "logs"));
             http::globalInit("", "PS4IPTV/test");
+            jobs.setWorkerExitHook(http::releaseThreadResources);
             jobs.start(4);
         }
     };

@@ -116,14 +116,15 @@ namespace ui {
         bool focused = false;
     };
 
-    // Home's navigation: [brand]  Home  Live TV  Movies  Series ............ (search)(favorites)(downloads)(settings)  22:14
+    // Home's navigation: [V7]  Home  Live TV  Movies  Series ............ (search)(favorites)(downloads)(settings)  22:14
+    // (the V7 symbol only: no product name next to it)
     // Sections are text tabs (the current one strong with an accent underline, the focused one an accent pill);
     // the secondary actions are small transparent round buttons. Nothing is boxed at rest.
     class NavTab;
 
     class TopNav : public c2d::RectangleShape {
     public:
-        TopNav(const std::string &brandName, const std::vector<std::string> &sections, const std::vector<Icon> &icons);
+        TopNav(const std::vector<std::string> &sections, const std::vector<Icon> &icons);
 
         int itemCount() const { return (int) (pills.size() + buttons.size()); }
 

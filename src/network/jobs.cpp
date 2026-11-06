@@ -17,7 +17,11 @@ JobSystem::~JobSystem() {
 }
 
 void *JobSystem::threadMain(void *self) {
-    ((JobSystem *) self)->workerLoop();
+    auto *js = (JobSystem *) self;
+    js->workerLoop();
+    if (js->exitHook) {
+        js->exitHook();
+    }
     return nullptr;
 }
 

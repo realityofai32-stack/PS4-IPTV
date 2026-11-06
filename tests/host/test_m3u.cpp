@@ -381,6 +381,16 @@ TEST(m3u_urls) {
     std::string shown = m3u::displayUrl("http://list.example.com/exampleuser/examplepass/playlist.m3u");
     CHECK(shown.find("exampleuser") == std::string::npos && shown.find("examplepass") == std::string::npos);
     CHECK(m3u::displayUrl("/data/PS4IPTV/playlists/sports.m3u") == "playlists/sports.m3u");
+    // a token as the file name is not shown (logged and on screen): hex, UUID, long random alphanumerics
+    CHECK(m3u::displayUrl("http://list.example.com/p/9f86d081884c7d659a2feaa0c55ad015.m3u8")
+          == "list.example.com/\xE2\x80\xA6/\xE2\x80\xA6.m3u8");
+    CHECK(m3u::displayUrl("https://list.example.com/550e8400-e29b-41d4-a716-446655440000")
+          == "list.example.com/\xE2\x80\xA6");
+    CHECK(m3u::displayUrl("http://list.example.com/x/aB3dE5fG7hJ9kL1mN2pQ.m3u") == "list.example.com/\xE2\x80\xA6/\xE2\x80\xA6.m3u");
+    // names stay readable
+    CHECK(m3u::displayUrl("http://list.example.com/lists/tv_channels_2024.m3u") == "list.example.com/\xE2\x80\xA6/tv_channels_2024.m3u");
+    CHECK(m3u::displayUrl("https://iptv-org.github.io/iptv/countries/tr.m3u") == "iptv-org.github.io/\xE2\x80\xA6/tr.m3u");
+    CHECK(m3u::displayUrl("http://list.example.com/playlist.m3u") == "list.example.com/playlist.m3u");
 }
 
 TEST(m3u_redaction_of_playlist_and_stream_urls) {

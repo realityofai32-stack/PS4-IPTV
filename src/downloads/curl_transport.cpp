@@ -170,6 +170,11 @@ namespace dl {
         curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
         curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(c, CURLOPT_MAXREDIRS, 8L);
+        // only http / https (the PS4 libcurl also has file, gopher, dict, ftp...); a download that starts on https
+        // (the address carries the account's credentials) never continues over plain http
+        curl_easy_setopt(c, CURLOPT_PROTOCOLS, (long) (CURLPROTO_HTTP | CURLPROTO_HTTPS));
+        curl_easy_setopt(c, CURLOPT_REDIR_PROTOCOLS, req.url.compare(0, 8, "https://") == 0
+                                                     ? (long) CURLPROTO_HTTPS : (long) (CURLPROTO_HTTP | CURLPROTO_HTTPS));
         curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT_MS, req.connectTimeoutMs);
         curl_easy_setopt(c, CURLOPT_LOW_SPEED_LIMIT, 1L);
         curl_easy_setopt(c, CURLOPT_LOW_SPEED_TIME, req.stallTimeoutS);

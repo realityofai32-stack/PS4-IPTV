@@ -48,6 +48,11 @@ public:
 
     ~JobSystem();
 
+    // called on each worker thread just before it ends (per-thread resources: the HTTP client's curl handle).
+    // Set before start(). thread_local objects with destructors cannot be used: the PS4 runtime has no
+    // __cxa_thread_atexit_impl (create-fself refuses the executable).
+    void setWorkerExitHook(std::function<void()> hook) { exitHook = std::move(hook); }
+
     void start(int workers);
 
     void stop();
@@ -78,6 +83,7 @@ private:
     void workerLoop();
 
     mutable std::mutex mutex;
+    std::function<void()> exitHook;
     std::condition_variable cv;
     std::condition_variable idleCv;
     std::deque<Job> queues[3];

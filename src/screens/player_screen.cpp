@@ -205,7 +205,8 @@ namespace {
 
         void tick(double now) override {
             Playback &pb = app.playback();
-            pb.setFramesRendered(video->getFramesRendered());  // counter is reset on every open()
+            pb.setFramesRendered(video->getFramesRendered());
+            pb.setRenderTiming(video->renderTiming());  // counter is reset on every open()
 
             // debounced zapping
             if (pendingIndex >= 0 && now >= zapAt) {

@@ -15,6 +15,7 @@
 #   10 English + Turkish localization complete, no hardcoded screen text
 #   11 download integration test (libcurl transport + manager, M3U service) against a local server
 #   12 complete Git history scanned for private credentials
+#   13 version: param.sfo APP_VER / VERSION derived from CMakeLists.txt APP_VERSION, the same version in eboot.bin
 # Usage: scripts/verify-ps4iptv.sh [Release|Debug]
 set -uo pipefail
 export LC_ALL=C   # sort and comm must agree on the order
@@ -89,14 +90,15 @@ pkgtool pkg_extract --passcode 00000000000000000000000000000000 "$pkg" "$x" > /d
 uroot="$x/uroot"
 files="$(cd "$uroot" && find . -type f | sed 's|^\./||' | sort)"
 allowed="$(printf '%s\n' assets/cacert.pem assets/fonts/DejaVuSans.ttf assets/fonts/DroidSansFallback.ttf \
-    assets/fonts/Inter-Regular.ttf assets/fonts/Inter-SemiBold.ttf eboot.bin sce_module/libSceFios2.prx \
+    assets/fonts/Inter-Regular.ttf assets/fonts/Inter-SemiBold.ttf assets/fonts/V7Subtitles.ttf eboot.bin sce_module/libSceFios2.prx \
     sce_module/libc.prx sce_sys/about/right.sprx sce_sys/keystone | sort)"
 unexpected="$(comm -23 <(echo "$files") <(echo "$allowed") | tr '\n' ' ')"
 missing="$(comm -13 <(echo "$files") <(echo "$allowed") | tr '\n' ' ')"
 entries="$(pkgtool pkg_listentries "$pkg" 2>&1)"
 sfo=0; grep -q PARAM_SFO <<< "$entries" && grep -q ICON0_PNG <<< "$entries" && sfo=1
 fonts=1
-for f in inter/Inter-Regular.ttf inter/Inter-SemiBold.ttf fonts-fallback/DejaVuSans.ttf fonts-fallback/DroidSansFallback.ttf; do
+for f in inter/Inter-Regular.ttf inter/Inter-SemiBold.ttf fonts-fallback/DejaVuSans.ttf fonts-fallback/DroidSansFallback.ttf \
+         fonts-subtitles/V7Subtitles.ttf; do
     cmp -s "$uroot/assets/fonts/$(basename "$f")" "third_party/$f" || fonts=0
 done
 [[ -z "$unexpected" && -z "$missing" && $sfo == 1 && $fonts == 1 ]] && r=PASS || r=FAIL
@@ -148,6 +150,25 @@ hrc=$?
 if [[ $hrc == 0 ]]; then r=PASS; elif [[ $hrc == 2 ]] && grep -q 'RESULT: CLEAN' <<< "$hist"; then r=WARN; else r=FAIL; fi
 report $r '12 Git history secret scan' "$(grep RESULT <<< "$hist")$( [[ $hrc == 2 ]] && echo ' (pattern scan only: no private secret list on this machine)')"
 grep FINDING <<< "$hist" | sed 's/^/      /'
+
+# 13
+appver="$(sed -nE 's/^set\(APP_VERSION "([^"]+)"\).*/\1/p' CMakeLists.txt)"
+want="$(awk -F. '{printf "%02d.%d%d", $1, $2, $3}' <<< "$appver")"
+sfo="$(python3 -I - "$pkg" <<'PY'
+import struct, sys
+d = open(sys.argv[1], "rb").read()
+i = d.find(b"\x00PSF")
+_, _, kt, dt, n = struct.unpack_from("<4sIIII", d, i)
+for e in range(n):
+    ko, fmt, ln, mx, do = struct.unpack_from("<HHIII", d, i + 20 + e * 16)
+    k = d[i + kt + ko:d.index(b"\0", i + kt + ko)].decode()
+    if k in ("APP_VER", "VERSION"):
+        print(k + "=" + d[i + dt + do:i + dt + do + ln].rstrip(b"\0").decode())
+PY
+)"
+inbin=0; strings -n 5 "$build/eboot.bin" | grep -qx "$appver" && inbin=1
+[[ -n "$appver" && "$sfo" == *"APP_VER=$want"* && "$sfo" == *"VERSION=$want"* && $inbin == 1 ]] && r=PASS || r=FAIL
+report $r '13 version' "APP_VERSION $appver (shown as v$appver) -> param.sfo $(tr '\n' ' ' <<< "$sfo")(expected $want), in eboot.bin=$inbin"
 
 echo
 echo "SUMMARY: $total checks, $fails failed, $warns warning(s)   (logs: build/verify-linux/)"

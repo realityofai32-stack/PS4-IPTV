@@ -38,7 +38,7 @@ Focus language (one per element type):
 ## HOME
 
 ```
-y 46 ┌ [V7] V7 IPTV   Home  Live TV  Movies  Series ........ (⌕)(☆)(↓)(⚙)  15:24 ┐ 118
+y 46 ┌ [V7]   Home  Live TV  Movies  Series ........ (⌕)(☆)(↓)(⚙)  15:24 ┐ 118
      │                                                      ░░░░ poster layer ░░░│
      │ CONTINUE WATCHING                                    ░ x 600..1920 ░░░░░░░│
      │ The Walking Dead: Daryl Dixon                        ░ y 0..800  ░░░░░░░░░│
@@ -52,11 +52,11 @@ y744 │ [ 408 x 230 ]  [ 408 x 230 ]  [ 408 x 230 ]  [ 408 x 230 ]   (peek, fad
 
 | Item | Value |
 |---|---|
-| Navigation | y 46..118 (72 high). Brand: V7 symbol 34 px + "V7 IPTV" 34 px semibold at x 96 |
-| Primary tabs | text tabs, 52 high, 22 px padding, 6 px apart, first at brand + 56. Current: strong semibold + 3 px accent underline; focused: accent pill; others: secondary text, no surface |
+| Navigation | y 46..118 (72 high). Brand: the V7 symbol alone, 34 px high at x 96 (the "V7 IPTV" name next to it was removed after the v0.3.0 hardware test) |
+| Primary tabs | text tabs, 52 high, 22 px padding, 6 px apart, first at the symbol + 56. Current: strong semibold + 3 px accent underline; focused: accent pill; others: secondary text, no surface |
 | Secondary actions | 4 round 52 px icon buttons, 12 px apart, transparent at rest (accent fill when focused), x 1470..1714; focused icon's name 22 px under it |
 | Clock | 28 px semibold, right-aligned at 1824 |
-| Notices | offline / HTTPS / expiry warning, 22 px, under the brand (only when there is one; no permanent status line) |
+| Notices | offline / HTTPS / expiry warning, 22 px, under the navigation (only when there is one; no permanent status line) |
 | Hero backdrop (v3.1) | layer x 600..1920, y 0..800 (page coordinates, a flat `#050608` page under it), tint + shade; eased fades: left 720 (600..1320), bottom 300 (500..800), top 240 (under the navigation). One large texture at a time. Real landscape backdrop (provider `backdrop_path`, 1280 x 720 exact-size texture, 3.52 MiB): cover-cropped, 1.11x. Otherwise the hero poster (512 x 768 texture box, never enlarged on the CPU) at its own ratio, top at the screen top, right edge 40 px past the screen: wanted 800 tall but never more than 1.25x its texture and never wider than 560 (512 x 768 -> 533 x 800 at 1.04x; 400 x 600 -> 500 x 750; 300 x 450 -> 375 x 562; under 400 px tall: not drawn). Left fade over half its visible width, bottom fade over 30 % of its height, both into its colour field: the poster's average colour as drawn, dimmed (`fit::ambientWash`, <= 34 per channel), solid behind / right of the poster, fading out over 420 px but never left of x 1096 (the text column stays black). (`ui::Backdrop::PosterStyle`, `fit::posterArt`.) Never stretched. |
 | Hero text | x 96, max width 1000. Anchored on the buttons, stacked upwards: buttons y 548; progress bar 480 x 6 at y 504 with time 22 px to its right; meta 24 px secondary; episode line 28 px; title 64 px semibold (max 2 lines); eyebrow 24 px semibold accent text. One-line title: eyebrow at ~y 270; two lines: ~y 195 (navigation ends at 118) |
 | Hero buttons | Resume 360 x 76 (primary), Details 250 x 76, 24 apart. Start state (no Continue Watching): Live TV / Movies / Series 250 each |

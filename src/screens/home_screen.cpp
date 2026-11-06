@@ -1,6 +1,6 @@
 // Home: top navigation, one cinematic hero for the most meaningful action, and rails of landscape cards.
 //
-//   navigation   [V7 IPTV]  Home  Live TV  Movies  Series  Local Media ... (search)(favorites)(downloads)(settings)  clock
+//   navigation   [V7]  Home  Live TV  Movies  Series  Local Media ... (search)(favorites)(downloads)(settings)  clock
 //   hero         the most recent Continue Watching item: eyebrow, title, episode, progress, Resume / Details, all
 //                over one full-bleed layer made from its poster (no separate poster tile). Without one: "What
 //                would you like to watch?" with the sections as buttons.
@@ -165,13 +165,12 @@ namespace {
             for (int id: {NAV_SEARCH, NAV_FAVORITES, NAV_DOWNLOADS, NAV_SETTINGS}) {
                 navIds.push_back(id);
             }
-            nav = new ui::TopNav(tr("app.name"), sections, {ui::Icon::Search, ui::Icon::Favorites, ui::Icon::Downloads,
-                                                             ui::Icon::Settings});
+            nav = new ui::TopNav(sections, {ui::Icon::Search, ui::Icon::Favorites, ui::Icon::Downloads, ui::Icon::Settings});
             nav->setCurrent(0);
             nav->setClock(clockx::localTime());
             add(nav);
 
-            // under the brand, only when there is something to know: offline, plain HTTP, account expiring
+            // under the navigation, only when there is something to know: offline, plain HTTP, account expiring
             std::string notice;
             int64_t now = clockx::unixNow();
             if (s.offline) {

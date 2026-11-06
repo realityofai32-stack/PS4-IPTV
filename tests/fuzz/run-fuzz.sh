@@ -27,6 +27,10 @@ build fuzz_keyboard "$S/platform/keyboard_logic.cpp" "$S/ui/keyboard_model.cpp" 
     "$S/platform/log.cpp" "$S/platform/redact.cpp" "$S/platform/fs.cpp" "$S/platform/clock.cpp" \
     "$S/i18n/strings_en.cpp" "$S/i18n/strings_tr.cpp"
 build fuzz_paths "$S/media/local_media.cpp" "$S/platform/fs.cpp" "$S/player/protocols.cpp"
+build fuzz_parsers "$S/iptv/m3u.cpp" "$S/iptv/xtream.cpp" "$S/core/json.cpp" "$S/core/utf8.cpp" "$S/core/url.cpp" \
+    "$S/core/hash.cpp" "$S/i18n/i18n.cpp" "$S/i18n/strings_en.cpp" "$S/i18n/strings_tr.cpp" "$S/platform/log.cpp" \
+    "$S/platform/redact.cpp" "$S/platform/fs.cpp" "$S/platform/clock.cpp" "$S/network/http_policy.cpp" \
+    "$S/player/mpv_log_filter.cpp" "$S/iptv/catalog.cpp" "$S/iptv/search_index.cpp"
 # seeds: the protocol's own shapes
 seeds="$OUT/seeds-stalker"
 mkdir -p "$seeds"
@@ -43,8 +47,20 @@ printf '%s' 'https://r.example.com/r?to=https%3A%2F%2Fh%2Fget.php%3Fusername%3Dx
 seedsp="$OUT/seeds-paths"; mkdir -p "$seedsp"
 printf '%s' '/data/../mnt/usb0/./a//b.mkv' > "$seedsp/a"
 printf '%s' 'https://user:pw@host:443/x' > "$seedsp/b"
+seedsx="$OUT/seeds-parsers"; mkdir -p "$seedsx"
+printf '%s' '#EXTM3U x-tvg-url="http://e.example.com/epg.xml"
+#EXTINF:-1 tvg-id="a" tvg-logo="http://l.example.com/a.png" group-title="News",Channel A
+#EXTVLCOPT:http-user-agent=Mozilla
+http://s.example.com/live/u/p/1.ts
+#EXTINF:-1,B
+https://s.example.com/b.m3u8?token=x' > "$seedsx/m3u"
+printf '%s' '{"user_info":{"auth":1,"status":"Active","exp_date":"1999999999","max_connections":"2"},"server_info":{"url":"h","port":"80","server_protocol":"http"}}' > "$seedsx/auth"
+printf '%s' '[{"stream_id":1,"name":"A","stream_icon":"file:///x","category_id":"2","num":1,"added":"1600000000"}]' > "$seedsx/live"
+printf '%s' '{"info":{"name":"S","cover":"c","backdrop_path":["b"]},"episodes":{"1":[{"id":"9","episode_num":1,"title":"E","container_extension":"mkv","info":{"duration_secs":3600}}]}}' > "$seedsx/series"
+printf '%s' 'Glyph 0x627 not found, selecting one more font for (sans-serif, 400, 0)' > "$seedsx/glyph"
+printf '%s' 'fontselect: Using default font: (Arial, 400, 0) -> /x/subfont.ttf, 0, (none)' > "$seedsx/fontselect"
 rc=0
-for t in fuzz_stalker:seeds-stalker fuzz_redact:seeds-redact fuzz_keyboard: fuzz_paths:seeds-paths; do
+for t in fuzz_stalker:seeds-stalker fuzz_redact:seeds-redact fuzz_keyboard: fuzz_paths:seeds-paths fuzz_parsers:seeds-parsers; do
     name="${t%%:*}"; seed="${t#*:}"
     corpus="$OUT/corpus-$name"; mkdir -p "$corpus"
     args=("$corpus")

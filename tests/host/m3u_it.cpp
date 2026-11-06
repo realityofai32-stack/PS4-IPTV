@@ -82,6 +82,7 @@ TEST(m3u_it_download_parse_and_save) {
     }
     http::globalInit("", "PS4IPTV-test/1.0");
     JobSystem jobs;
+    jobs.setWorkerExitHook(http::releaseThreadResources);
     jobs.start(2);
     CatalogCache cache(dataDir());
     cache.remove("it1", M3uService::CACHE_NAME);

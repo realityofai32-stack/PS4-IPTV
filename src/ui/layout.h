@@ -54,7 +54,7 @@ namespace layout {
         constexpr float TAB_H = 52;
         constexpr float TAB_PAD = 22;
         constexpr float TAB_GAP = 6;
-        constexpr float TABS_GAP = 56;                 // wordmark -> first tab
+        constexpr float TABS_GAP = 56;                 // V7 symbol -> first tab
         constexpr float ICON = 52;
         constexpr float ICON_GAP = 12;
         constexpr float CLOCK_W = 110;                 // reserved right of the icons ("23:59" at 28 px ~ 76 px)

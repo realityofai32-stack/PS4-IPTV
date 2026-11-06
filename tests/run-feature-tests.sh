@@ -21,7 +21,7 @@ run() {
     local log="$OUT/$name.log"
     if "$@" > "$log" 2>&1; then r=PASS; else r=FAIL; fi
     local detail
-    detail="$(grep -E "checks, [0-9]+ failures|local case|failure\(s\)|^ok +fuzz|replayed|input\(s\)" "$log" | tr '\n' ' ' | cut -c1-300)"
+    detail="$(grep -E "checks, [0-9]+ failures|local case|failure\(s\)|^ok +fuzz|replayed|input\(s\)|passed, " "$log" | tr '\n' ' ' | cut -c1-300)"
     printf '%s  %-26s %s\n' "$r" "$name" "$detail" | tee -a "$summary"
 }
 run host-unit "$REPO/scripts/test-host.sh"
@@ -32,6 +32,9 @@ run local-media-playback "$REPO/tests/media/run-media-tests.sh"
 run download-m3u-integration "$REPO/scripts/test-download-integration.sh"
 run credential-guard "$REPO/scripts/test-credential-guard.sh"
 run fuzzing "$REPO/tests/fuzz/run-fuzz.sh" "$FUZZ"
+run subtitles "$REPO/tests/subtitles/run-subtitle-tests.sh"
+run network-failures "$REPO/tests/network/run-network-tests.sh"
+run version "$REPO/tests/version/test-app-version.sh"
 pkg="$REPO/build/ps4iptv-release/IV0001-IPTV00002_00-IPTV000020002000.pkg"
 if [[ -f "$pkg" ]]; then
     run ps4-pkg-tls-inspection python3 -I "$REPO/tests/https/inspect_ps4_binary.py" "$REPO/build/ps4iptv-release" "$pkg" "$OUT"

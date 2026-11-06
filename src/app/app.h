@@ -164,6 +164,10 @@ public:
     // persists favorites/history; logs and toasts on failure
     void saveLibrary();
 
+    // periodic progress during playback: what changed is serialized now, written (with its fsync) by a worker so
+    // the video never waits for the disk; a later saveLibrary() is never overtaken (LibraryStore::write)
+    void saveLibraryInBackground();
+
     double now() const;
 
     const std::string &romfs() const { return romfsPath; }

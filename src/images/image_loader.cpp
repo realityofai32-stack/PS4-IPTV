@@ -207,6 +207,8 @@ void ImageLoader::start(const std::string &k) {
             req.stallTimeoutS = 8;
             req.maxBytes = MAX_IMAGE_BYTES;
             req.cancel = token.shared();
+            req.credentials = false;   // artwork: an https -> http redirect carries nothing secret
+            req.retries = 0;           // images have their own back-off (images::loadImage)
             http::Response r = http::get(req);
             images::FetchResponse f;
             f.status = r.status;
@@ -215,8 +217,9 @@ void ImageLoader::start(const std::string &k) {
             f.detail = http::describe(r);
             if (r.error == http::Error::TooLarge) {
                 f.status = 413;                // permanent: never retried
-            } else if (r.error == http::Error::HttpsUnsupported) {
-                f.status = 0;                  // permanent
+            } else if (r.error == http::Error::HttpsUnsupported || r.error == http::Error::Redirect
+                       || r.error == http::Error::TlsCertificate) {
+                f.status = 0;                  // permanent: not http(s), refused redirect, untrusted certificate
             } else if (r.error != http::Error::None) {
                 f.networkError = true;         // retried after a back-off
             }

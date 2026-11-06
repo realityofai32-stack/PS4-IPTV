@@ -1,0 +1,38 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-STABILITY: ARABIC SUBTITLES (ISSUE #1), STABILITY, NETWORK, SECURITY
+=====================================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Details: docs/v7-stability-security.md.
+Install OVER the existing V7 IPTV: profiles, settings, history and downloads are kept.
+Afterwards copy /data/PS4IPTV/logs/log.txt over FTP. Useful lines:
+  [app] subtitle font installed: V7Subtitles.ttf                     (first start of this build only)
+  [player] session: video rendered N frame(s) on the main thread, X ms mean / Y ms max, Z over 33 ms; ...
+  [player] session subtitles: track N (subrip, lang 'ara') on screen S s, right-to-left text shown;
+           render with subtitles X ms mean / Y ms max (...), without X / Y ms (...)
+  [player] subtitles: the subtitle font has no glyph for N character(s): U+....   (only for scripts it lacks)
+  [http] <origin>: <reason> - retry 1 of 2 in 0.75s                  (only on temporary network failures)
+
+ 1. ISSUE #1 - ARABIC SUBTITLES: play a movie / episode with an Arabic subtitle track (embedded or an external
+    same-name .srt in Local Media). Arabic letters are drawn joined, right to left (no boxes); punctuation and digits
+    in the right place; playback is as smooth as with English subtitles (no stutter while lines change).
+    Log: the "session subtitles" line after stopping - compare "render with subtitles" against "without" (similar
+    values expected), and NO flood of "Glyph 0x..." lines.
+ 2. Same with a Hebrew or Persian track if available; and English / Turkish subtitles: unchanged look (same font,
+    size, position, shadow options in Options > Subtitle style).
+ 3. HOME NAVIGATION: top-left shows only the V7 symbol (no "V7 IPTV" text); the tabs start right after it, aligned
+    with the page; focus, current-tab underline and the icons on the right unchanged. Welcome screen and About still
+    show the product name.
+ 4. VERSION: Settings > About shows "v0.3.0"; About page "Version 0.3.0 • build ... • <commit>" with the commit of
+    BUILD.txt (no "-dirty"). PLEASE NOTE WHERE "v3.0.0" WAS SEEN BEFORE (which screen: PS4 Information panel, a
+    package installer, or inside the app) and what that screen shows now; the console metadata is APP_VER 00.30.
+ 5. PLAYBACK WHILE SAVING: watch a movie > 2 minutes: no periodic hitch every ~15 s; stop and Continue Watching
+    resumes at the right position; favorite toggle (Square) still saved after an app restart.
+ 6. NETWORK: sign in / refresh catalogs as usual (Xtream, M3U, Stalker). If a provider is briefly unreachable the
+    app retries quietly (log "[http] ... retry"), and a failure leaves the screen usable (Back works, retry works).
+    An https:// provider address that redirects to http:// now shows "The server redirected from HTTPS to
+    unencrypted HTTP ..." - enter it with http:// in that case.
+ 7. ZAPPING / REOPENING: Live TV: zap 20 channels quickly, open / stop / open; Movies, Series, an HTTPS stream and
+    a Local Media file the same way. No freeze, the right stream plays each time, Back always returns.
+ 8. LOCAL MEDIA: a USB folder with many files (e.g. a camera folder with thousands of pictures plus some videos)
+    opens without a long freeze; videos are listed.
+ 9. Regression: Search, Favorites, Continue Watching, Recently Watched, Next Episode countdown, Downloads, audio /
+    subtitle track switching, aspect / zoom, keyboard, themes / accent, Turkish UI.

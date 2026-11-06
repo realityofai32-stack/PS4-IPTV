@@ -129,6 +129,24 @@ namespace m3u {
             std::string_view path;   // from the first '/' after the authority, up to '?' / '#'
         };
 
+        // a random-looking path segment (access token, hash, UUID) rather than a name: >= 20 characters of letters,
+        // digits, '-' and '_' with at least 4 of each kind, or >= 16 hexadecimal digits
+        bool tokenLike(std::string_view s) {
+            int letters = 0, digits = 0, hex = 0, other = 0;
+            for (char c: s) {
+                bool d = c >= '0' && c <= '9';
+                bool l = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+                digits += d;
+                letters += l;
+                hex += d || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+                other += !d && !l && c != '-' && c != '_';
+            }
+            if (other > 0) {
+                return false;
+            }
+            return (s.size() >= 20 && letters >= 4 && digits >= 4) || (s.size() >= 16 && hex == (int) s.size() && digits >= 4);
+        }
+
         bool splitUrl(std::string_view url, Authority &a) {
             a.scheme = schemeOf(url);
             if (a.scheme.empty()) {
@@ -379,7 +397,14 @@ namespace m3u {
         std::string out = lower(a.host);
         if (!last.empty()) {
             out += slash == 0 ? "/" : "/\xE2\x80\xA6/";   // host/…/name: inner segments may be credentials
-            out += std::string(last);
+            // a token as the file name (".../a91f0c...e3.m3u8", a UUID): shown as "…" + its extension
+            size_t dot = last.rfind('.');
+            std::string_view stem = dot == std::string_view::npos ? last : last.substr(0, dot);
+            if (tokenLike(stem)) {
+                out += "\xE2\x80\xA6" + std::string(dot == std::string_view::npos ? "" : last.substr(dot));
+            } else {
+                out += std::string(last);
+            }
         }
         return out;
     }

@@ -10,3 +10,5 @@
 # M3U parser fixtures: exact bytes (LF / CRLF / CR line ends, BOM, invalid UTF-8, UTF-16)
 tests/fixtures/m3u/* -text
 *.sh text eol=lf
+# subtitle fixtures: exact bytes (CRLF + BOM, invalid UTF-8)
+tests/fixtures/subtitles/* -text

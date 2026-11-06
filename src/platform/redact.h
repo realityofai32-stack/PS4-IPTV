@@ -37,6 +37,11 @@ namespace redact {
     std::string apply(const std::string &text);
 
     UrlInfo parseUrl(const std::string &url);
+
+    // Every URL in `text` ("scheme://...") cut to its origin: "scheme://host[:port]/[...]" (user information, path,
+    // query and fragment dropped), then apply(). For lines of third-party logs (mpv "Playing: <url>", FFmpeg
+    // "Opening '<url>' for reading") whose URLs can carry provider tokens in the path that no rule recognises.
+    std::string urlsToOrigins(const std::string &text);
 }
 
 #endif // PS4IPTV_PLATFORM_REDACT_H

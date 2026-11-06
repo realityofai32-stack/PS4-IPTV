@@ -269,15 +269,16 @@ namespace ui {
         RectangleShape *underline;
     };
 
-    TopNav::TopNav(const std::string &brandName, const std::vector<std::string> &sections, const std::vector<Icon> &icons)
+    TopNav::TopNav(const std::vector<std::string> &sections, const std::vector<Icon> &icons)
             : RectangleShape(FloatRect(theme::SAFE_X, layout::home::NAV_Y, theme::CONTENT_W, layout::home::NAV_H)) {
         using namespace layout::home;
         setFillColor(theme::none());
         const float h = getSize().y;
-        auto *brand = new Brand(brandName, BRAND_MARK_H, theme::HEADING);
-        brand->setPosition(0, std::round((h - BRAND_MARK_H) / 2));
-        add(brand);
-        float x = brand->getSize().x + TABS_GAP;
+        // the V7 symbol alone: the product name is not repeated in the navigation
+        auto *mark = new BrandMark(BRAND_MARK_H);
+        mark->setPosition(0, std::round((h - BRAND_MARK_H) / 2));
+        add(mark);
+        float x = mark->getSize().x + TABS_GAP;
         for (const std::string &s: sections) {
             auto *tab = new NavTab(s, x, TAB_H);
             tab->setPosition(x, std::round((h - TAB_H) / 2));

@@ -1,6 +1,10 @@
 // Exact resume, Continue Watching, Recently Watched, persistence, Series main button and HUD timing.
 
 #include <cstdlib>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 #include "check.h"
 #include "../../src/app/series_plan.h"
@@ -648,4 +652,120 @@ TEST(continue_watching_remove_storage_bounded) {
     fromFile.setProfile("p1");
     CHECK(fromFile.continueWatching(10).size() == 1);
     CHECK(fromFile.serializeHistory().find("dismissed") == std::string::npos);
+}
+
+namespace {
+    HistoryEntry movieAt(const std::string &id, double pos) {
+        HistoryEntry e;
+        e.type = ContentType::Movie;
+        e.id = id;
+        e.name = "Movie " + id;
+        e.position = pos;
+        e.duration = 6000;
+        e.watchedAt = 1700000000;
+        return e;
+    }
+
+    std::string fileText(const std::string &path) {
+        std::string s;
+        fs::readFile(path, s, 16u * 1024 * 1024);
+        return s;
+    }
+}
+
+TEST(library_saves_only_what_changed) {
+    std::string dir = tempDir("lib_snapshot");
+    LibraryStore lib(dir);
+    lib.load();
+    lib.setProfile("p1");
+    lib.updateProgress(movieAt("m1", 100));
+    CHECK(lib.save());
+    CHECK(fs::exists(fs::join(dir, "favorites.json")) && fs::exists(fs::join(dir, "history.json")));
+    // nothing changed: no file is rewritten (no fsync every 15 s during playback for nothing)
+    fs::removeFile(fs::join(dir, "favorites.json"));
+    LibraryStore::Snapshot s;
+    CHECK(!lib.snapshot(s));
+    CHECK(lib.save());
+    CHECK(!fs::exists(fs::join(dir, "favorites.json")));
+    // a progress update rewrites history.json only
+    lib.updateProgress(movieAt("m1", 160));
+    CHECK(lib.snapshot(s) && s.writeHistory && !s.writeFavorites);
+    CHECK(lib.write(s));
+    CHECK(!fs::exists(fs::join(dir, "favorites.json")));
+    lib.toggleFavorite(ContentType::Movie, "m1");
+    CHECK(lib.snapshot(s) && s.writeFavorites && !s.writeHistory);
+    CHECK(lib.write(s));
+    CHECK(fs::exists(fs::join(dir, "favorites.json")));
+}
+
+TEST(library_background_writes_never_go_back_in_time) {
+    std::string dir = tempDir("lib_order");
+    LibraryStore lib(dir);
+    lib.load();
+    lib.setProfile("p1");
+    lib.updateProgress(movieAt("m1", 100));
+    LibraryStore::Snapshot a, b, c;
+    CHECK(lib.snapshot(a));                     // both files (first snapshot)
+    lib.updateProgress(movieAt("m1", 200));
+    CHECK(lib.snapshot(b) && b.writeHistory);   // newer history
+    lib.toggleFavorite(ContentType::Movie, "m2");
+    CHECK(lib.snapshot(c) && c.writeFavorites && !c.writeHistory);
+    // the worker writes the newer snapshots first, the old one last: it must not overwrite them
+    CHECK(lib.write(c));
+    CHECK(lib.write(b));
+    CHECK(lib.write(a));
+    LibraryStore back(dir);
+    back.load();
+    back.setProfile("p1");
+    const HistoryEntry *p = back.progressOf(ContentType::Movie, "m1");
+    CHECK(p != nullptr && p->position == 200);
+    CHECK(back.isFavorite(ContentType::Movie, "m2"));
+}
+
+TEST(library_failed_write_is_repeated_by_the_next_save) {
+    std::string dir = tempDir("lib_fail");
+    std::string blocked = fs::join(dir, "not-a-dir");
+    fs::writeFileReplace(blocked, "x");                 // a file where the library folder should be
+    LibraryStore lib(fs::join(blocked, "sub"));
+    lib.setProfile("p1");
+    lib.updateProgress(movieAt("m1", 50));
+    std::string err;
+    CHECK(!lib.save(&err));
+    CHECK(!err.empty());
+    // nothing changed in memory, but the failed files are written by the next attempt
+    LibraryStore::Snapshot s;
+    CHECK(lib.snapshot(s) && s.writeHistory && s.writeFavorites);
+}
+
+TEST(library_concurrent_background_writes_and_snapshots) {
+    std::string dir = tempDir("lib_threads");
+    LibraryStore lib(dir);
+    lib.load();
+    lib.setProfile("p1");
+    std::vector<std::thread> writers;
+    std::mutex queueLock;
+    std::vector<std::shared_ptr<LibraryStore::Snapshot>> queue;
+    for (int i = 1; i <= 200; i++) {
+        lib.updateProgress(movieAt("m1", i * 10.0));
+        auto s = std::make_shared<LibraryStore::Snapshot>();
+        if (lib.snapshot(*s)) {
+            writers.emplace_back([&lib, s] { lib.write(*s); });
+        }
+        if (writers.size() >= 8) {
+            for (auto &t: writers) {
+                t.join();
+            }
+            writers.clear();
+        }
+    }
+    for (auto &t: writers) {
+        t.join();
+    }
+    CHECK(lib.save());   // the final synchronous save (app exit)
+    LibraryStore back(dir);
+    back.load();
+    back.setProfile("p1");
+    const HistoryEntry *p = back.progressOf(ContentType::Movie, "m1");
+    CHECK(p != nullptr && p->position == 2000);
+    CHECK(fileText(fs::join(dir, "history.json")).find("\"m1\"") != std::string::npos);
 }
