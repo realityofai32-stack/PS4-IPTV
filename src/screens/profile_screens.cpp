@@ -49,7 +49,7 @@ namespace {
             downloadsButton = new ui::Button(tr("home.downloads"), FloatRect(bx + 2 * (bw + gap), 640, bw, 88));
             downloadsButton->setVisibility(hasDownloads ? Visibility::Visible : Visibility::Hidden);
             add(downloadsButton);
-            screens::hintBar(this, {{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("common.exit")}});
+            screens::hintBar(this, {{A::Confirm, tr("common.select")}, {A::Back, tr("common.exit")}});
             refresh();
         }
 
@@ -354,7 +354,7 @@ namespace {
             if (index >= (int) profiles.size()) {
                 detailTitle->setText(tr("profiles.add_title"));
                 detailBody->setText(tr("profiles.add_text"));
-                hints->setHints({{ui::Glyph::Cross, tr("common.add")}, {ui::Glyph::Circle, tr("common.back")}});
+                hints->setHints({{A::Confirm, tr("common.add")}, {A::Back, tr("common.back")}});
                 return;
             }
             const Profile &p = profiles[(size_t) index];
@@ -377,9 +377,9 @@ namespace {
                 }
             }
             detailBody->setText(body);
-            hints->setHints({{ui::Glyph::Cross, tr(p.isPlaylist() ? "profiles.open" : "profiles.connect")},
-                             {ui::Glyph::Square, tr("common.edit")}, {ui::Glyph::Triangle, tr("common.delete")},
-                             {ui::Glyph::Options, tr("profiles.options")}, {ui::Glyph::Circle, tr("common.back")}});
+            hints->setHints({{A::Confirm, tr(p.isPlaylist() ? "profiles.open" : "profiles.connect")},
+                             {A::Edit, tr("common.edit")}, {A::DeleteItem, tr("common.delete")},
+                             {A::Options, tr("profiles.options")}, {A::Back, tr("common.back")}});
         }
 
         ui::ListView *list;
@@ -437,7 +437,7 @@ namespace {
             spinner->setPosition(40, 110);
             spinner->setVisibility(Visibility::Hidden);
             status->add(spinner);
-            screens::hintBar(this, {{ui::Glyph::Cross, tr("profile.hint_edit")}, {ui::Glyph::Circle, tr("common.cancel")}});
+            screens::hintBar(this, {{A::Confirm, tr("profile.hint_edit")}, {A::Back, tr("common.cancel")}});
             setStatus(tr(isNew ? "profile.status_new" : "profile.status_edit"), theme::textSecondary());
             refresh();
         }

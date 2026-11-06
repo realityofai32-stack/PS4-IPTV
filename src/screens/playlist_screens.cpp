@@ -84,7 +84,7 @@ namespace {
             spinner->setPosition(40, 110);
             spinner->setVisibility(Visibility::Hidden);
             status->add(spinner);
-            screens::hintBar(this, {{ui::Glyph::Cross, tr("profile.hint_edit")}, {ui::Glyph::Circle, tr("common.cancel")}});
+            screens::hintBar(this, {{A::Confirm, tr("profile.hint_edit")}, {A::Back, tr("common.cancel")}});
             setStatus(tr(isNew ? "playlist.status_new" : "playlist.status_edit"), theme::textSecondary());
             refresh();
         }
@@ -334,7 +334,7 @@ namespace {
                 values[i]->setAlign(ui::Align::Right, panel->getSize().x - 48);
                 values[i]->setMaxWidth(900);
             }
-            screens::hintBar(this, {{ui::Glyph::Cross, tr("m3u.refresh")}, {ui::Glyph::Circle, tr("common.back")}});
+            screens::hintBar(this, {{A::Confirm, tr("m3u.refresh")}, {A::Back, tr("common.back")}});
             fill();
         }
 
@@ -441,7 +441,7 @@ namespace {
                                      theme::accentText());
                 pv->setMaxWidth(cardW - 96);
             }
-            screens::hintBar(this, {{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("common.back")}});
+            screens::hintBar(this, {{A::Confirm, tr("common.select")}, {A::Back, tr("common.back")}});
             refresh();
         }
 

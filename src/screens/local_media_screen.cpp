@@ -146,7 +146,8 @@ namespace {
             }
             LOG_I("localmedia", "%d storage location(s) available", (int) roots.size());
             context->set("", "");
-            empty->set(rows.empty() ? tr("localmedia.no_storage") : "", rows.empty() ? tr("localmedia.no_storage_text") : "");
+            noStorage = rows.empty();
+            showNoStorage();
             list->setSelected(0);
             list->reload();
             setHints();
@@ -156,6 +157,7 @@ namespace {
         void showFolder(const std::string &path, int select = 0) {
             localmedia::Listing l = localmedia::list(*root, path, formats);
             folder = path;
+            noStorage = false;
             rows.clear();
             if (l.ok) {
                 for (const auto &e: l.entries) {
@@ -263,15 +265,28 @@ namespace {
 
         void setHints() {
             if (root == nullptr) {
-                hints->setHints({{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::Triangle, tr("localmedia.rescan")},
-                                 {ui::Glyph::Circle, tr("common.back")}});
+                hints->setHints({{A::Confirm, tr("common.open")}, {A::Refresh, tr("localmedia.rescan")},
+                                 {A::Back, tr("common.back")}});
             } else {
-                hints->setHints({{ui::Glyph::Cross, tr("localmedia.open_play")},
-                                 {ui::Glyph::Triangle, tr("localmedia.refresh")},
-                                 {ui::Glyph::Circle, tr("localmedia.up")}});
+                hints->setHints({{A::Confirm, tr("localmedia.open_play")},
+                                 {A::Refresh, tr("localmedia.refresh")},
+                                 {A::Back, tr("localmedia.up")}});
             }
         }
 
+        // the storage list with no location: "Connect a USB drive and press {key}"
+        void showNoStorage() {
+            empty->set(noStorage ? tr("localmedia.no_storage") : "",
+                       noStorage ? tr("localmedia.no_storage_text", {screens::keyName(A::Refresh)}) : "");
+        }
+
+        void onInputDeviceChanged() override {
+            if (noStorage) {
+                showNoStorage();
+            }
+        }
+
+        bool noStorage = false;
         localmedia::Formats formats;
         std::vector<localmedia::Root> roots;
         const localmedia::Root *root = nullptr;

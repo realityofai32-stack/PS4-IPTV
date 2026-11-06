@@ -159,8 +159,8 @@ namespace {
             credits->setMaxLines(2);
             tech = ui::label(this, "", theme::CAPTION, x, 0, ui::Weight::Regular, theme::textMuted());
             tech->setMaxWidth(w);
-            screens::hintBar(this, {{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Square, tr("common.favorite")},
-                                    {ui::Glyph::Circle, tr("common.back")}});
+            screens::hintBar(this, {{A::Confirm, tr("common.select")}, {A::Favorite, tr("common.favorite")},
+                                    {A::Back, tr("common.back")}});
             app.vod().requestMovieInfo(app.session().profile, movie.streamId);
             refresh();
         }
@@ -428,7 +428,7 @@ namespace {
             }
 
             const HistoryEntry *p = app.library().progressOf(ContentType::Movie, movie.streamId);
-            bool resumable = p && progress::inProgress(p->position, p->duration, p->watched);
+            bool resumable = p && progress::inProgress(*p);
             bool watched = p && p->watched;
             if (resumable) {
                 progressText->setText(tr("detail.stopped_at", {fmt::remaining(p->position, p->duration),
@@ -604,6 +604,10 @@ namespace {
 
         void onPause() override {
             app.images().want(std::vector<ImageRequest>());
+        }
+
+        void onInputDeviceChanged() override {
+            refreshAll();   // "Press {key} to try again"
         }
 
         void onResume() override {
@@ -1106,14 +1110,14 @@ namespace {
             buildChips();
             requestImages();   // stills of the episodes now on screen
             if (focus == 2) {
-                hints->setHints({{ui::Glyph::Cross, tr("common.play")},
-                                 {ui::Glyph::Square, tr(app.session().profile.supportsDownloads() ? "download.download"
-                                                                                                  : "common.favorite")},
-                                 {ui::Glyph::Options, tr("detail.episode_options")}, {ui::Glyph::L1, ""},
-                                 {ui::Glyph::R1, tr("detail.season")}, {ui::Glyph::Circle, tr("common.back")}});
+                const bool dl = app.session().profile.supportsDownloads();
+                hints->setHints({{A::Confirm, tr("common.play")},
+                                 {dl ? A::Download : A::Favorite, tr(dl ? "download.download" : "common.favorite")},
+                                 {A::Options, tr("detail.episode_options")},
+                                 {A::Tabs, tr("detail.season")}, {A::Back, tr("common.back")}});
             } else {
-                hints->setHints({{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("detail.season")},
-                                 {ui::Glyph::Square, tr("common.favorite")}, {ui::Glyph::Circle, tr("common.back")}});
+                hints->setHints({{A::Confirm, tr("common.select")}, {A::Tabs, tr("detail.season")},
+                                 {A::Favorite, tr("common.favorite")}, {A::Back, tr("common.back")}});
             }
         }
 
@@ -1216,7 +1220,8 @@ namespace {
             if (loading) {
                 stateText->setText(tr("detail.loading_episodes"));
             } else if (!info) {
-                stateText->setText(tr(app.session().offline ? "detail.episodes_offline" : "detail.episodes_failed", {error}));
+                stateText->setText(app.session().offline ? tr("detail.episodes_offline", {error})
+                                                         : tr("detail.episodes_failed", {error, screens::keyName(A::Confirm)}));
             } else if (info->seasons.empty()) {
                 stateText->setText(tr("detail.no_episodes"));
             } else {

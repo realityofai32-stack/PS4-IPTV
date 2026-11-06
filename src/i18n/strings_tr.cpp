@@ -251,7 +251,7 @@ namespace i18n {
             {"live.favorites_caption", "FAVORİLER"},
             {"live.all_caption", "TÜM KANALLAR"},
             {"live.list_failed", "Kanal listesi yüklenemedi. Geri dönüp Profiller'den yeniden bağlanın."},
-            {"live.no_favorites", "Henüz favori kanal yok. Eklemek için bir kanalda kare tuşuna basın."},
+            {"live.no_favorites", "Henüz favori kanal yok. Eklemek için bir kanalda {0} tuşuna basın."},
             {"live.empty_category", "Bu kategoride kanal yok."},
             {"live.category", "Kategori"},
             {"live.categories", "Kategoriler"},
@@ -288,8 +288,8 @@ namespace i18n {
             {"browse.recently_added", "Son eklenenler"},
             {"browse.continue", "İzlemeye devam et"},
             {"browse.first_time", "İlk seferde bu biraz zaman alabilir."},
-            {"browse.press_x_retry", "Tekrar denemek için kategorilerde X'e basın."},
-            {"browse.no_favorites", "Henüz favori yok. Bir afişte kare tuşuna basın."},
+            {"browse.press_x_retry", "Tekrar denemek için kategorilerde {0} tuşuna basın."},
+            {"browse.no_favorites", "Henüz favori yok. Bir afişte {0} tuşuna basın."},
             {"browse.nothing_continue", "Henüz devam edilecek bir şey yok."},
             {"browse.empty_category", "Bu kategoride içerik yok."},
             {"browse.refreshing", "Yenileniyor…"},
@@ -330,7 +330,7 @@ namespace i18n {
             {"detail.seasons.other", "{0} sezon"},
             {"detail.per_episode", "bölüm başına {0} dk"},
             {"detail.loading_episodes", "Bölümler yükleniyor…"},
-            {"detail.episodes_failed", "Bölümler yüklenemedi ({0}). Tekrar denemek için X'e basın."},
+            {"detail.episodes_failed", "Bölümler yüklenemedi ({0}). Tekrar denemek için {1} tuşuna basın."},
             {"detail.episodes_offline", "Bölüm listesi çevrimdışı kullanılamıyor ({0}). İndirilen bölümler "
                                         "İndirmeler'de."},
             {"detail.no_episodes", "Sağlayıcı bu dizi için bölüm listelemiyor."},
@@ -342,9 +342,9 @@ namespace i18n {
             // ---------------------------------------------------------------- favoriler / arama
             {"favorites.tab_channels", "Kanallar"},
             {"favorites.type", "Tür"},
-            {"favorites.empty_channels", "Henüz favori kanal yok. Eklemek için birinde kare tuşuna basın."},
-            {"favorites.empty_movies", "Henüz favori film yok. Eklemek için birinde kare tuşuna basın."},
-            {"favorites.empty_series", "Henüz favori dizi yok. Eklemek için birinde kare tuşuna basın."},
+            {"favorites.empty_channels", "Henüz favori kanal yok. Eklemek için birinde {0} tuşuna basın."},
+            {"favorites.empty_movies", "Henüz favori film yok. Eklemek için birinde {0} tuşuna basın."},
+            {"favorites.empty_series", "Henüz favori dizi yok. Eklemek için birinde {0} tuşuna basın."},
             {"search.filter_all", "Tümü"},
             {"search.placeholder", "Bir başlık veya kanal yazın"},
             {"search.summary.one", "“{1}” için {0} sonuç"},
@@ -401,8 +401,6 @@ namespace i18n {
             {"player.up_next", "Sıradaki"},
             {"player.last_episode", "Son bölümü bitirdiniz"},
             {"player.the_end", "Son"},
-            {"player.end_hint_play_next", "X  Sonrakini oynat          Daire  Geri"},
-            {"player.end_hint_again", "X  Tekrar izle          Daire  Geri"},
             {"player.chip_audio", "Ses: {0}"},
             {"player.chip_subtitles", "Altyazı: {0}"},
             {"player.offline_copy", "İndirilen kopya"},
@@ -412,15 +410,28 @@ namespace i18n {
             {"player.options", "Seçenekler"},
             {"player.info", "Bilgi"},
             {"player.next_episode", "Sonraki bölüm"},
-            {"player.next_countdown", "{0} saniye içinde oynatılacak…"},
             {"player.next_play_now", "Şimdi oynat"},
+            {"player.play_next", "Sonrakini oynat"},
+            {"player.watch_again", "Tekrar izle"},
+            {"player.retry_now", "Şimdi dene"},
+            {"player.retry", "Yeniden dene"},
+            {"player.next_eyebrow", "SONRAKİ BÖLÜM"},
+            {"player.watch_credits", "Jeneriği izle"},
+            {"player.next_seconds", "{0} sn"},
+            {"home.up_next", "Sıradaki bölüm"},
+            {"home.hero_play_next", "{0} oynat"},
+            {"keys.space", "Boşluk"},
+            {"buttons.cross", "X"},
+            {"buttons.circle", "Daire"},
+            {"buttons.square", "Kare"},
+            {"buttons.triangle", "Üçgen"},
+            {"buttons.options", "OPTIONS"},
+            {"buttons.dpad", "Yön tuşları"},
             {"player.attempt_of", "{0} / {1}"},
             {"player.attempt", "Deneme {0}"},
             {"player.resuming_at", "{0} konumundan devam ediliyor…"},
             {"player.next_attempt", "Bağlantı koptu. Sonraki deneme {0} sn içinde  (deneme {1})"},
             {"player.retrying_in", "{0} sn içinde yeniden deneniyor…  (deneme {1})"},
-            {"player.hint_retry_now", "X  Şimdi dene          Daire  İptal"},
-            {"player.hint_retry", "X  Yeniden dene          Daire  Geri"},
             {"player.title_unavailable", "Bu içerik kullanılamıyor"},
             {"player.gave_up", "Otomatik yeniden bağlanma {0} denemeden sonra durdu."},
             {"recovery.status.opening", "açılıyor"},
@@ -537,8 +548,7 @@ namespace i18n {
             {"downloads.paused_for_playback", "oynatma sırasında duraklatıldı"},
             {"downloads.tab_downloading", "İndiriliyor  {0}"},
             {"downloads.tab_downloaded", "İndirilenler  {0}"},
-            {"downloads.empty_active", "İndirilen bir şey yok. Bir filmde İndir'i seçin veya bir bölümde kare tuşuna "
-                                       "basın."},
+            {"downloads.empty_active", "İndirilen bir şey yok. Bir filmde İndir'i seçin veya bir bölümde {0} tuşuna basın."},
             {"downloads.empty_done", "İndirilen filmler ve bölümler burada görünür ve internet bağlantısı olmadan "
                                      "oynatılır."},
             {"downloads.profile", "Profil: {0}"},
@@ -653,20 +663,14 @@ namespace i18n {
                                              "sınırlı sayıda, her denemede biraz daha bekleyerek kendiliğinden yeniden "
                                              "bağlanır. Sağlayıcı yayını reddederse (HTTP 403) geri sayar ve tekrar "
                                              "dener."},
-            {"settings.retry_stall.off_desc", "Kapalı: oynatıcı takılmadan sonra arabelleğe almaya devam eder ve asla "
-                                              "kendiliğinden yeniden bağlanmaz. Yeniden bağlanmak için oynatma sırasında "
-                                              "X'e basın."},
+            {"settings.retry_stall.off_desc", "Kapalı: oynatıcı takılmadan sonra arabelleğe almaya devam eder ve asla kendiliğinden yeniden bağlanmaz. Yeniden bağlanmak için oynatıcıda Yeniden dene'yi seçin."},
             {"settings.audio_language", "Tercih edilen ses dili"},
             {"settings.audio_language.auto", "Otomatik (dosya varsayılanı)"},
-            {"settings.audio_language.desc", "Dosyada bu dilde bir ses parçası varsa filmler ve bölümler onunla başlar "
-                                             "(yorum parçaları atlanır). Otomatik, dosyanın varsayılan olarak "
-                                             "işaretlediği parçayı oynatır. Dosyadaki tüm parçalar oynatma sırasında "
-                                             "OPTIONS tuşuyla seçilebilir."},
+            {"settings.audio_language.desc", "Dosyada bu dilde bir ses parçası varsa filmler ve bölümler onunla başlar (yorum parçaları atlanır). Otomatik, dosyanın varsayılan olarak işaretlediği parçayı oynatır. Dosyadaki tüm parçalar oynatma sırasında Oynatma seçenekleri'nden seçilebilir."},
             {"settings.subtitles", "Altyazılar"},
             {"settings.subtitles.auto", "Otomatik"},
             {"settings.subtitles.always", "Varsa açık"},
-            {"settings.subtitles.off_desc", "Kapalı: altyazılar kendiliğinden açılmaz. Oynatma sırasında OPTIONS "
-                                            "tuşuyla yine de bir altyazı seçebilirsiniz."},
+            {"settings.subtitles.off_desc", "Kapalı: altyazılar kendiliğinden açılmaz. Oynatma sırasında Oynatma seçenekleri'nden yine de bir altyazı seçebilirsiniz."},
             {"settings.subtitles.always_desc", "Varsa açık: dosyada altyazı varsa, mümkünse altyazı dilinizde, her zaman "
                                                "bir altyazı gösterilir."},
             {"settings.subtitles.auto_desc", "Otomatik: ses başka bir dildeyken altyazı dilinizdeki altyazılar açılır. "
@@ -676,29 +680,19 @@ namespace i18n {
             {"settings.subtitle_language.same", "Sesle aynı"},
             {"settings.subtitle_language.desc", "Altyazıların seçileceği dil. “Sesle aynı”, tercih edilen ses dilini "
                                                 "kullanır. Altyazılar video dosyalarının içinde gömülüdür."},
-            {"settings.subtitle_size.desc", "Metin altyazıların (SRT, ASS) yazı boyutu. Oynatma sırasında OPTIONS "
-                                            "menüsünde de bulunur."},
+            {"settings.subtitle_size.desc", "Metin altyazıların (SRT, ASS) yazı boyutu. Oynatma sırasında Oynatma seçenekleri'nde de bulunur."},
             {"settings.subtitle_position.desc", "Yukarıda, altyazıları alt kenardan uzaklaştırır (TV görüntüyü "
                                                 "kırpıyorsa kullanışlıdır)."},
             {"settings.subtitle_shadow.desc", "Parlak sahneler için kenarlıklı altyazı metninin arkasına koyu bir gölge "
                                               "ekler."},
             {"settings.aspect", "Varsayılan en boy oranı"},
-            {"settings.aspect.desc", "{0}\n\nBir film, bölüm veya kanal başladığında görüntünün gösterileceği "
-                                     "biçim. Otomatik / Kaynak videonun kendi biçimini kullanır; sabit bir oran "
-                                     "görüntüyü esnetilmiş veya sıkıştırılmış gösterebilir ama hiçbir yer kesilmez. "
-                                     "Oynatma sırasında OPTIONS menüsü onu yalnızca o oynatma için değiştirir."},
+            {"settings.aspect.desc", "{0}\n\nBir film, bölüm veya kanal başladığında görüntünün gösterileceği biçim. Otomatik / Kaynak videonun kendi biçimini kullanır; sabit bir oran görüntüyü esnetilmiş veya sıkıştırılmış gösterebilir ama hiçbir yer kesilmez. Oynatma sırasında Oynatma seçenekleri onu yalnızca o oynatma için değiştirir."},
             {"settings.crop", "Varsayılan kırpma"},
-            {"settings.crop.desc", "{0}\n\nYok hiçbir yeri kesmez. Ekranı Doldur ekranı bozulma olmadan doldurur ve "
-                                   "sığmayanı keser. Bir oran, görüntünün yalnızca o biçimdeki orta kısmını bırakır "
-                                   "(örneğin 2.39:1, videonun parçası olan siyah şeritleri kaldırır). Oynatma "
-                                   "sırasında OPTIONS menüsü onu yalnızca o oynatma için değiştirir."},
-            {"settings.zoom.desc", "Görüntüyü en boy oranı ve kırpmanın üzerine büyütür (en fazla %150). Oynatma "
-                                   "sırasında OPTIONS menüsü onu yalnızca o oynatma için değiştirir."},
+            {"settings.crop.desc", "{0}\n\nYok hiçbir yeri kesmez. Ekranı Doldur ekranı bozulma olmadan doldurur ve sığmayanı keser. Bir oran, görüntünün yalnızca o biçimdeki orta kısmını bırakır (örneğin 2.39:1, videonun parçası olan siyah şeritleri kaldırır). Oynatma sırasında Oynatma seçenekleri onu yalnızca o oynatma için değiştirir."},
+            {"settings.zoom.desc", "Görüntüyü en boy oranı ve kırpmanın üzerine büyütür (en fazla %150). Oynatma sırasında Oynatma seçenekleri onu yalnızca o oynatma için değiştirir."},
             {"settings.zoom", "Varsayılan yakınlaştırma"},
             {"settings.tech_info", "Teknik oynatma bilgisini göster"},
-            {"settings.tech_info.desc", "Oynatma başladığında yayın bilgi panelini (çözünürlük, kodekler, arabellek, ağ "
-                                        "hızı, yeniden bağlanma denemeleri) gösterir. Üçgen tuşu onu istediğiniz zaman "
-                                        "açıp kapatır."},
+            {"settings.tech_info.desc", "Oynatma başladığında yayın bilgi panelini (çözünürlük, kodekler, arabellek, ağ hızı, yeniden bağlanma denemeleri) gösterir. Oynatma seçenekleri'nden istediğiniz zaman açılıp kapatılabilir."},
             {"settings.images", "Logoları ve afişleri yükle"},
             {"settings.images.desc", "Kanal logolarını ve afişleri sağlayıcınızdan indirip konsolda saklar. Kapalı: "
                                      "bunların yerine başlıklar ve baş harfler gösterilir, görsel indirilmez."},
@@ -707,9 +701,7 @@ namespace i18n {
                                      "Devam Et). Kapalı: her zaman baştan başlar; ilerleme yine de hatırlanır. Canlı "
                                      "TV için geçerli değildir."},
             {"settings.autoplay", "Sonraki bölümü otomatik oynat"},
-            {"settings.autoplay.desc", "Açık: bölümün son 45 saniyesinde bir geri sayım sonraki bölümü gösterir; bölüm "
-                                       "bitince başlar (X: şimdi oynat, Daire: iptal). Kapalı: bölüm bitince sonraki "
-                                       "bölüm önerilir ve X'e bastığınızda başlar."},
+            {"settings.autoplay.desc", "Açık: bölüm bitmeden 7 saniye önce küçük bir kart sonraki bölümü gösterir ve geri sayım bitince oynatır (Şimdi oynat hemen başlatır, Jeneriği izle izlemeye devam eder). Kapalı: bölüm bitince sonraki bölüm önerilir."},
             {"settings.retry_downloads", "İndirmeleri otomatik yeniden dene"},
             {"settings.retry_downloads.desc", "Açık: bağlantı koptuğunda indirmeler bekler ve giderek daha seyrek "
                                               "deneyerek kaldıkları yerden kendiliğinden devam eder. Kapalı: kesilen "
@@ -909,7 +901,7 @@ namespace i18n {
             {"appearance.title", "Görünüm"},
             {"appearance.accent", "Vurgu rengi"},
             {"appearance.accent.desc", "Odak çerçevelerinin, ana düğmelerin, seçili sekmelerin ve ilerleme çubuklarının rengi. Arka planlar, görseller ve video kendi renklerini korur."},
-            {"appearance.accent.current", "Geçerli vurgu: {0}. Bir rengi uygulamak için X'e basın; hemen kaydedilir."},
+            {"appearance.accent.current", "Geçerli vurgu: {0}. Bir rengi uygulamak için {1} tuşuna basın; hemen kaydedilir."},
             {"appearance.accent.applied", "Vurgu rengi: {0}"},
             {"appearance.accent.blue", "V7 Mavisi"},
             {"appearance.accent.cyan", "Camgöbeği"},
@@ -998,7 +990,7 @@ namespace i18n {
             {"localmedia.kind_storage", "Depolama"},
             {"localmedia.kind_folder", "Klasör"},
             {"localmedia.no_storage", "Depolama bulunamadı"},
-            {"localmedia.no_storage_text", "Ne dahili depolama ne de bir USB sürücü açılabiliyor. Bir USB sürücü takıp Üçgen'e basın."},
+            {"localmedia.no_storage_text", "Ne dahili depolama ne de bir USB sürücü açılabiliyor. Bir USB sürücü takıp {0} tuşuna basın."},
             {"localmedia.empty", "Burada oynatılabilir dosya yok"},
             {"localmedia.empty_text", "Bu klasörde alt klasör ya da oynatıcının desteklediği bir video veya ses dosyası yok."},
             {"localmedia.unreadable", "Bu klasör açılamıyor"},

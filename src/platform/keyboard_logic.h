@@ -48,6 +48,7 @@ namespace kbd {
         std::string text;
         bool repeat = false;
         int repeatCount = 0;
+        bool shift = false;   // a Shift key was held (Shift+Tab = previous)
     };
 
     // libSceKeyboard bits (orbis/_types/keyboard.h)

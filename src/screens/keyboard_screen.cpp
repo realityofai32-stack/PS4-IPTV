@@ -62,10 +62,10 @@ namespace {
                 }
                 keys.push_back(line);
             }
-            screens::hintBar(this, {{ui::Glyph::Cross, tr("keyboard.hint_type")},
-                                    {ui::Glyph::Square, tr("keyboard.hint_backspace")},
-                                    {ui::Glyph::Triangle, tr("keyboard.hint_space")}, {ui::Glyph::L2, tr("keyboard.hint_shift")},
-                                    {ui::Glyph::R2, tr("keyboard.hint_done")}, {ui::Glyph::Circle, tr("common.cancel")}});
+            screens::hintBar(this, {{A::Type, tr("keyboard.hint_type")},
+                                    {A::TextBackspace, tr("keyboard.hint_backspace")},
+                                    {A::TextSpace, tr("keyboard.hint_space")}, {A::TextShift, tr("keyboard.hint_shift")},
+                                    {A::TextDone, tr("keyboard.hint_done")}, {A::Back, tr("common.cancel")}});
             refresh();
         }
 
@@ -217,7 +217,7 @@ namespace {
                 btns.push_back(b);
                 x += bw + 24;
             }
-            screens::hintBar(this, {{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("common.back")}});
+            screens::hintBar(this, {{A::Confirm, tr("common.select")}, {A::Back, tr("common.back")}});
             refresh();
         }
 
@@ -283,8 +283,9 @@ namespace {
                                                                     + ui::ScrollBar::GAP, 760), 84, 4, this);
             panel->add(list);
             auto *hints = new ui::HintBar();
+            hints->setOwner(this);
             hints->setPosition(P::OPTIONS_PAD, layout::HINTS_Y);
-            hints->setHints({{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("common.back")}});
+            hints->setHints({{A::Confirm, tr("common.select")}, {A::Back, tr("common.back")}});
             panel->add(hints);
             list->setSelected(checked >= 0 ? checked : 0);
         }

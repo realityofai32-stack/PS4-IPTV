@@ -7,6 +7,7 @@
 //              position queried from mpv right before stopping, so the last seconds since the periodic
 //              sample are never lost. During a seek the requested target is the position.
 //   due()      periodic updates: the store every MEMORY_EVERY seconds, history.json every DISK_EVERY
+//   setCompleted()  the last 45 s were reached (CompletionLatch): records say watched from then on
 // Local Media items (VodItem::localMedia) are never recorded: begin() returns 0, due() None, record() false.
 
 #ifndef PS4IPTV_APP_VOD_PROGRESS_H
@@ -50,6 +51,12 @@ public:
     // (playback never got past its first second); existing progress is then left untouched.
     bool record(double now, double finalPosition = -1, bool atEnd = false);
 
+    // Continue Watching completion (app/auto_next.h CompletionLatch): while set, every record() writes the item as
+    // watched at its real position (it leaves Continue Watching even if the user exits during the credits)
+    void setCompleted(bool on) { completed = on; }
+
+    bool isCompleted() const { return completed; }
+
     // what the user would resume from right now
     double position() const;
 
@@ -70,6 +77,7 @@ private:
     double lastPosition = 0;
     double knownDuration = 0;
     bool hadFrame = false;
+    bool completed = false;
     double pendingTarget = -1;
     double settleTarget = -1;
     double settleUntil = 0;

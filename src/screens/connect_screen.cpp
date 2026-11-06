@@ -74,7 +74,7 @@ namespace {
                 buttons[i]->setVisibility(Visibility::Hidden);
                 add(buttons[i]);
             }
-            hints = screens::hintBar(this, {{ui::Glyph::Circle, tr("common.cancel")}});
+            hints = screens::hintBar(this, {{A::Back, tr("common.cancel")}});
         }
 
         ~ConnectScreen() override {
@@ -171,7 +171,7 @@ namespace {
             for (auto *b: buttons) {
                 b->setVisibility(Visibility::Hidden);
             }
-            hints->setHints({{ui::Glyph::Circle, tr("common.cancel")}});
+            hints->setHints({{A::Back, tr("common.cancel")}});
             for (int i = 0; i < STEPS; i++) {
                 setStep(i, State::Pending, "");
             }
@@ -330,7 +330,7 @@ namespace {
                 buttons[i]->setVisibility(i >= firstButton() ? Visibility::Visible : Visibility::Hidden);
                 buttons[i]->setFocused(i == focus);
             }
-            hints->setHints({{ui::Glyph::Cross, tr("common.select")}, {ui::Glyph::Circle, tr("connect.profiles")}});
+            hints->setHints({{A::Confirm, tr("common.select")}, {A::Back, tr("connect.profiles")}});
         }
 
         static constexpr int STEPS = 2;

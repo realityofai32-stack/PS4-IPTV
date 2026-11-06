@@ -118,17 +118,21 @@ not distributed with V7 IPTV.</sub>
 
 ### Next Episode
 
-Series episodes support a **45-second Next Episode countdown**. During the final 45 seconds of an episode that has
-a next episode, a small panel appears in the bottom-right corner:
+About **7 seconds** before an episode that has a next episode ends, a compact card appears in the lower-right
+corner (*NEXT EPISODE · S02E05 · title*, with a thin countdown bar), clear of the subtitles:
 
-- **✕ Cross**: play the next episode now
-- **○ Circle**: cancel auto-play for this playback
+- **Play now** (✕ / Enter): play the next episode at once
+- **Watch credits** (○ / Esc): keep watching; no automatic next episode for this playback
 
-If no button is pressed, the next episode starts automatically when the current episode genuinely ends; nothing
-of the ending is cut. It works for episodes started from Series Detail and from Continue Watching, follows the
-provider's episode order across season boundaries, and respects *Settings › Playback › Auto-play next episode*
-(on by default; when off, the usual *Up next* screen appears at the end). In offline mode the next episode must
-already be downloaded.
+If nothing is pressed, the next episode starts when the card's 7 seconds run out. It works for episodes started
+from Series Detail and from Continue Watching, follows the provider's episode order across season boundaries
+(missing episode numbers are never invented), and respects *Settings › Playback › Auto-play next episode* (on by
+default; when off, the usual *Up next* screen appears at the end). In offline mode the next episode must already be
+downloaded.
+
+**Continue Watching** keeps a series in the row: leave an episode with more than 45 seconds to go and it resumes
+there; once its last 45 seconds are reached, the series' Continue Watching card moves to the next episode at once,
+whether you then exit, watch the credits or let it end. After the series' last episode the series leaves the row.
 
 ### What each source type supports
 
@@ -197,14 +201,21 @@ addresses, are stored only on the console.
 
 | Button | Action |
 |---|---|
-| ✕ | Select / open / play; in the player: pause / resume; during the Next Episode countdown: play now |
-| ○ | Back; during the Next Episode countdown: cancel auto-play |
+| ✕ | Select / open / play; in the player: pause / resume; on the Next Episode card: play now |
+| ○ | Back; on the Next Episode card: watch credits (no auto-play) |
 | □ | Favorite; on an episode: download it; on a Continue Watching card: remove it from the row |
 | △ | Search (Live TV, Movies, Series); in the player: technical info |
 | OPTIONS | Settings (Home); sort & refresh (Movies, Series); Refresh Playlist / Playlist Info (playlist sources); source actions (Sources); playback options (player) |
 | L1 / R1 | Previous / next category, season, tab or episode |
 | L2 / R2 | Page up / down; in the player: seek 1 minute |
 | D-pad ← → | Seek 10 seconds in the player |
+
+**USB / Bluetooth keyboard**: every hint on screen shows the keys of the device you are using - press a key and the
+hints switch to the keyboard, press a controller button and they switch back. Always: arrows = D-pad, Enter = ✕,
+Esc / Backspace = ○, Tab / Shift+Tab = R1 / L1, Page Up / Down = L2 / R2. Where a screen offers the action: F
+favorite, Del remove (Favorites, Continue Watching) or delete (a source), D download, P pause / resume (Downloads),
+E edit (a source), S search, O options / settings / sort, R refresh (Local Media); in the player Space play / pause,
+← → seek 10 s, N next episode, I technical info.
 
 **Accelerated hold-to-scroll**: hold a direction to scroll quickly. After 0.3 s the list moves every 90 ms, then
 60 ms, 40 ms and, after 3.5 s, every 30 ms. A short press always moves exactly one item. *Settings › Appearance ›

@@ -11,6 +11,7 @@
 
 #include "cross2d/c2d.h"
 #include "scroll_math.h"
+#include "../platform/input_actions.h"
 #include "text.h"
 #include "theme.h"
 
@@ -53,16 +54,62 @@ namespace ui {
         ButtonGlyph(Glyph glyph, float size);
     };
 
-    // bottom controller hints: [glyph] text  [glyph] text ... A glyph with an empty text is paired with the next
-    // one ([L1][R1] Category). Keep it to the actions that matter on the screen (about five).
+    // a keyboard key cap: [Enter] [Esc] [Tab] [F] - rounded corners (a key), not the controller's round pill
+    class KeyCap : public c2d::RectangleShape {
+    public:
+        KeyCap(const std::string &label, float size);
+    };
+
+    // one control hint: an action (platform/input_actions.h) and what it does on this screen
+    struct Hint {
+        actions::Action action;
+        std::string text;
+
+        bool operator==(const Hint &o) const { return action == o.action && text == o.text; }
+    };
+
+    // the glyph (controller) or key cap(s) (keyboard) of an action for the active device, added to `parent` at x;
+    // returns the width used (0: the action has no key on that device and nothing was drawn)
+    float actionGlyph(c2d::C2DObject *parent, actions::Action action, float x, float y, float size,
+                      actions::Device device);
+
+    // Bottom control hints: [glyph] text  [glyph] text ... for the device in use (actions::tracker()): DualShock 4
+    // glyphs, or keyboard key caps after a key was used. An action without a key on the active device is left out.
+    // Pairs ([L1][R1] Category) are one action (actions::Action::Tabs). Keep it to the actions that matter on the
+    // screen (about five).
+    // Every bar belongs to its screen (setOwner; screens::hintBar does it): the keyboard shortcuts of that screen
+    // are exactly the actions its bars show plus setShortcuts() (actions::route), and refreshAll() redraws every bar
+    // when the active device changes.
     class HintBar : public c2d::RectangleShape {
     public:
         HintBar();
 
-        void setHints(const std::vector<std::pair<Glyph, std::string>> &hints);
+        ~HintBar() override;
+
+        void setHints(const std::vector<Hint> &hints);
+
+        // actions whose keyboard shortcuts work on the owner screen without being shown (e.g. the player's Info)
+        void setShortcuts(const std::vector<actions::Action> &shortcuts);
+
+        void setOwner(const c2d::C2DObject *owner) { ownerScreen = owner; }
+
+        // right edge of the last hint (after a setHints / refresh)
+        float contentWidth() const { return width; }
+
+        // the actions declared by every bar of `owner` (shown and shortcuts)
+        static std::vector<actions::Action> declared(const c2d::C2DObject *owner);
+
+        // the active device changed: every bar is drawn again
+        static void refreshAll();
 
     private:
-        std::vector<std::pair<Glyph, std::string>> current;
+        void rebuild();
+
+        std::vector<Hint> current;
+        std::vector<actions::Action> extra;
+        const c2d::C2DObject *ownerScreen = nullptr;
+        actions::Device drawnFor = actions::Device::Controller;
+        float width = 0;
     };
 
     // Pill button. Primary (the main action of a screen: Play, Resume, Save...) is accent-filled; secondary is a

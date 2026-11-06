@@ -1,8 +1,9 @@
 // Series detail: which episode the main button plays, and per-episode progress states (host-testable).
 //
 // Main button:
-//   Resume SxxEyy · 24:16   the most recently played episode that is in progress (exact position)
-//   Next SxxEyy             no episode in progress, the most recently played one was completed: the one after
+//   Resume SxxEyy · 24:16   the series' Continue Watching entry is an episode in progress (exact position)
+//   Next SxxEyy             it is the next episode waiting to start (HistoryEntry::upNext), or nothing is in
+//                           progress and the most recently played episode was completed: the one after
 //   Play SxxEyy             otherwise: the episode last opened (under 5 s), or the first episode
 // Nothing is created for an episode until its playback actually starts.
 

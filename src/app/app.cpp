@@ -8,7 +8,7 @@
 #include "../network/http.h"
 #include "../platform/clock.h"
 #include "../platform/fs.h"
-#include "../platform/key_routing.h"
+#include "../platform/input_actions.h"
 #include "../platform/log.h"
 #include "../player/subtitle_font.h"
 #include "../ui/text.h"
@@ -481,7 +481,10 @@ void App::logic() {
         LOG_I("clock", "after %.0f s: %s", CLOCK_CHECK_AT, clockx::clockReport().c_str());
     }
     input.update(joystick, t);
+    actions::DeviceTracker &device = actions::tracker();
+    const unsigned deviceGen = device.generation();
     for (const auto &e: input.events()) {
+        device.controllerInput();   // a real press / repeat: the hints follow the controller
         if (top()) {
             top()->handleInput(e);
         }
@@ -490,9 +493,19 @@ void App::logic() {
     // the physical keyboard after the controller; both always work. A key that opens / closes a screen (typing on
     // a source field opens its keyboard) holds the keys after it until that screen is on top: they belong to it.
     for (const auto &k: keyboard.poll(t)) {
+        device.keyboardInput();     // a real key: the hints follow the keyboard
         if (heldKeys.size() < 64) {   // bounded: a screen that never settles cannot make it grow
             heldKeys.push_back(k);
         }
+    }
+    device.keyboardConnected(keyboard.connected());   // unplugged: back to the controller's hints
+    if (device.generation() != deviceGen) {
+        LOG_I("input", "hints follow the %s", device.active() == actions::Device::Keyboard ? "keyboard" : "controller");
+        ui::HintBar::refreshAll();
+        for (auto *s: stack) {
+            s->onInputDeviceChanged();
+        }
+        requestRedraw();
     }
     size_t used = 0;
     while (used < heldKeys.size() && pendingOps.empty()) {
@@ -524,9 +537,10 @@ void App::onKey(const kbd::Event &k) {
     if (s == nullptr || s->handleKey(k)) {
         return;
     }
-    // not taken by the screen: the controller button that means the same (navigation everywhere)
+    // not taken by the screen: the controller button that means the same - a universal key (navigation everywhere)
+    // or a shortcut of an action this screen offers (its hint bars), never a hidden one (platform/input_actions.h)
     InputEvent e;
-    if (kbd::toPad(k, e)) {
+    if (actions::route(k, ui::HintBar::declared(s), e)) {
         s->handleInput(e);
     }
 }

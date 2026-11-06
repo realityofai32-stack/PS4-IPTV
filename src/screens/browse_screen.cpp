@@ -91,7 +91,7 @@ namespace {
             const HistoryEntry *p = a.library().progressOf(TYPE, m.streamId);
             if (p && p->watched) {
                 add("\xE2\x9C\x93 " + tr("progress.watched"));
-            } else if (p && progress::inProgress(p->position, p->duration, p->watched)) {
+            } else if (p && progress::inProgress(*p)) {
                 add(fmt::remaining(p->position, p->duration));
             }
             return s;
@@ -100,7 +100,7 @@ namespace {
         static float progressOf(App &a, const Item &m, bool &watched) {
             const HistoryEntry *p = a.library().progressOf(TYPE, m.streamId);
             watched = p && p->watched;
-            return p && progress::inProgress(p->position, p->duration, p->watched)
+            return p && progress::inProgress(*p)
                    ? std::max(0.02f, (float) progress::fraction(p->position, p->duration)) : 0.0f;
         }
 
@@ -235,6 +235,10 @@ namespace {
 
         void onPause() override {
             app.images().want(std::vector<ImageRequest>());
+        }
+
+        void onInputDeviceChanged() override {
+            refreshState();   // the empty / failed states name a key
         }
 
         void onResume() override {
@@ -653,10 +657,10 @@ namespace {
                        + (st.status == CatalogStatus::Loading ? "\n" + tr("browse.first_time") : "")
                        + (shownProgress > 0 ? "\n" + i18n::count("browse.loaded_so_far", shownProgress) : "");
             } else if (st.status == CatalogStatus::Failed) {
-                text = tr(Traits::failedKey(), {st.message}) + "\n" + tr("browse.press_x_retry");
+                text = tr(Traits::failedKey(), {st.message}) + "\n" + tr("browse.press_x_retry", {screens::keyName(A::Confirm)});
             } else if (visible.empty()) {
-                text = tr(currentRow == FAVORITES_ROW ? "browse.no_favorites"
-                          : currentRow == CONTINUE_ROW ? "browse.nothing_continue" : "browse.empty_category");
+                text = currentRow == FAVORITES_ROW ? tr("browse.no_favorites", {screens::keyName(A::Favorite)})
+                       : tr(currentRow == CONTINUE_ROW ? "browse.nothing_continue" : "browse.empty_category");
             }
             stateText->setText(text);
             spinner->setVisibility(loading && cat.empty() ? Visibility::Visible : Visibility::Hidden);
@@ -816,13 +820,13 @@ namespace {
             categoryList->setFocused(focus == 0);
             grid->setFocused(focus == 1);
             if (focus == 0) {
-                hints->setHints({{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
-                                 {ui::Glyph::Triangle, tr("home.search")}, {ui::Glyph::Options, tr("browse.sort")},
-                                 {ui::Glyph::Circle, tr("common.back")}});
+                hints->setHints({{A::Confirm, tr("common.open")}, {A::Tabs, tr("live.category")},
+                                 {A::Search, tr("home.search")}, {A::Options, tr("browse.sort")},
+                                 {A::Back, tr("common.back")}});
             } else {
-                hints->setHints({{ui::Glyph::Cross, tr("browse.details")}, {ui::Glyph::Square, tr("common.favorite")},
-                                 {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
-                                 {ui::Glyph::Options, tr("browse.sort")}, {ui::Glyph::Circle, tr("live.categories")}});
+                hints->setHints({{A::Details, tr("browse.details")}, {A::Favorite, tr("common.favorite")},
+                                 {A::Tabs, tr("live.category")},
+                                 {A::Options, tr("browse.sort")}, {A::Back, tr("live.categories")}});
             }
             categoryList->reload();   // rail texts step back while the grid has the focus
             refreshInfo();

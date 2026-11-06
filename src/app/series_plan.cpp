@@ -68,24 +68,34 @@ namespace seriesplan {
         if (p == nullptr) {
             return EpisodeState::Untouched;
         }
-        if (p->watched || progress::isWatched(p->position, p->duration)) {
+        if (p->watched || progress::isWatched(*p)) {
             return EpisodeState::Watched;
         }
-        return progress::inProgress(p->position, p->duration, p->watched) ? EpisodeState::InProgress
+        return progress::inProgress(*p) ? EpisodeState::InProgress
                                                                          : EpisodeState::Untouched;
     }
 
     Action defaultAction(const iptv::SeriesInfo &info, const std::string &seriesId, const LibraryStore &store) {
         Action a;
         std::vector<const HistoryEntry *> played = store.seriesProgress(seriesId);   // most recent first
-        // 1. an episode in progress
+        // 1. the series' Continue Watching entry: an episode in progress, or the next episode it points at (upNext,
+        //    set when the episode before it reached its last seconds) - the most recent of them, as in the row
         for (const HistoryEntry *p: played) {
             int s, e;
-            if (episodeState(p) == EpisodeState::InProgress && locate(info, p->id, s, e)) {
+            if (!locate(info, p->id, s, e)) {
+                continue;
+            }
+            if (episodeState(p) == EpisodeState::InProgress) {
                 a.kind = Kind::Resume;
                 a.season = s;
                 a.episode = e;
                 a.position = p->position;
+                return a;
+            }
+            if (p->upNext && progress::continueEligible(*p)) {
+                a.kind = Kind::Next;
+                a.season = s;
+                a.episode = e;
                 return a;
             }
         }

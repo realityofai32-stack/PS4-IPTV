@@ -158,10 +158,8 @@ KeyboardModel::KeyResult KeyboardModel::applyKey(const kbd::Event &k) {
             return k.repeat ? KeyResult::Unchanged : KeyResult::Ok;
         case kbd::Key::Escape:
             return k.repeat ? KeyResult::Unchanged : KeyResult::Cancel;
-        case kbd::Key::Tab:
-            return KeyResult::Unchanged;
         default:
-            return KeyResult::Unhandled;
+            return KeyResult::Unhandled;   // also Tab / Shift+Tab: not text, they switch the filter / tab (actions::route)
     }
     return value == before ? KeyResult::Unchanged : KeyResult::Edited;
 }

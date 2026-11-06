@@ -144,11 +144,12 @@ namespace {
                                ui::Weight::SemiBold);
             status->setMaxWidth(1700);
             hints = new ui::HintBar();
+            hints->setOwner(this);   // its actions are this screen's keyboard shortcuts (also while the HUD is hidden)
             hints->setPosition(theme::SAFE_X, layout::HINTS_Y - (theme::SCREEN_H - bh));
             bottom->add(hints);
-            hints->setHints({{ui::Glyph::Cross, tr("live.controls")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.channel")},
-                             {ui::Glyph::Square, tr("common.favorite")}, {ui::Glyph::Triangle, tr("player.info")},
-                             {ui::Glyph::Circle, tr("common.back")}});
+            hints->setHints({{A::Confirm, tr("live.controls")}, {A::Tabs, tr("live.channel")},
+                             {A::Favorite, tr("common.favorite")}, {A::Info, tr("player.info")},
+                             {A::Back, tr("common.back")}});
 
             // centre: opening / reconnecting / HTTP 403 countdown / failure
             centre = ui::box(this, FloatRect((theme::SCREEN_W - CENTRE_W) / 2, 380, CENTRE_W, CENTRE_H),
@@ -160,8 +161,11 @@ namespace {
             centreText->setAlign(ui::Align::Center, CENTRE_W);
             centreText->setMaxWidth(CENTRE_W - 80);
             centreText->setMaxLines(2);
-            centreHint = ui::label(centre, "", theme::LABEL, 0, 222, ui::Weight::Regular, theme::textMuted());
-            centreHint->setAlign(ui::Align::Center, CENTRE_W);
+            centreHint = new ui::HintBar();   // [X] Retry  [O] Back - for the device in use
+            centreHint->setOwner(this);
+            centreHint->setPosition(0, 206);
+            centreHint->setSize(CENTRE_W, layout::HINTS_H);
+            centre->add(centreHint);
             spinner = new ui::Spinner(18);
             spinner->setPosition((CENTRE_W - 18 * 3.6f) / 2, 230);
             centre->add(spinner);
@@ -515,14 +519,14 @@ namespace {
             } else if (rs == stability::Status::Refused) {
                 centreTitle->setText(tr("player.http_403"));
                 centreText->setText(tr("player.retrying_in", {std::to_string(secondsLeft), attempt}));
-                centreHint->setText(tr("player.hint_retry_now"));
+                setCentreHints({{A::Confirm, tr("player.retry_now")}, {A::Back, tr("common.cancel")}});
             } else if (rs == stability::Status::Failed) {
                 bool stopped = pb.state() == PlaybackState::Error;
                 centreTitle->setText(stopped && !pb.errorMessage().empty() ? pb.errorMessage() : tr("live.unavailable"));
                 centreText->setText(recovery.attempts() > 0 ? tr("player.gave_up", {std::to_string(recovery.attempts())})
                                                             : pb.state() == PlaybackState::Ended
                                                               ? tr("live.ended") : "");
-                centreHint->setText(tr("player.hint_retry"));
+                setCentreHints({{A::Confirm, tr("player.retry")}, {A::Back, tr("common.back")}});
             }
 
             // buffering pill over the (frozen) picture
@@ -589,7 +593,18 @@ namespace {
         ui::Label *status;
         ui::Label *centreTitle;
         ui::Label *centreText;
-        ui::Label *centreHint;
+        ui::HintBar *centreHint;
+
+        void setCentreHints(const screens::Hints &h) {
+            centreHint->setHints(h);
+            centreHint->setPosition(std::round((CENTRE_W - std::min(CENTRE_W, centreHint->contentWidth())) / 2),
+                                    centreHint->getPosition().y);
+        }
+
+        void onInputDeviceChanged() override {
+            centreHint->setPosition(std::round((CENTRE_W - std::min(CENTRE_W, centreHint->contentWidth())) / 2),
+                                    centreHint->getPosition().y);
+        }
         ui::Label *pillText;
         ui::Label *infoText;
         ui::Spinner *spinner;

@@ -9,6 +9,11 @@
 //     position at that moment). Removing hides the card only: the position, history, favorites and downloads
 //     stay. The item returns once playback moves NEW_PROGRESS_SECONDS away from that position; it is
 //     forgotten when the progress is reset, completed or evicted. Optional in the file (older versions ignore it).
+//   - upNext (on a progress entry, optional in the file): the series' Continue Watching pointer to the episode that
+//     comes next. Set (position 0) when the episode before it entered its last COMPLETION_REMAINING seconds
+//     (markUpNext), so the series stays in the row after the user exits during the credits, at the end of file,
+//     with auto-play off or after "Watch credits". Opening that episode keeps the pointer until real progress
+//     (MIN_CONTINUE_SECONDS) or the end replaces it. Older versions ignore the field (a position-0 entry).
 // Schema 1 files (history with positions inside) are migrated on load.
 
 #ifndef PS4IPTV_STORAGE_LIBRARY_STORE_H
@@ -42,6 +47,7 @@ struct HistoryEntry {
     std::string seriesName;
     int season = 0;
     int episode = 0;
+    bool upNext = false;      // episodes: Continue Watching points here next (position 0), see markUpNext
 };
 
 // resume / watched rules (movies and episodes)
@@ -50,14 +56,31 @@ namespace progress {
     const double MIN_CONTINUE_SECONDS = 5;   // playback has genuinely started
     // a removed Continue Watching item comes back once playback moved this far from where it was removed
     const double NEW_PROGRESS_SECONDS = 60;
+    // Series: an episode is complete for Continue Watching once this little of it remains (credits), whatever
+    // happens afterwards; the next episode then becomes the series' Continue Watching entry (markUpNext). Independent
+    // of the visible Next Episode card (app/auto_next.h CARD_SECONDS).
+    const double COMPLETION_REMAINING = 45;
 
+    // movies: ~93 % (end credits)
     bool isWatched(double position, double duration);
 
-    // started (>= 5 s) and not finished: listed in Continue Watching, resumed at exactly `position`
+    // by content type: a series episode is complete only in its last COMPLETION_REMAINING seconds (exiting with more
+    // left keeps it in progress, resumed at that exact position); movies at WATCHED_FRACTION
+    bool isWatched(double position, double duration, iptv::ContentType type);
+
+    bool isWatched(const HistoryEntry &e);
+
+    // started (>= 5 s) and not finished: listed in Continue Watching, resumed at exactly `position` (movie rule)
     bool inProgress(double position, double duration, bool watched);
+
+    // the same with the entry's type (episodes: the 45 s rule)
+    bool inProgress(const HistoryEntry &e);
 
     // 0..1 for progress bars (0 when unknown)
     double fraction(double position, double duration);
+
+    // listed in Continue Watching: in progress, or a series' next episode waiting to be started (upNext)
+    bool continueEligible(const HistoryEntry &e);
 }
 
 class LibraryStore {
@@ -97,6 +120,14 @@ public:
     // records a movie / episode position: progress + Recently Watched, newest activity
     void updateProgress(const HistoryEntry &entry);
 
+    // Continue Watching moves on to the series' next episode: `next` (an episode with seriesId) gets a progress
+    // entry at position 0 marked upNext, the newest activity of the profile; every other upNext pointer of that
+    // series is cleared. It is not added to Recently Watched (nothing was played) and ends a removal of it.
+    void markUpNext(const HistoryEntry &next);
+
+    // the series' current Continue Watching entry: its most recently active eligible episode (nullptr: none)
+    const HistoryEntry *seriesContinueEntry(const std::string &seriesId) const;
+
     // forget the position and watched state, keep the history entry (also ends a Continue Watching removal)
     void resetProgress(iptv::ContentType type, const std::string &id);
 
@@ -107,8 +138,8 @@ public:
     // removed from Continue Watching and not played on since
     bool isDismissed(iptv::ContentType type, const std::string &id) const;
 
-    // in-progress movies and episodes that were not removed from the row, most recent playback activity first;
-    // per series only its most recently played unfinished (and not removed) episode
+    // in-progress movies and episodes (and series' upNext episodes) that were not removed from the row, most recent
+    // playback activity first; per series only its most recent eligible (and not removed) episode
     std::vector<const HistoryEntry *> continueWatching(size_t limit) const;
 
     // everything played recently, newest first, one entry per series. At most maxLive Live TV channels

@@ -336,13 +336,32 @@ namespace {
             auto *wl = ui::label(watch, tr("live.watch"), theme::BODY, 0, ui::Label::centerOffset(theme::BODY, wh),
                                  ui::Weight::SemiBold);
             watchLabel = wl;
-            float textW = wl->width();
+            watchGlyph = new RectangleShape(FloatRect(0, 0, 1, 1));
+            watchGlyph->setFillColor(theme::none());
+            watch->add(watchGlyph);
+            layoutWatch();
+        }
+
+        // [X] Watch / [Enter] Watch, centred in the button, for the device in use
+        void layoutWatch() {
+            for (auto *c: watchGlyph->getChilds()) {
+                watchGlyph->remove(c);
+                delete c;
+            }
             const float glyph = 34;
-            float groupX = (iw - (glyph + 14 + textW)) / 2;
-            auto *g = new ui::ButtonGlyph(ui::Glyph::Cross, glyph);
-            g->setPosition(std::round(groupX), std::round((wh - glyph) / 2));
-            watch->add(g);
-            wl->setPosition(std::round(groupX + glyph + 14), ui::Label::centerOffset(theme::BODY, wh));
+            const float wh = watch->getSize().y;
+            float gw = ui::actionGlyph(watchGlyph, A::Confirm, 0, 0, glyph, actions::tracker().active());
+            float textW = watchLabel->width();
+            float groupX = std::round((watch->getSize().x - (gw + 14 + textW)) / 2);
+            watchGlyph->setPosition(groupX, std::round((wh - glyph) / 2));
+            watchLabel->setPosition(groupX + gw + 14, ui::Label::centerOffset(theme::BODY, wh));
+        }
+
+        void onInputDeviceChanged() override {
+            layoutWatch();
+            if (!empty->getText().empty() && categoryList->selected() == FAVORITES_ROW && app.session().liveLoaded) {
+                empty->setText(tr("live.no_favorites", {screens::keyName(A::Favorite)}));
+            }
         }
 
         void refreshDetails() {
@@ -478,7 +497,8 @@ namespace {
             if (!app.session().liveLoaded) {
                 empty->setText(tr("live.list_failed"));
             } else if (visible.empty()) {
-                empty->setText(tr(row == FAVORITES_ROW ? "live.no_favorites" : "live.empty_category"));
+                empty->setText(row == FAVORITES_ROW ? tr("live.no_favorites", {screens::keyName(A::Favorite)})
+                                                    : tr("live.empty_category"));
             } else {
                 empty->setText("");
             }
@@ -494,16 +514,16 @@ namespace {
             channelList->setFocused(focus == 1);
             screens::Hints h;
             if (focus == 0) {
-                h = {{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
-                     {ui::Glyph::Triangle, tr("home.search")}};
+                h = {{A::Confirm, tr("common.open")}, {A::Tabs, tr("live.category")},
+                     {A::Search, tr("home.search")}};
             } else {
-                h = {{ui::Glyph::Cross, tr("live.watch")}, {ui::Glyph::Square, tr("common.favorite")},
-                     {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")}, {ui::Glyph::Triangle, tr("home.search")}};
+                h = {{A::Confirm, tr("live.watch")}, {A::Favorite, tr("common.favorite")},
+                     {A::Tabs, tr("live.category")}, {A::Search, tr("home.search")}};
             }
             if (playlist) {
-                h.push_back({ui::Glyph::Options, tr("m3u.options")});
+                h.push_back({A::Options, tr("m3u.options")});
             }
-            h.push_back({ui::Glyph::Circle, tr(focus == 0 ? "common.back" : "live.categories")});
+            h.push_back({A::Back, tr(focus == 0 ? "common.back" : "live.categories")});
             hints->setHints(h);
             refreshDetails();
         }
@@ -584,6 +604,7 @@ namespace {
         ui::Label *detailNumber = nullptr;
         ui::Label *detailFav = nullptr;
         RectangleShape *watch = nullptr;
+        RectangleShape *watchGlyph = nullptr;
         ui::HintBar *hints;
         std::vector<int> visible;
         std::unordered_map<int, std::string> lastInCategory;   // category row -> last selected stream id

@@ -77,6 +77,8 @@ std::vector<images::Box> ImageLoader::boxes(ImageKind kind) {
             return {images::art::BACKDROP};
         case ImageKind::HeroPoster:
             return {images::art::HERO_POSTER};
+        case ImageKind::HeroAmbient:
+            return {{1280, 1280}};   // the generator's input (images/hero_art.h): a large cover keeps 1280 px
         default:
             return {{96, 52}, {340, 190}};
     }
@@ -87,7 +89,7 @@ int ImageLoader::maxSourceDimension(ImageKind kind) {
 }
 
 bool ImageLoader::exactPage(ImageKind kind) {
-    return kind == ImageKind::Backdrop || kind == ImageKind::HeroPoster;
+    return kind == ImageKind::Backdrop || kind == ImageKind::HeroPoster || kind == ImageKind::HeroAmbient;
 }
 
 ImageLoader::ImageLoader(JobSystem &j, const std::string &cacheDir)
@@ -229,6 +231,24 @@ void ImageLoader::start(const std::string &k) {
         if (pending->kind == ImageKind::HeroPoster && !pending->outcome.variants.empty()) {
             pending->average = images::averageColor(pending->outcome.variants[0]);
         }
+        if (pending->kind == ImageKind::HeroAmbient && !pending->outcome.variants.empty()) {
+            // the cinematic background, once, here on the worker (the main thread only uploads the result)
+            double t0 = clockx::monotonic();
+            images::hero::Result r = images::hero::generate(pending->outcome.variants[0]);
+            pending->hero.milliseconds = (clockx::monotonic() - t0) * 1000.0;
+            pending->hero.mode = r.mode;
+            pending->hero.crop = r.crop;
+            pending->hero.input = {r.sourceW, r.sourceH};
+            pending->hero.cropSize = {r.cropW, r.cropH};
+            pending->average = r.ambient;
+            if (r.image.valid()) {
+                pending->outcome.variants[0] = std::move(r.image);
+            } else {
+                pending->outcome.variants.clear();
+                pending->outcome.result = images::Scheduler::Result::Permanent;
+                pending->outcome.detail = "hero background not generated";   // i18n-exempt: log detail
+            }
+        }
     }, [this, weak, pending]() {
         if (weak.lock()) {
             decoded.push_back(pending);
@@ -252,6 +272,7 @@ void ImageLoader::finish(const std::shared_ptr<Pending> &p) {
     auto set = std::make_shared<ImageSet>();
     set->source = {o.sourceW, o.sourceH};
     set->average = p->average;
+    set->hero = p->hero;
     int64_t bytes = 0;
     const bool exact = exactPage(p->kind);
     for (const auto &v: o.variants) {
@@ -278,6 +299,21 @@ void ImageLoader::finish(const std::shared_ptr<Pending> &p) {
             backdropKeys.pop_front();
         }
     }
+    if (p->kind == ImageKind::HeroAmbient) {
+        heroArtKeys.erase(std::remove(heroArtKeys.begin(), heroArtKeys.end(), p->key), heroArtKeys.end());
+        heroArtKeys.push_back(p->key);
+        while ((int) heroArtKeys.size() > MAX_HERO_ART) {
+            memory.erase(heroArtKeys.front());
+            scheduler.forget(heroArtKeys.front());
+            heroArtKeys.pop_front();
+        }
+        const ImageVariant &v = set->variants[0];
+        LOG_I("images", "hero background %s generated: %s, crop %s %dx%d of %dx%d (source %dx%d) -> %dx%d texture "
+                        "(%lld KiB) in %.1f ms on a worker", hash.c_str(), images::hero::modeName(p->hero.mode),
+              images::hero::cropName(p->hero.crop), p->hero.cropSize.x, p->hero.cropSize.y, p->hero.input.x,
+              p->hero.input.y, o.sourceW, o.sourceH, v.size.x, v.size.y, (long long) (bytes / 1024),
+              p->hero.milliseconds);
+    }
     scheduler.finished(p->key, images::Scheduler::Result::Ok, now);
     gen++;
     if (exact) {
@@ -294,6 +330,7 @@ void ImageLoader::finish(const std::shared_ptr<Pending> &p) {
 void ImageLoader::clearCache(std::function<void(int64_t)> done) {
     memory.clear();     // widgets keep what they show until they rebind
     backdropKeys.clear();
+    heroArtKeys.clear();
     scheduler.reset();
     gen++;
     std::shared_ptr<images::DiskCache> cache = disk;

@@ -250,7 +250,7 @@ namespace i18n {
             {"live.favorites_caption", "FAVORITES"},
             {"live.all_caption", "ALL CHANNELS"},
             {"live.list_failed", "The channel list could not be loaded. Go back and reconnect from Profiles."},
-            {"live.no_favorites", "No favorite channels yet. Press the square button on a channel to add it here."},
+            {"live.no_favorites", "No favorite channels yet. Press {0} on a channel to add it here."},
             {"live.empty_category", "No channels in this category."},
             {"live.category", "Category"},
             {"live.categories", "Categories"},
@@ -287,8 +287,8 @@ namespace i18n {
             {"browse.recently_added", "Recently added"},
             {"browse.continue", "Continue watching"},
             {"browse.first_time", "The first time this can take a moment."},
-            {"browse.press_x_retry", "Press X on the categories to try again."},
-            {"browse.no_favorites", "No favorites yet. Press the square button on a poster."},
+            {"browse.press_x_retry", "Press {0} on the categories to try again."},
+            {"browse.no_favorites", "No favorites yet. Press {0} on a poster."},
             {"browse.nothing_continue", "Nothing to continue yet."},
             {"browse.empty_category", "Nothing in this category."},
             {"browse.refreshing", "Refreshing…"},
@@ -329,7 +329,7 @@ namespace i18n {
             {"detail.seasons.other", "{0} seasons"},
             {"detail.per_episode", "{0} min per episode"},
             {"detail.loading_episodes", "Loading episodes…"},
-            {"detail.episodes_failed", "Episodes could not be loaded ({0}). Press X to try again."},
+            {"detail.episodes_failed", "Episodes could not be loaded ({0}). Press {1} to try again."},
             {"detail.episodes_offline", "Episode list not available offline ({0}). Downloaded episodes are in "
                                         "Downloads."},
             {"detail.no_episodes", "The provider lists no episodes for this series."},
@@ -341,9 +341,9 @@ namespace i18n {
             // ---------------------------------------------------------------- favorites / search
             {"favorites.tab_channels", "Channels"},
             {"favorites.type", "Type"},
-            {"favorites.empty_channels", "No favorite channels yet. Press the square button on one to add it here."},
-            {"favorites.empty_movies", "No favorite movies yet. Press the square button on one to add it here."},
-            {"favorites.empty_series", "No favorite series yet. Press the square button on one to add it here."},
+            {"favorites.empty_channels", "No favorite channels yet. Press {0} on one to add it here."},
+            {"favorites.empty_movies", "No favorite movies yet. Press {0} on one to add it here."},
+            {"favorites.empty_series", "No favorite series yet. Press {0} on one to add it here."},
             {"search.filter_all", "All"},
             {"search.placeholder", "Type a title or channel"},
             {"search.summary.one", "{0} result for “{1}”"},
@@ -400,8 +400,6 @@ namespace i18n {
             {"player.up_next", "Up next"},
             {"player.last_episode", "You finished the last episode"},
             {"player.the_end", "The end"},
-            {"player.end_hint_play_next", "X  Play next          Circle  Back"},
-            {"player.end_hint_again", "X  Watch again          Circle  Back"},
             {"player.chip_audio", "Audio: {0}"},
             {"player.chip_subtitles", "Subtitles: {0}"},
             {"player.offline_copy", "Downloaded copy"},
@@ -411,15 +409,28 @@ namespace i18n {
             {"player.options", "Options"},
             {"player.info", "Info"},
             {"player.next_episode", "Next episode"},
-            {"player.next_countdown", "Playing in {0}…"},
             {"player.next_play_now", "Play now"},
+            {"player.play_next", "Play next"},
+            {"player.watch_again", "Watch again"},
+            {"player.retry_now", "Retry now"},
+            {"player.retry", "Retry"},
+            {"player.next_eyebrow", "NEXT EPISODE"},
+            {"player.watch_credits", "Watch credits"},
+            {"player.next_seconds", "{0}s"},
+            {"home.up_next", "Next episode"},
+            {"home.hero_play_next", "Play {0}"},
+            {"keys.space", "Space"},
+            {"buttons.cross", "X"},
+            {"buttons.circle", "Circle"},
+            {"buttons.square", "Square"},
+            {"buttons.triangle", "Triangle"},
+            {"buttons.options", "OPTIONS"},
+            {"buttons.dpad", "D-pad"},
             {"player.attempt_of", "{0} of {1}"},
             {"player.attempt", "Attempt {0}"},
             {"player.resuming_at", "Resuming at {0}…"},
             {"player.next_attempt", "Connection lost. Next attempt in {0} s  (attempt {1})"},
             {"player.retrying_in", "Retrying in {0} s…  (attempt {1})"},
-            {"player.hint_retry_now", "X  Retry now          Circle  Cancel"},
-            {"player.hint_retry", "X  Retry          Circle  Back"},
             {"player.title_unavailable", "This title is unavailable"},
             {"player.gave_up", "Automatic reconnect gave up after {0} attempts."},
             {"recovery.status.opening", "opening"},
@@ -536,8 +547,7 @@ namespace i18n {
             {"downloads.paused_for_playback", "paused during playback"},
             {"downloads.tab_downloading", "Downloading  {0}"},
             {"downloads.tab_downloaded", "Downloaded  {0}"},
-            {"downloads.empty_active", "Nothing is downloading. Choose Download on a movie, or press the square "
-                                       "button on an episode."},
+            {"downloads.empty_active", "Nothing is downloading. Choose Download on a movie, or press {0} on an episode."},
             {"downloads.empty_done", "Downloaded movies and episodes appear here and play without an internet "
                                      "connection."},
             {"downloads.profile", "Profile: {0}"},
@@ -651,19 +661,14 @@ namespace i18n {
                                              "reconnects by itself a limited number of times, waiting longer after each "
                                              "try. If the provider refuses the stream (HTTP 403), it counts down and "
                                              "retries."},
-            {"settings.retry_stall.off_desc", "Off: the player keeps buffering after a stall and never reconnects by "
-                                              "itself. Press X during playback to reconnect."},
+            {"settings.retry_stall.off_desc", "Off: the player keeps buffering after a stall and never reconnects by itself. Choose Retry in the player to reconnect."},
             {"settings.audio_language", "Preferred audio language"},
             {"settings.audio_language.auto", "Auto (file default)"},
-            {"settings.audio_language.desc", "Movies and episodes start with an audio track in this language when the "
-                                             "file has one (commentary tracks are skipped). Auto plays the track the "
-                                             "file marks as default. Every track of the file can be chosen during "
-                                             "playback with the OPTIONS button."},
+            {"settings.audio_language.desc", "Movies and episodes start with an audio track in this language when the file has one (commentary tracks are skipped). Auto plays the track the file marks as default. Every track of the file can be chosen during playback in Playback options."},
             {"settings.subtitles", "Subtitles"},
             {"settings.subtitles.auto", "Auto"},
             {"settings.subtitles.always", "On when available"},
-            {"settings.subtitles.off_desc", "Off: subtitles never turn on by themselves. You can still choose one "
-                                            "during playback with the OPTIONS button."},
+            {"settings.subtitles.off_desc", "Off: subtitles never turn on by themselves. You can still choose one during playback in Playback options."},
             {"settings.subtitles.always_desc", "On when available: a subtitle track is shown whenever the file has one, "
                                                "in your subtitle language if possible."},
             {"settings.subtitles.auto_desc", "Auto: subtitles in your subtitle language turn on when the audio is in "
@@ -673,28 +678,19 @@ namespace i18n {
             {"settings.subtitle_language.same", "Same as audio"},
             {"settings.subtitle_language.desc", "The language subtitles are chosen in. “Same as audio” uses the "
                                                 "preferred audio language. Subtitles are embedded in the video files."},
-            {"settings.subtitle_size.desc", "Text size of text subtitles (SRT, ASS). Also in the OPTIONS menu during "
-                                            "playback."},
+            {"settings.subtitle_size.desc", "Text size of text subtitles (SRT, ASS). Also in Playback options during playback."},
             {"settings.subtitle_position.desc", "Raised moves subtitles up, away from the bottom edge (useful when the "
                                                 "TV crops the picture)."},
             {"settings.subtitle_shadow.desc", "Adds a dark shadow behind the outlined subtitle text, for bright "
                                               "scenes."},
             {"settings.aspect", "Default aspect ratio"},
-            {"settings.aspect.desc", "{0}\n\nThe shape the picture is shown with when a movie, episode or channel "
-                                     "starts. Auto / Source uses the video's own shape; a fixed ratio may make the "
-                                     "picture look stretched or squeezed, but nothing is cut off. The OPTIONS menu "
-                                     "during playback changes it for that playback only."},
+            {"settings.aspect.desc", "{0}\n\nThe shape the picture is shown with when a movie, episode or channel starts. Auto / Source uses the video's own shape; a fixed ratio may make the picture look stretched or squeezed, but nothing is cut off. Playback options during playback change it for that playback only."},
             {"settings.crop", "Default crop"},
-            {"settings.crop.desc", "{0}\n\nNone never cuts anything off. Fill Screen fills the screen without "
-                                   "distortion and cuts off what does not fit. A ratio keeps only the centre of the "
-                                   "picture in that shape (for example 2.39:1 removes black bars that are part of "
-                                   "the video). The OPTIONS menu during playback changes it for that playback only."},
-            {"settings.zoom.desc", "Enlarges the picture (up to 150%) on top of the aspect ratio and crop. The "
-                                   "OPTIONS menu during playback changes it for that playback only."},
+            {"settings.crop.desc", "{0}\n\nNone never cuts anything off. Fill Screen fills the screen without distortion and cuts off what does not fit. A ratio keeps only the centre of the picture in that shape (for example 2.39:1 removes black bars that are part of the video). Playback options during playback change it for that playback only."},
+            {"settings.zoom.desc", "Enlarges the picture (up to 150%) on top of the aspect ratio and crop. Playback options during playback change it for that playback only."},
             {"settings.zoom", "Default zoom"},
             {"settings.tech_info", "Show technical playback info"},
-            {"settings.tech_info.desc", "Shows the stream information panel (resolution, codecs, buffer, network speed, "
-                                        "reconnect attempts) when playback starts. Triangle toggles it at any time."},
+            {"settings.tech_info.desc", "Shows the stream information panel (resolution, codecs, buffer, network speed, reconnect attempts) when playback starts. It can be shown or hidden at any time in Playback options."},
             {"settings.images", "Load logos and posters"},
             {"settings.images.desc", "Downloads channel logos and posters from your provider and keeps them on the "
                                      "console. Off: titles and initials are shown instead and no images are "
@@ -704,9 +700,7 @@ namespace i18n {
                                      "Off: they always start from the beginning; progress is still remembered. Never "
                                      "applies to Live TV."},
             {"settings.autoplay", "Auto-play next episode"},
-            {"settings.autoplay.desc", "On: in the last 45 seconds of an episode a countdown shows the next one, which "
-                                       "starts when the episode ends (X: play now, Circle: cancel). Off: the next "
-                                       "episode is offered when the episode ends and starts when you press X."},
+            {"settings.autoplay.desc", "On: 7 seconds before an episode ends a small card shows the next one and plays it when its countdown runs out (Play now starts it at once, Watch credits keeps watching). Off: the next episode is offered when the episode ends."},
             {"settings.retry_downloads", "Retry downloads automatically"},
             {"settings.retry_downloads.desc", "On: when the connection drops, downloads wait and continue by themselves "
                                               "from where they stopped, trying again less and less often. Off: an "
@@ -904,7 +898,7 @@ namespace i18n {
             {"appearance.title", "Appearance"},
             {"appearance.accent", "Accent color"},
             {"appearance.accent.desc", "The color of focus outlines, the main buttons, selected tabs and progress bars. Backgrounds, artwork and video keep their own colors."},
-            {"appearance.accent.current", "Current accent: {0}. Press X to apply a color; it is saved at once."},
+            {"appearance.accent.current", "Current accent: {0}. Press {1} to apply a color; it is saved at once."},
             {"appearance.accent.applied", "Accent color: {0}"},
             {"appearance.accent.blue", "V7 Blue"},
             {"appearance.accent.cyan", "Cyan"},
@@ -993,7 +987,7 @@ namespace i18n {
             {"localmedia.kind_storage", "Storage"},
             {"localmedia.kind_folder", "Folder"},
             {"localmedia.no_storage", "No storage found"},
-            {"localmedia.no_storage_text", "Neither the internal storage nor a USB drive can be opened. Connect a USB drive and press Triangle."},
+            {"localmedia.no_storage_text", "Neither the internal storage nor a USB drive can be opened. Connect a USB drive and press {0}."},
             {"localmedia.empty", "No playable files here"},
             {"localmedia.empty_text", "This folder has no subfolders and no video or audio files the player supports."},
             {"localmedia.unreadable", "This folder cannot be opened"},

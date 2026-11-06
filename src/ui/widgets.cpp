@@ -4,6 +4,7 @@
 #include "components.h"
 #include "scroll_math.h"
 #include "widgets.h"
+#include "../i18n/i18n.h"
 #include "../core/utf8.h"
 #include "../platform/clock.h"
 
@@ -118,16 +119,138 @@ namespace ui {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
+    KeyCap::KeyCap(const std::string &text, float s) : RectangleShape(FloatRect(0, 0, s, s)) {
+        setFillColor(theme::none());
+        const unsigned size = (unsigned) std::round(s * 0.42f);
+        auto *l = new Label(text, size, Weight::SemiBold, theme::textPrimary());
+        float w = std::max(s, l->width() + s * 0.5f);
+        setSize(w, s);
+        auto *cap = box(nullptr, FloatRect(0, 0, w, s), theme::surfaceElevated(), std::round(s * 0.22f));
+        cap->setOutlineColor(theme::divider());
+        cap->setOutlineThickness(1.5f);
+        add(cap);
+        l->setAlign(Align::Center, w);
+        l->setPosition(0, Label::centerOffset(size, s));
+        add(l);
+    }
+
+    namespace {
+        Glyph glyphOf(PadButton b) {
+            switch (b) {
+                case PadButton::Cross:
+                    return Glyph::Cross;
+                case PadButton::Circle:
+                    return Glyph::Circle;
+                case PadButton::Square:
+                    return Glyph::Square;
+                case PadButton::Triangle:
+                    return Glyph::Triangle;
+                case PadButton::L1:
+                    return Glyph::L1;
+                case PadButton::R1:
+                    return Glyph::R1;
+                case PadButton::L2:
+                    return Glyph::L2;
+                case PadButton::R2:
+                    return Glyph::R2;
+                case PadButton::Options:
+                    return Glyph::Options;
+                default:
+                    return Glyph::DPad;
+            }
+        }
+
+        std::vector<HintBar *> &bars() {
+            static std::vector<HintBar *> list;
+            return list;
+        }
+    }
+
+    float actionGlyph(C2DObject *parent, actions::Action action, float x, float y, float size,
+                      actions::Device device) {
+        const actions::Binding &b = actions::binding(action);
+        float start = x;
+        if (device == actions::Device::Keyboard) {
+            if (!actions::hasKeyboard(action)) {
+                return 0;
+            }
+            for (int i = 0; i < 2; i++) {
+                if (b.keys[i].kind == actions::KeyKind::None) {
+                    continue;
+                }
+                if (x > start) {
+                    x += 6;
+                }
+                auto *k = new KeyCap(actions::keyLabel(b.keys[i], i18n::tr("keys.space")), size);
+                k->setPosition(x, y);
+                parent->add(k);
+                x += k->getSize().x;
+            }
+            return x - start;
+        }
+        auto *g = new ButtonGlyph(b.dpad ? Glyph::DPad : glyphOf(b.pad), size);
+        g->setPosition(x, y);
+        parent->add(g);
+        x += g->getSize().x;
+        if (!b.dpad && b.pad2 != PadButton::Count) {
+            auto *g2 = new ButtonGlyph(glyphOf(b.pad2), size);
+            g2->setPosition(x + 6, y);
+            parent->add(g2);
+            x += 6 + g2->getSize().x;
+        }
+        return x - start;
+    }
+
     HintBar::HintBar() : RectangleShape(FloatRect(theme::SAFE_X, theme::SCREEN_H - theme::SAFE_Y - 40,
                                                   theme::SCREEN_W - 2 * theme::SAFE_X, 40)) {
         setFillColor(theme::none());
+        bars().push_back(this);
     }
 
-    void HintBar::setHints(const std::vector<std::pair<Glyph, std::string>> &hints) {
-        if (hints == current) {
+    HintBar::~HintBar() {
+        auto &list = bars();
+        list.erase(std::remove(list.begin(), list.end(), this), list.end());
+    }
+
+    void HintBar::setHints(const std::vector<Hint> &hints) {
+        if (hints == current && drawnFor == actions::tracker().active() && (!hints.empty() || getChilds().empty())) {
             return;
         }
         current = hints;
+        rebuild();
+    }
+
+    void HintBar::setShortcuts(const std::vector<actions::Action> &shortcuts) {
+        extra = shortcuts;
+    }
+
+    std::vector<actions::Action> HintBar::declared(const C2DObject *owner) {
+        std::vector<actions::Action> out;
+        if (owner == nullptr) {
+            return out;
+        }
+        for (HintBar *b: bars()) {
+            if (b->ownerScreen != owner) {
+                continue;
+            }
+            for (const Hint &h: b->current) {
+                out.push_back(h.action);
+            }
+            out.insert(out.end(), b->extra.begin(), b->extra.end());
+        }
+        return out;
+    }
+
+    void HintBar::refreshAll() {
+        for (HintBar *b: bars()) {
+            if (b->drawnFor != actions::tracker().active()) {
+                b->rebuild();
+            }
+        }
+    }
+
+    void HintBar::rebuild() {
+        drawnFor = actions::tracker().active();
         // regular spacing first; a compact layout when the hints do not fit (longer translations)
         const struct {
             unsigned size;
@@ -139,20 +262,20 @@ namespace ui {
                 delete child;
             }
             float x = 0;
-            for (const auto &h: hints) {
-                auto *g = new ButtonGlyph(h.first, 36);
-                g->setPosition(x, 2);
-                add(g);
-                if (h.second.empty()) {
-                    x += g->getSize().x + 6;   // paired with the next glyph: [L1][R1] Category
-                    continue;
+            bool any = false;
+            for (const auto &h: current) {
+                float w = actionGlyph(this, h.action, x, 2, 36, drawnFor);
+                if (w <= 0) {
+                    continue;   // no key for it on this device: not shown
                 }
-                x += g->getSize().x + 10;
-                auto *l = label(this, h.second, layout.size, x, Label::centerOffset(layout.size, 40), Weight::Regular,
+                any = true;
+                x += w + 10;
+                auto *l = label(this, h.text, layout.size, x, Label::centerOffset(layout.size, 40), Weight::Regular,
                                 theme::textSecondary());
                 x += l->width() + layout.gap;
             }
-            if (x - layout.gap <= getSize().x) {
+            width = any ? x - layout.gap : 0;
+            if (width <= getSize().x) {
                 break;
             }
         }

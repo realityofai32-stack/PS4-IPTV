@@ -176,10 +176,11 @@ namespace kbd {
 
     Event Decoder::eventFor(int usage, uint32_t mods, bool caps) const {
         Event e;
+        bool shift = (mods & (MOD_LSHIFT | MOD_RSHIFT)) != 0;
+        e.shift = shift;
         if (editingKey(usage, e.key)) {
             return e;
         }
-        bool shift = (mods & (MOD_LSHIFT | MOD_RSHIFT)) != 0;
         bool ctrl = (mods & (MOD_LCTRL | MOD_RCTRL)) != 0;
         bool alt = (mods & (MOD_LALT | MOD_RALT)) != 0;
         bool altGr = (mods & MOD_RALT) != 0 || (ctrl && alt);

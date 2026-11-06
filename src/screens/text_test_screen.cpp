@@ -144,8 +144,8 @@ namespace {
             stats = ui::label(this, "", theme::CAPTION, rx, 906, ui::Weight::Regular, theme::textMuted());
             stats->setMaxWidth(rw);
 
-            screens::hintBar(this, {{ui::Glyph::Cross, tr(startup ? "diagnostics.continue" : "common.close")},
-                                    {ui::Glyph::Triangle, tr("diagnostics.restart_lines")}});
+            screens::hintBar(this, {{A::Confirm, tr(startup ? "diagnostics.continue" : "common.close")},
+                                    {A::Restart, tr("diagnostics.restart_lines")}});
         }
 
         const char *name() const override { return "text-test"; }

@@ -35,8 +35,8 @@ namespace {
             add(grid);
             empty = new ui::EmptyState(FloatRect(theme::SAFE_X, TOP, theme::CONTENT_W, 480));
             add(empty);
-            screens::hintBar(this, {{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("favorites.type")},
-                                    {ui::Glyph::Square, tr("common.remove")}, {ui::Glyph::Circle, tr("common.back")}});
+            screens::hintBar(this, {{A::Confirm, tr("common.open")}, {A::Tabs, tr("favorites.type")},
+                                    {A::Remove, tr("common.remove")}, {A::Back, tr("common.back")}});
             app.vod().openMovies(app.session().profile);
             app.vod().openSeries(app.session().profile);
             rebuild();
@@ -47,6 +47,12 @@ namespace {
         void onResume() override {
             liveGen = app.session().liveGeneration;
             rebuild();
+        }
+
+        void onInputDeviceChanged() override {
+            if (count() == 0) {
+                rebuild();   // the empty state names a key
+            }
         }
 
         void onPause() override {
@@ -289,8 +295,10 @@ namespace {
             if (loading) {
                 empty->set(tr("common.loading"), "");
             } else if (count() == 0) {
-                empty->set(tr("empty.favorites_title"), tr(tab == 0 ? "favorites.empty_channels" : tab == 1 ? "favorites.empty_movies"
-                                                                                                         : "favorites.empty_series"));
+                empty->set(tr("empty.favorites_title"),
+                           tr(tab == 0 ? "favorites.empty_channels" : tab == 1 ? "favorites.empty_movies"
+                                                                               : "favorites.empty_series",
+                              {screens::keyName(A::Favorite)}));
             } else {
                 empty->set("", "");
             }

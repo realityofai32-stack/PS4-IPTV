@@ -3,7 +3,9 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <vector>
 
+#include "../../src/platform/input_actions.h"
 #include "../../src/platform/keyboard_logic.h"
 #include "../../src/ui/keyboard_model.h"
 
@@ -27,6 +29,16 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
                 REQUIRE(!e.text.empty() && e.text.size() <= 4);
             }
             field.applyKey(e);
+            // routing on a screen declaring an arbitrary set of actions: always a real button, or nothing
+            std::vector<actions::Action> declared;
+            for (size_t i = 0; i < 4 && pos + i < size; i++) {
+                declared.push_back((actions::Action) (data[pos + i] % (int) actions::Action::Count));
+            }
+            InputEvent out;
+            if (actions::route(e, declared, out)) {
+                REQUIRE((int) out.button >= 0 && (int) out.button < (int) PadButton::Count);
+                REQUIRE(out.repeat == e.repeat);
+            }
         }
         // the same bytes as raw key codes / modifiers (never parsed as a structure)
         uint16_t keys[8];

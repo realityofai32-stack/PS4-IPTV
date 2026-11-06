@@ -58,7 +58,7 @@ public:
     enum class KeyResult {
         Unhandled,   // not a text key (arrows...): the screen passes it on
         Edited,      // the text changed
-        Unchanged,   // taken, nothing changed (Tab, a full field, a held Delete)
+        Unchanged,   // taken, nothing changed (a full field, a held Delete)
         Ok,          // Enter
         Cancel       // Escape
     };

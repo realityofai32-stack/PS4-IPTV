@@ -263,6 +263,10 @@ namespace {
             refreshPanel();
         }
 
+        void onInputDeviceChanged() override {
+            refreshPanel();   // descriptions may name a key
+        }
+
         void tick(double now) override {
             // Storage: sizes follow the downloads (at most once per second)
             if (catIndex == CAT_DOWNLOADS && app.downloads().generation() != downloadsGen && now - lastStorage > 1) {
@@ -452,14 +456,14 @@ namespace {
             list->setFocused(focus == 1);
             categoryList->reload();   // the other categories step back while the settings have focus
             if (focus == 0) {
-                hints->setHints({{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""},
-                                 {ui::Glyph::R1, tr("live.category")}, {ui::Glyph::Circle, tr("common.back")}});
+                hints->setHints({{A::Confirm, tr("common.open")},
+                                 {A::Tabs, tr("live.category")}, {A::Back, tr("common.back")}});
             } else {
                 bool swatches = catIndex == CAT_APPEARANCE;
-                hints->setHints({{ui::Glyph::Cross, tr(swatches ? "settings.hint_apply" : "common.select")},
-                                 {ui::Glyph::DPad, tr("settings.hint_change")},
-                                 {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("live.category")},
-                                 {ui::Glyph::Circle, tr("settings.hint_categories")}});
+                hints->setHints({{A::Confirm, tr(swatches ? "settings.hint_apply" : "common.select")},
+                                 {A::Change, tr("settings.hint_change")},
+                                 {A::Tabs, tr("live.category")},
+                                 {A::Back, tr("settings.hint_categories")}});
             }
             refreshPanel();
         }
@@ -607,7 +611,8 @@ namespace {
                 }
                 row.describe = [] {
                     return tr("appearance.accent.desc") + "\n\n"
-                           + tr("appearance.accent.current", {tr(theme::accentPreset().nameKey)});
+                           + tr("appearance.accent.current", {tr(theme::accentPreset().nameKey),
+                                                               screens::keyName(A::Confirm)});
                 };
                 items.push_back(row);
             }
@@ -1139,7 +1144,7 @@ namespace {
             auto *body = ui::label(this, text, theme::LABEL, theme::SAFE_X, 210, ui::Weight::Regular, theme::textSecondary());
             body->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X);
             body->setMaxLines(24);
-            screens::hintBar(this, {{ui::Glyph::Circle, tr("common.back")}});
+            screens::hintBar(this, {{A::Back, tr("common.back")}});
         }
 
         const char *name() const override { return "about"; }
@@ -1166,7 +1171,7 @@ namespace {
             values = ui::label(this, "", theme::LABEL, theme::SAFE_X + NAME_W, 290, ui::Weight::SemiBold);
             values->setMaxLines(MAX_LINES);
             values->setMaxWidth(theme::SCREEN_W - 2 * theme::SAFE_X - NAME_W);
-            screens::hintBar(this, {{ui::Glyph::Circle, tr("common.back")}});
+            screens::hintBar(this, {{A::Back, tr("common.back")}});
             refreshStats();
         }
 

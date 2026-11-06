@@ -18,9 +18,13 @@
 // every screen text comes from the localization tables (src/i18n): tr("key"), tr("key", {args})
 using i18n::tr;
 
+// hints and shortcuts name actions: {A::Confirm, tr("common.open")} (platform/input_actions.h)
+using A = actions::Action;
+
 namespace screens {
 
-    using Hints = std::vector<std::pair<ui::Glyph, std::string>>;
+    // control hints name actions (platform/input_actions.h), drawn for the active device (DS4 glyphs / key caps)
+    using Hints = std::vector<ui::Hint>;
 
     // page title (+ optional subtitle under it) at the top-left of a full screen, after the V7 symbol; returns
     // the title (headerContext places text after it)
@@ -71,7 +75,12 @@ namespace screens {
     void bindBackdrop(App &app, ui::Backdrop *backdrop, const std::string &posterUrl,
                       const std::string &backdropUrl = "");
 
+    // a bottom hint bar owned by `parent` (a screen passes itself): its actions are that screen's keyboard shortcuts
     ui::HintBar *hintBar(c2d::C2DObject *parent, const Hints &hints);
+
+    // the key / button that performs an action on the active device, for sentences ("Press {0} to try again"):
+    // "X", "Square", "OPTIONS" on the controller; "Enter", "F", "Del" on the keyboard
+    std::string keyName(actions::Action action);
 
     // playback HUD shade over the video, added to `parent` (a HUD band of `height`, at its top or bottom edge):
     // `solid` px of the overlay at the screen edge (behind the text), then an eased fade into the picture. The

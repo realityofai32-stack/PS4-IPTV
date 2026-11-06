@@ -259,15 +259,19 @@ namespace layout {
         constexpr float OPTIONS_LIST_W = OPTIONS_W - OPTIONS_PAD - SAFE_X;   // 536: ends at the safe edge
         constexpr float OPTIONS_ROW_H = 80;
         constexpr float OPTIONS_EDGE_W = 80;           // soft fade on the panel's left edge
-        // next-episode countdown (bottom right, independent of the HUD): it ends above the progress bar, so the bar,
-        // time, track chips and hints stay visible when the HUD is shown, and it sits above the bottom subtitle
-        // lines (mpv sub-pos 100: their baseline near y 1045, two lines up to ~ y 925)
-        constexpr float NEXT_W = 440;
-        constexpr float NEXT_H = 230;
-        constexpr float NEXT_X = SAFE_RIGHT - NEXT_W;          // 1384
-        constexpr float NEXT_Y = BAR_Y - 34 - NEXT_H;          // 630 .. 860
-        constexpr float NEXT_PAD = 28;
-        constexpr float NEXT_BAR_H = 4;
+        // the Next Episode card (the last ~7 s of an episode, independent of the HUD): a compact card in the lower
+        // right that leaves the video dominant. It ends 100 px above the progress bar, so the bar, time, chips and
+        // hints stay readable when the HUD is shown, and clear of subtitles: bottom position (mpv sub-pos 100) puts two
+        // lines at ~ y 925 .. 1045, raised (88) at ~ y 815 .. 950 - the card ends at y 790, right of the centre.
+        constexpr float NEXT_W = 500;
+        constexpr float NEXT_H = 156;
+        constexpr float NEXT_X = SAFE_RIGHT - NEXT_W;          // 1324 .. 1824
+        constexpr float NEXT_Y = 790 - NEXT_H;                 // 634 .. 790
+        constexpr float NEXT_PAD = 24;
+        constexpr float NEXT_BAR_H = 3;                        // the countdown: a thin bar along the card's bottom
+        constexpr float NEXT_BUTTON_H = 44;
+        constexpr float NEXT_SLIDE = 24;                       // px the card slides in from the right
+        constexpr double NEXT_SLIDE_SECONDS = 0.22;
     }
 }
 

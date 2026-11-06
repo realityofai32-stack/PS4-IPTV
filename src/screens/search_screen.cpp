@@ -627,12 +627,12 @@ namespace {
             list->reload();
             if (zone == 0) {
                 // the essentials (R2 still jumps to the results; so does Right at the keyboard's edge)
-                hints->setHints({{ui::Glyph::Cross, tr("keyboard.hint_type")}, {ui::Glyph::Square, tr("common.delete")},
-                                 {ui::Glyph::Triangle, tr("keyboard.hint_space")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("search.filter")},
-                                 {ui::Glyph::Circle, tr("common.back")}});
+                hints->setHints({{A::Type, tr("keyboard.hint_type")}, {A::TextBackspace, tr("common.delete")},
+                                 {A::TextSpace, tr("keyboard.hint_space")}, {A::Tabs, tr("search.filter")},
+                                 {A::Back, tr("common.back")}});
             } else {
-                hints->setHints({{ui::Glyph::Cross, tr("common.open")}, {ui::Glyph::L1, ""}, {ui::Glyph::R1, tr("search.filter")},
-                                 {ui::Glyph::L2, ""}, {ui::Glyph::R2, tr("common.page")}, {ui::Glyph::Circle, tr("search.keyboard")}});
+                hints->setHints({{A::Confirm, tr("common.open")}, {A::Tabs, tr("search.filter")},
+                                 {A::Page, tr("common.page")}, {A::Back, tr("search.keyboard")}});
             }
         }
 

@@ -30,6 +30,10 @@ public:
 
     virtual void onAppExit() {}  // the app is closing (every screen on the stack, top first)
 
+    // the user switched between the controller and the keyboard (actions::tracker()): hint bars redraw themselves;
+    // screens with key names inside their texts (screens::keyName) set them again
+    virtual void onInputDeviceChanged() {}
+
     virtual void handleInput(const InputEvent &event) = 0;
 
     // A physical keyboard key. Text entry screens take characters and editing keys and return true; anything a

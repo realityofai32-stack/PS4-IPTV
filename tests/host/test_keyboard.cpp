@@ -310,7 +310,9 @@ TEST(keyboard_navigation_keys_and_routing) {
                 {kbd::USAGE_BACKSPACE, kbd::Key::Backspace, true, PadButton::Circle},
                 {75, kbd::Key::PageUp, true, PadButton::L2}, {78, kbd::Key::PageDown, true, PadButton::R2},
                 {74, kbd::Key::Home, false, PadButton::Count}, {77, kbd::Key::End, false, PadButton::Count},
-                {76, kbd::Key::Delete, false, PadButton::Count}, {kbd::USAGE_TAB, kbd::Key::Tab, false, PadButton::Count}};
+                {76, kbd::Key::Delete, false, PadButton::Count},
+                // Tab is universal since the v7 hints pass: Tab = R1, Shift+Tab = L1 (this loop holds Shift)
+                {kbd::USAGE_TAB, kbd::Key::Tab, true, PadButton::L1}};
     for (const auto &k: keys) {
         Decoder d;
         uint16_t u = (uint16_t) k.usage;
@@ -421,7 +423,8 @@ TEST(keyboard_input_reaches_every_text_field) {
     CHECK(edit.text().empty());
     CHECK(pressKey(edit, kbd::USAGE_BACKSPACE, t) == KeyboardModel::KeyResult::Unchanged);
     CHECK(pressKey(edit, kbd::USAGE_ESCAPE, t) == KeyboardModel::KeyResult::Cancel);
-    CHECK(pressKey(edit, kbd::USAGE_TAB, t) == KeyboardModel::KeyResult::Unchanged);
+    // Tab is not text: it switches the filter / tab (actions::route), the field is unchanged
+    CHECK(pressKey(edit, kbd::USAGE_TAB, t) == KeyboardModel::KeyResult::Unhandled);
     CHECK(pressKey(edit, kbd::USAGE_UP, t) == KeyboardModel::KeyResult::Unhandled);   // moves the on-screen focus
     CHECK(pressKey(edit, kbd::USAGE_SPACE, t) == KeyboardModel::KeyResult::Edited && edit.text() == " ");
     // a held Backspace empties the field without leaving it; a held Delete clears once

@@ -105,41 +105,160 @@ namespace autonext {
         return found;
     }
 
+    CompletionLatch::Change CompletionLatch::update(double position, double duration, bool started) {
+        if (!started || !(duration > 0) || !std::isfinite(duration) || !(position >= 0) || !std::isfinite(position)) {
+            return Change::None;
+        }
+        double remaining = duration - position;
+        if (!on) {
+            if (remaining <= progress::COMPLETION_REMAINING && position >= progress::MIN_CONTINUE_SECONDS) {
+                on = true;
+                return Change::Latched;
+            }
+            return Change::None;
+        }
+        if (remaining > progress::COMPLETION_REMAINING + RESET_MARGIN) {
+            on = false;
+            return Change::Released;
+        }
+        return Change::None;
+    }
+
+    namespace {
+        // provider order of two episodes: < 0 a before b, 0 the same / unknown, > 0 after
+        int order(const std::vector<screens::VodItem> &queue, const iptv::SeriesInfo *info, const std::string &aId,
+                  int aSeason, int aEpisode, const std::string &bId, int bSeason, int bEpisode) {
+            if (aId == bId) {
+                return 0;
+            }
+            int ai = -1, bi = -1;
+            for (size_t i = 0; i < queue.size(); i++) {
+                if (queue[i].id == aId) {
+                    ai = (int) i;
+                }
+                if (queue[i].id == bId) {
+                    bi = (int) i;
+                }
+            }
+            if (ai >= 0 && bi >= 0) {
+                return ai < bi ? -1 : 1;
+            }
+            int as = 0, ae = 0, bs = 0, be = 0;
+            if (info != nullptr && seriesplan::locate(*info, aId, as, ae) && seriesplan::locate(*info, bId, bs, be)) {
+                return as != bs ? (as < bs ? -1 : 1) : (ae < be ? -1 : ae > be ? 1 : 0);
+            }
+            if (aSeason != bSeason) {
+                return aSeason < bSeason ? -1 : 1;
+            }
+            return aEpisode < bEpisode ? -1 : aEpisode > bEpisode ? 1 : 0;
+        }
+    }
+
+    bool advancesContinue(const std::vector<screens::VodItem> &queue, int next, const iptv::SeriesInfo *info,
+                          const HistoryEntry *current) {
+        if (next < 0 || next >= (int) queue.size()) {
+            return false;
+        }
+        if (current == nullptr || current->seriesId != queue[(size_t) next].seriesId) {
+            return true;
+        }
+        const screens::VodItem &n = queue[(size_t) next];
+        if (current->id == n.id) {
+            // already the series' entry: an upNext pointer is refreshed, real progress in it is kept
+            return !progress::inProgress(*current);
+        }
+        return order(queue, info, current->id, current->season, current->episode, n.id, n.season, n.episode) < 0;
+    }
+
+    HistoryEntry upNextEntry(const screens::VodItem &next, int64_t watchedAt) {
+        HistoryEntry h;
+        h.type = iptv::ContentType::Series;
+        h.id = next.id;
+        h.name = next.title;
+        h.icon = next.image;
+        h.extension = next.extension;
+        h.seriesId = next.seriesId;
+        h.seriesName = next.seriesName;
+        h.season = next.season;
+        h.episode = next.episode;
+        h.duration = next.durationHint > 0 ? next.durationHint : 0;
+        h.watchedAt = watchedAt;
+        return h;
+    }
+
+    UpNext persistUpNext(LibraryStore &store, const std::vector<screens::VodItem> &queue, int index, int next,
+                         const iptv::SeriesInfo *info, int64_t now) {
+        if (next < 0 || next >= (int) queue.size() || index < 0 || index >= (int) queue.size() || next == index) {
+            return UpNext::None;
+        }
+        const screens::VodItem &n = queue[(size_t) next];
+        if (n.type != iptv::ContentType::Series || n.id.empty() || n.seriesId.empty()) {
+            return UpNext::None;
+        }
+        const HistoryEntry *current = store.seriesContinueEntry(n.seriesId);
+        if (current != nullptr && current->id == queue[(size_t) index].id) {
+            current = nullptr;   // the completed episode itself
+        }
+        if (!advancesContinue(queue, next, info, current)) {
+            return UpNext::Kept;
+        }
+        store.markUpNext(upNextEntry(n, now));
+        return UpNext::Moved;
+    }
+
+    int Countdown::seconds() const {
+        if (state != Phase::Counting) {
+            return 0;
+        }
+        return std::min((int) CARD_SECONDS, std::max(1, (int) std::ceil(CARD_SECONDS - elapsed - 1e-9)));
+    }
+
+    float Countdown::fraction() const {
+        if (state != Phase::Counting) {
+            return 0;
+        }
+        return (float) std::min(1.0, std::max(0.0, elapsed / CARD_SECONDS));
+    }
+
     bool Countdown::update(const Frame &f) {
         if (state == Phase::Transitioning || state == Phase::Cancelled) {
             return false;
         }
         const bool known = f.remaining >= 0 && std::isfinite(f.remaining);
-        if (!f.canAdvance || !f.running || !known) {
-            state = Phase::Idle;
-            shownSeconds = 0;
-            shownFraction = 0;
+        if (!f.canAdvance) {
+            reset();
             return false;
         }
         if (state == Phase::Idle) {
-            if (f.remaining > COUNTDOWN_SECONDS) {
+            if (!f.running || !known || f.remaining > CARD_SECONDS) {
                 return false;
             }
             state = Phase::Counting;
-        } else if (f.remaining > COUNTDOWN_SECONDS + RESET_MARGIN) {
-            state = Phase::Idle;   // seeked back: it may come again at the end
-            shownSeconds = 0;
-            shownFraction = 0;
+            elapsed = 0;
+            lastNow = f.now;
+            held = false;
+        } else if (known && f.remaining > CARD_SECONDS + RESET_MARGIN) {
+            reset();   // seeked back: it may come again at the end
             return false;
         }
-        if (f.remaining <= END_TOLERANCE) {
+        double step = lastNow >= 0 ? f.now - lastNow : 0;
+        lastNow = f.now;
+        held = !f.running;   // buffering, reconnecting, an error, the Options panel: hidden, the count waits
+        if (held) {
+            return false;
+        }
+        if (!f.paused && std::isfinite(step)) {
+            elapsed += std::min(MAX_STEP, std::max(0.0, step));
+        }
+        if (elapsed >= CARD_SECONDS - 1e-9 || (known && f.remaining <= END_TOLERANCE)) {
             state = Phase::Transitioning;
-            shownSeconds = 0;
-            shownFraction = 0;
             return true;
         }
-        shownSeconds = std::min((int) COUNTDOWN_SECONDS, std::max(1, (int) std::ceil(f.remaining)));
-        shownFraction = (float) std::min(1.0, f.remaining / COUNTDOWN_SECONDS);
         return false;
     }
 
     bool Countdown::playNow() {
-        if (state != Phase::Counting) {
+        if (!visible()) {
             return false;
         }
         state = Phase::Transitioning;
@@ -147,12 +266,10 @@ namespace autonext {
     }
 
     bool Countdown::cancel() {
-        if (state != Phase::Counting) {
+        if (!visible()) {
             return false;
         }
         state = Phase::Cancelled;
-        shownSeconds = 0;
-        shownFraction = 0;
         return true;
     }
 

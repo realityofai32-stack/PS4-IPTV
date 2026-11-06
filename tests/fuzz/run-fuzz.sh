@@ -23,7 +23,7 @@ build fuzz_stalker "$S/iptv/stalker.cpp" "$S/iptv/xtream.cpp" "$S/core/json.cpp"
     "$S/core/hash.cpp" "$S/i18n/i18n.cpp" "$S/i18n/strings_en.cpp" "$S/i18n/strings_tr.cpp" "$S/platform/log.cpp" \
     "$S/platform/redact.cpp" "$S/platform/fs.cpp" "$S/platform/clock.cpp"
 build fuzz_redact "$S/platform/redact.cpp"
-build fuzz_keyboard "$S/platform/keyboard_logic.cpp" "$S/ui/keyboard_model.cpp" "$S/core/utf8.cpp" "$S/i18n/i18n.cpp" \
+build fuzz_keyboard "$S/platform/keyboard_logic.cpp" "$S/platform/input_actions.cpp" "$S/ui/keyboard_model.cpp" "$S/core/utf8.cpp" "$S/i18n/i18n.cpp" \
     "$S/platform/log.cpp" "$S/platform/redact.cpp" "$S/platform/fs.cpp" "$S/platform/clock.cpp" \
     "$S/i18n/strings_en.cpp" "$S/i18n/strings_tr.cpp"
 build fuzz_paths "$S/media/local_media.cpp" "$S/platform/fs.cpp" "$S/player/protocols.cpp"

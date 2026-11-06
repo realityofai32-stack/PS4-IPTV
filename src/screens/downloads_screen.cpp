@@ -128,6 +128,10 @@ namespace {
             requestImages();
         }
 
+        void onInputDeviceChanged() override {
+            reload(false);   // the empty state names a key
+        }
+
         void onPause() override {
             app.images().want(std::vector<ImageRequest>());
         }
@@ -283,7 +287,7 @@ namespace {
                 r.state->setColor(theme::success());
                 std::string when = d.completedAt > 0 ? clockx::localDate(d.completedAt) : "";
                 r.detail->setText(dl::formatBytes(d.downloadedBytes) + (when.empty() ? "" : "  \xC2\xB7  " + when));
-                if (p && progress::inProgress(p->position, p->duration, p->watched)) {
+                if (p && progress::inProgress(*p)) {
                     r.state->setText(fmt::remaining(p->position, p->duration));
                     r.state->setColor(theme::textSecondary());
                 }
@@ -393,7 +397,8 @@ namespace {
             }
             if (shown.empty()) {
                 empty->set(tr(tab == 0 ? "empty.downloads_active_title" : "empty.downloads_done_title"),
-                           tr(tab == 0 ? "downloads.empty_active" : "downloads.empty_done"));
+                           tab == 0 ? tr("downloads.empty_active", {screens::keyName(A::Download)})
+                                    : tr("downloads.empty_done"));
             } else {
                 empty->set("", "");
             }
@@ -404,19 +409,18 @@ namespace {
             const dl::Item *d = selected();
             screens::Hints h;
             if (d && tab == 1) {
-                h.push_back({ui::Glyph::Cross, tr("common.play")});
+                h.push_back({A::Confirm, tr("common.play")});
             } else if (d) {
-                h.push_back({ui::Glyph::Cross, tr("downloads.actions")});
+                h.push_back({A::Confirm, tr("downloads.actions")});
                 bool running = d->state == dl::State::Downloading || d->state == dl::State::Queued
                                || d->state == dl::State::WaitingForNetwork;
-                h.push_back({ui::Glyph::Square, tr(running ? "download.pause" : "download.resume")});
+                h.push_back({A::PauseResume, tr(running ? "download.pause" : "download.resume")});
             }
             if (d) {
-                h.push_back({ui::Glyph::Triangle, tr("downloads.options")});
+                h.push_back({A::MoreOptions, tr("downloads.options")});
             }
-            h.push_back({ui::Glyph::L1, ""});
-            h.push_back({ui::Glyph::R1, tr("downloads.switch_tab")});
-            h.push_back({ui::Glyph::Circle, tr("common.back")});
+            h.push_back({A::Tabs, tr("downloads.switch_tab")});
+            h.push_back({A::Back, tr("common.back")});
             hints->setHints(h);
         }
 
@@ -495,7 +499,7 @@ namespace {
             dl::Item item = d;
             if (d.state == dl::State::Completed) {
                 const HistoryEntry *p = progressOf(d);
-                bool resumable = p && progress::inProgress(p->position, p->duration, p->watched);
+                bool resumable = p && progress::inProgress(*p);
                 names.push_back(resumable ? tr("download.resume_offline", {fmt::clock(p->position)})
                                           : tr("download.play_offline"));
                 actions.push_back([this, item] { play(item, true); });

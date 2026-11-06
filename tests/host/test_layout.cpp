@@ -205,16 +205,19 @@ TEST(layout_downloads_and_player) {
         CHECK(BOTTOM_Y < BAR_Y);
         CHECK(BAR_Y + BAR_H < TIME_Y);
         CHECK(TIME_Y + LINE_28 < HINTS_Y);
-        // next-episode countdown: bottom right inside the safe area, compact, clear of the progress bar / time /
-        // track chips / hints (it may show with or without the HUD), and above the bottom subtitle lines
+        // the Next Episode card: bottom right inside the safe area, compact, clear of the progress bar / time /
+        // track chips / hints (it may show with or without the HUD), and above both subtitle positions
         CHECK_EQ(NEXT_X + NEXT_W, SAFE_RIGHT);
         CHECK(NEXT_Y >= SAFE_Y && NEXT_Y > SUBTITLE_Y + LINE_28);
         CHECK(NEXT_Y + NEXT_H <= BAR_Y - 30);
         CHECK(NEXT_X > SCREEN_W / 2 + 300);              // right of the centred subtitle column's middle
-        CHECK(NEXT_W * NEXT_H < 0.06f * SCREEN_W * SCREEN_H);   // the video stays dominant (< 6 % of the screen)
-        // contents: heading 24 + 30, title 60 + 35, countdown 104 + 30, bar 146, hints 170 + 40, bottom padding
-        CHECK(60 + LINE_28 < 104 && 104 + LINE_24 < 146 && 146 + NEXT_BAR_H < 170);
-        CHECK(170 + HINTS_H + 16 <= NEXT_H);
+        CHECK(NEXT_W * NEXT_H < 0.04f * SCREEN_W * SCREEN_H);   // the video stays dominant (< 4 % of the screen)
+        CHECK(NEXT_W <= 520 && NEXT_H <= 160);                  // compact (the v3.2 panel was 440 x 230)
+        // subtitles: raised (mpv sub-pos 88) two lines reach up to ~ y 815, bottom ones ~ y 925
+        CHECK(NEXT_Y + NEXT_H <= 800);
+        // contents: eyebrow 16 + 28, title 46 + 35, actions 90 + 44, the bar 12 above the bottom edge
+        CHECK(16 + 28 <= 46 && 46 + LINE_28 <= 90 && 90 + NEXT_BUTTON_H <= NEXT_H - 12 - NEXT_BAR_H - 4);
+        CHECK(NEXT_BAR_H <= 4 && NEXT_SLIDE <= 32 && NEXT_SLIDE_SECONDS <= 0.3);
         // hidden while the Options panel is open; geometrically it would sit under it
         CHECK(NEXT_X >= OPTIONS_X);
     }

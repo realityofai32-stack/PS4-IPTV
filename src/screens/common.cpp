@@ -139,9 +139,42 @@ namespace screens {
 
     ui::HintBar *hintBar(C2DObject *parent, const Hints &hints) {
         auto *bar = new ui::HintBar();
+        bar->setOwner(parent);   // screens pass themselves: the bar's actions are the screen's keyboard shortcuts
         bar->setHints(hints);
         parent->add(bar);
         return bar;
+    }
+
+    std::string keyName(actions::Action action) {
+        const actions::Binding &b = actions::binding(action);
+        if (actions::tracker().active() == actions::Device::Keyboard && actions::hasKeyboard(action)) {
+            return actions::keyLabel(b.keys[0], tr("keys.space"));
+        }
+        if (b.dpad) {
+            return tr("buttons.dpad");
+        }
+        switch (b.pad) {
+            case PadButton::Cross:
+                return tr("buttons.cross");
+            case PadButton::Circle:
+                return tr("buttons.circle");
+            case PadButton::Square:
+                return tr("buttons.square");
+            case PadButton::Triangle:
+                return tr("buttons.triangle");
+            case PadButton::Options:
+                return tr("buttons.options");
+            case PadButton::L1:
+                return b.pad2 == PadButton::R1 ? "L1 / R1" : "L1";
+            case PadButton::R1:
+                return "R1";
+            case PadButton::L2:
+                return b.pad2 == PadButton::R2 ? "L2 / R2" : "L2";
+            case PadButton::R2:
+                return "R2";
+            default:
+                return "";
+        }
     }
 
     std::string aspectName(display::Aspect aspect) {

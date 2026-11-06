@@ -6,6 +6,7 @@ double VodProgress::begin(const screens::VodItem &item, bool resumeWanted, doubl
     current = item;
     knownDuration = item.durationHint > 0 ? item.durationHint : 0;
     hadFrame = false;
+    completed = false;
     pendingTarget = -1;
     settleTarget = -1;
     lastMemory = now;
@@ -16,7 +17,7 @@ double VodProgress::begin(const screens::VodItem &item, bool resumeWanted, doubl
         return 0;   // Local Media belongs to no source: nothing is remembered or resumed
     }
     const HistoryEntry *p = store.progressOf(item.type, item.id);
-    if (resumeWanted && p != nullptr && progress::inProgress(p->position, p->duration, p->watched)) {
+    if (resumeWanted && p != nullptr && progress::inProgress(*p)) {
         start = p->position;   // exactly where playback stopped
         if (knownDuration <= 0 && p->duration > 0) {
             knownDuration = p->duration;
@@ -109,7 +110,7 @@ bool VodProgress::record(double now, double finalPosition, bool atEnd) {
     h.episode = it.episode;
     h.position = pos;
     h.duration = knownDuration;
-    h.watched = atEnd || progress::isWatched(pos, knownDuration);
+    h.watched = atEnd || completed || progress::isWatched(pos, knownDuration, h.type);
     h.watchedAt = wallClock ? wallClock() : 0;
     store.updateProgress(h);
     return true;

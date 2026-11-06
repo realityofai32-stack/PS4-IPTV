@@ -1,0 +1,45 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX: KEYBOARD HINTS, SERIES CONTINUE WATCHING, NEXT EPISODE CARD, HOME HERO ART
+=================================================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Details: docs/v7-ux-hints-continue-hero.md.
+Install OVER the existing V7 IPTV: profiles, settings, history and downloads are kept.
+Afterwards copy /data/PS4IPTV/logs/log.txt over FTP. Useful lines:
+  [input] hints follow the keyboard / controller                     (every switch of the hint device)
+  [player] episode <id> complete for Continue Watching (N s left)
+  [player] continue watching -> next episode <id> (SxxEyy) at 0 s (last 45 s | end of file | ...)
+  [player] next episode card shown: N s left / card: countdown finished / card: watch credits
+  [home] hero art: <type>, provider backdrop available ..., usable ..., fallback ...: source WxH, ... drawn WxH
+  [images] hero background <hash> generated: <mode>, crop ... -> WxH texture (KiB) in X ms on a worker
+
+ 1. KEYBOARD HINTS: with DS4 + keyboard connected, press any key: every hint bar shows key caps (Enter, Esc, Tab,
+    PgUp/PgDn, F, Del, S, O ...); press a DS4 button: glyphs again. No flicker while nothing is pressed. Unplug the
+    keyboard while key caps are shown: DS4 glyphs return. Check Home, Live TV, Movies, Series, Details, Search,
+    Settings, Local Media, Downloads, Favorites, Sources, the player HUD, Playback options, the end / retry panels
+    and the Next Episode card. A shown key must do what its hint says on that screen:
+      Home: S search, O settings, Del on a Continue Watching card removes it (F must do nothing there)
+      Movies / Series grid: F favorite, Tab / Shift+Tab category, O sort, Enter details
+      Series Detail episodes: D download, O episode options, Tab season
+      Downloads: P pause / resume, O options, Tab tab; Sources: E edit, Del delete, O options
+      Player: Space pause, <- -> seek 10 s, PgUp/PgDn 1 min, N next episode, Shift+Tab previous, O Playback options
+      (audio / subtitles), I technical info, F favorite; Search: typing, Tab switches the filter
+    Empty states / "press ... to try again" name the key of the device in use.
+ 2. CONTINUE WATCHING (THE BUG): open a series from Continue Watching, watch to ~2 minutes before the end, Back:
+    the series stays, resumes at that exact position. Then watch into the last 45 s and Back: the card now shows the
+    NEXT episode ("Next episode", Resume button "Play SxxEyy"); it starts from 0.
+ 3. Same with: letting the episode end (Auto-play OFF in Settings > Playback); "Watch credits" then Back; auto-next
+    starting the next episode and Back within 2-3 s; the last episode of a season (-> next season's first); a
+    provider with skipped episode numbers. The final episode of the series: the series leaves Continue Watching.
+ 4. Replay an older episode from Series Detail to its end: Continue Watching still shows the later episode.
+ 5. NEXT EPISODE CARD: appears ~7 s before the end, bottom right, small (NEXT EPISODE / SxxEyy · title /
+    [Play now]  Watch credits / thin bar filling over 7 s). Video stays dominant; subtitles at the bottom and
+    "Raised" stay readable. Play now = at once; Watch credits = card gone, the episode plays to its end, Up next panel;
+    no input = the next episode starts after 7 s. Pause during the card: the count waits. No card on the final
+    episode or with Auto-play off; offline only when the next episode is downloaded.
+ 6. HOME HERO: an item whose provider has a landscape backdrop: the sharp backdrop as before. An item without one:
+    a soft, dark, blurred 16:9 background from the poster (no sharp poster on the right), title / buttons / progress
+    clearly readable. A provider with tiny posters: a clean dark hero with a hint of colour. Navigate away and back:
+    no re-generation (no new "[images] hero background" line for the same poster). Please send one screenshot of each
+    case you have and the matching "[home] hero art:" lines; note the "in X ms on a worker" values.
+ 7. Regression: Xtream, M3U, Stalker; HTTPS; Local Media; Search; Favorites; Recently Watched; Downloads (offline
+    play); audio / subtitle switching and subtitle style; aspect / zoom; DS4 navigation and hold-to-scroll; keyboard
+    typing (US / Turkish Q); Turkish UI; accent themes; Movies / Series / Details artwork unchanged.

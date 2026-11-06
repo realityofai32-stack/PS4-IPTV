@@ -5,13 +5,20 @@
 #define PS4IPTV_PLATFORM_KEY_ROUTING_H
 
 #include "input.h"
+#include "input_actions.h"
 #include "keyboard_logic.h"
 
 namespace kbd {
 
-    // arrows -> d-pad, Enter -> Cross, Escape / Backspace -> Circle (Backspace never repeats: holding it does not
-    // leave several screens), Page Up / Down -> L2 / R2. false: the key means nothing outside a text field.
+    // The universal keys (platform/input_actions.h routeUniversal): arrows -> d-pad, Enter -> Cross, Escape /
+    // Backspace -> Circle (Backspace never repeats: holding it does not leave several screens), Page Up / Down ->
+    // L2 / R2, Tab / Shift+Tab -> R1 / L1. false: the key is not universal (screen shortcuts: actions::route).
     inline bool toPad(const Event &k, InputEvent &out) {
+        return actions::routeUniversal(k, out);
+    }
+
+    // the pre-v7-hints table, kept for reference by the tests (identical to routeUniversal without Tab)
+    inline bool toPadClassic(const Event &k, InputEvent &out) {
         out = InputEvent();
         out.repeat = k.repeat;
         out.repeatCount = k.repeatCount;
