@@ -834,6 +834,11 @@ namespace {
                 logHeroArt(h);
                 return;
             }
+            if (h.art == h.backdropSet) {
+                backdrop->setLevel(theme::backdropTint().r, theme::backdropShade().a);   // sharp art: as approved
+            } else {
+                backdrop->setLevel(L::HERO_GENERATED_TINT, L::HERO_GENERATED_SHADE);   // blurred: lighter
+            }
             backdrop->set(h.art->at(0).texture, h.art->at(0).size, ui::Backdrop::Art::Landscape);
             logHeroArt(h);
         }

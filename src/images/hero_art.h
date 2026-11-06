@@ -38,9 +38,9 @@ namespace images {
         constexpr int LANDSCAPE_MIN_W = 960;
         constexpr float LANDSCAPE_ASPECT = 1.5f;
         constexpr float BAND_CENTER = 0.32f;    // a portrait poster's 16:9 band: centred at 32 % of its height
-        constexpr float DESATURATE = 0.35f;
-        constexpr float DARKEN = 0.82f;
-        constexpr float LEFT_DARKEN = 0.45f;    // brightness at the image's left edge (ramps to 1 at LEFT_RAMP_END)
+        constexpr float DESATURATE = 0.30f;
+        constexpr float DARKEN = 0.95f;
+        constexpr float LEFT_DARKEN = 0.70f;    // brightness at the left edge (ramps to 1 at LEFT_RAMP_END); ui::Backdrop adds its own fade
         constexpr float LEFT_RAMP_END = 0.55f;
 
         // a provider backdrop worth showing sharp: landscape and large enough for the 1320 x 800 hero

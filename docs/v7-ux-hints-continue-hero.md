@@ -144,7 +144,7 @@ against the right edge, never enlarged past 1.25×, on a field of its average co
      1. a 16:9 crop (a band centred at 32 % of a taller image, the centre of a wider one);
      2. area-averaged to 160 × 90;
      3. three box-blur passes of radius 4 (≈ Gaussian σ 4.5 → ~37 px on the 1320 px hero);
-     4. desaturated 35 %, darkened to 0.82, and darker towards the left (0.45 → 1 over 55 %);
+     4. desaturated 30 %, darkened to 0.95, and darker towards the left (0.70 → 1 over 55 %);
      5. enlarged to **640 × 360** with a 4 × 4 ordered dither, so dark gradients do not band on the TV.
    - **Wide cover**: a cover that is itself a large wide image (≥ 960 px, ≥ 1.5:1) is shown sharp, cropped to 16:9,
      at most 1280 × 720, never enlarged on the CPU.
@@ -153,7 +153,10 @@ against the right edge, never enlarged past 1.25×, on a field of its average co
 4. **No artwork, or an image that fails to decode:** the plain dark hero.
 
 Every hero layer goes through `ui::Backdrop` Landscape: dimmed, shaded, with the strong eased fade into the page on
-the left. The portrait poster is no longer pasted on the right. Detail pages are unchanged.
+the left. Sharp provider art keeps the approved level, ~24 % (tint 150, shade 150). The blurred background has no
+detail left to compete with the text, so it is drawn at ~50 % (`Backdrop::setLevel`: tint 210, shade 100). A host
+composite preview showed the 24 % level as near-black murk for blurred art. The portrait poster is no longer pasted on
+the right. Detail pages are unchanged.
 
 **Cost**, measured on the host (`hero_art_generation_cost`, -O2):
 

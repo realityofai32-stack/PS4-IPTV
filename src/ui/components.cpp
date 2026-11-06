@@ -511,6 +511,11 @@ namespace ui {
         }
     }
 
+    void Backdrop::setLevel(uint8_t tint, uint8_t shadeAlpha) {
+        image->setFillColor(Color(tint, tint, (uint8_t) std::min(255, tint + 2), 255));
+        shade->setFillColor(theme::withAlpha(theme::backdropShade(), shadeAlpha));
+    }
+
     void Backdrop::setAnchor(float a) {
         anchor = std::min(1.0f, std::max(0.0f, a));
         recrop = true;   // the next set() crops again (the texture stays referenced meanwhile)
