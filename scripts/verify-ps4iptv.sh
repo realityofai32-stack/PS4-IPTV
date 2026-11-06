@@ -166,7 +166,8 @@ for e in range(n):
         print(k + "=" + d[i + dt + do:i + dt + do + ln].rstrip(b"\0").decode())
 PY
 )"
-inbin=0; strings -n 5 "$build/eboot.bin" | grep -qx "$appver" && inbin=1
+# grep reads everything (no -q): with pipefail an early exit would fail the pipeline through strings' SIGPIPE
+inbin=0; [[ "$(strings -n 5 "$build/eboot.bin" | grep -cxF "$appver")" -ge 1 ]] && inbin=1
 [[ -n "$appver" && "$sfo" == *"APP_VER=$want"* && "$sfo" == *"VERSION=$want"* && $inbin == 1 ]] && r=PASS || r=FAIL
 report $r '13 version' "APP_VERSION $appver (shown as v$appver) -> param.sfo $(tr '\n' ' ' <<< "$sfo")(expected $want), in eboot.bin=$inbin"
 
