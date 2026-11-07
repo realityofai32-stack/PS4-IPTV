@@ -1,0 +1,18 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX-6: HOME HERO SHOWCASE POSTER
+================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Details: docs/v7-ux-hints-continue-hero.md
+("v7-ux-6: the showcase poster"). Install OVER the existing V7 IPTV: profiles, settings, history and downloads kept.
+Log line per hero change (no URLs): [home] hero art: <type>, provider backdrop available ..., usable ... ->
+  backdrop: ... | showcase detail cover / list image: source WxH, texture WxH, drawn WxH at X,Y (scale) | omitted
+
+ 1. An item WITHOUT a provider backdrop (most items): the hero shows the poster as a sharp, framed object on the right
+    (rounded corners, soft shadow, thin frame, nearly full brightness), on a dark field tinted with the poster's colour;
+    the text, buttons and progress on the left stay clearly readable. Not blurred, not stretched, not faded. For a
+    movie, the poster may switch once to a larger cover when the details arrive (no flicker loop).
+ 2. An item WITH a landscape backdrop: full-screen backdrop, noticeably brighter than before, the left side still dark
+    behind the text.
+ 3. A provider with tiny posters (under 300 px): the clean dark hero with a hint of colour, no poster.
+ 4. Navigate away and back, change the Continue Watching item: the right artwork, no stale poster from another item.
+ 5. Please send screenshots of cases 1 and 2 with their "[home] hero art:" lines.
+ 6. Regression: rails / cards, Movies / Series / Details artwork (unchanged), Next Episode card, Settings picker.

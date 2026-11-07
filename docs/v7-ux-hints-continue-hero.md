@@ -188,6 +188,29 @@ Final behaviour (`images/hero_art` `plan()`, `screens/home_screen.cpp`):
 No external artwork service, no generated or blurred image. While a backdrop is loading only the backdrop is
 requested; a poster still in memory stays on screen meanwhile.
 
+### v7-ux-6: the showcase poster (current)
+
+Approved after the v7-ux-5 analysis (`images/hero_art`, `screens/home_screen.cpp`):
+
+1. **A usable provider backdrop** (landscape ≥ 1.3:1, ≥ 640 × 300) is drawn full-bleed at about 42 % brightness:
+   `Backdrop::setLevel(190, 110)` on Home only, versus about 24 % on detail pages. The 720 px eased left fade keeps
+   the text column readable.
+2. **Otherwise, the showcase:**
+   - An ambient field fills the hero box under its fades (`Backdrop::setAmbient`). Its colour is the poster's average,
+     40 % desaturated, scaled to 32 %, with no channel above 56, and never darker than the page.
+   - The poster sits on the right as a separate object, above the fades, so it is never faded. It is at most 560 px
+     tall and 420 px wide, never enlarged, right edge at x 1680, centred at y 395.
+   - It has 12 px rounded corners (the poster tiles' proven technique), a soft shadow (black at alpha 120, 10 px
+     down) and a 1.5 px frame. Brightness is 240 / 255.
+   - Image choice: the detail cover (movies: `cover_big` / `movie_image`; series: the `get_series_info` cover) when
+     it differs from the list image, else the list image (`stream_icon` / `cover`). The list image is shown while
+     the cover loads, and stays when the cover fails.
+   - A texture under 300 px tall is omitted: the ambient field alone.
+3. **No artwork:** the clean dark hero.
+
+Texture memory is unchanged: one `HeroPoster` texture (512 × 768 max, 1.5 MiB), or the backdrop (3.5 MiB). There is
+no generation and no per-frame work.
+
 ## 5. Hardware diagnostics
 
 Each Home hero art change logs one line (no URL, host, credential or path):

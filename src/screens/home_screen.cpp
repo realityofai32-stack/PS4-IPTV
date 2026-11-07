@@ -9,12 +9,14 @@
 // Geometry: ui/layout.h (layout::home), docs/v7-ui-v2-layouts.md. Cards are landscape media cards (v3): the whole
 // portrait poster on the left at the size of its texture (no 16:9 crop, no upscaling), title / episode / time left /
 // progress on a neutral surface beside it; channels show their logo contained in a neutral logo area instead.
-// The hero's artwork (images/hero_art.h - provider artwork only, never generated):
+// The hero's artwork (images/hero_art.h - provider artwork only, never generated, blurred or cropped):
 //   1. the provider's real landscape backdrop (get_vod_info / get_series_info backdrop_path) when it loads and is
-//      usable (landscape, >= 640 x 300): cover-cropped 1280 x 720, dimmed, a strong fade into the page on the left
-//   2. otherwise the dark hero with the sharp portrait poster on the right, dissolving into the page, on a subtle
-//      field of its own average colour (ui::Backdrop Poster art, v3.1): never stretched, never drawn larger than
-//      layout::home::HERO_POSTER_MAX_UPSCALE x its texture; under HERO_POSTER_MIN_H it is omitted (clean dark hero)
+//      usable (landscape, >= 640 x 300): full-bleed 1280 x 720, at ~42 % brightness (HERO_BACKDROP_TINT / _SHADE),
+//      the strong fade into the page on the left keeps the text readable
+//   2. otherwise the SHOWCASE: a dark ambient field in the poster's own colour (Backdrop::setAmbient) and the
+//      portrait poster as a sharp framed object on the right (<= 560 px tall, never enlarged, rounded corners, a soft
+//      shadow, 94 % brightness) - the detail cover (cover_big / movie_image, series cover) when the provider has a
+//      different one, else the list image; under 300 texels tall it is omitted
 //   3. no artwork: the clean dark hero
 // Every hero art change is logged with what the provider sent and what was chosen (sizes - never a URL). Binding
 // always asks for the current hero's images, so a late result for an earlier hero is never shown.
@@ -139,8 +141,8 @@ namespace {
             backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, L::BACKDROP_H),
                                         L::BACKDROP_FADE_LEFT, L::BACKDROP_FADE_BOTTOM, L::BACKDROP_FADE_TOP);
             backdrop->setAnchor(HERO_ANCHOR);
-            backdrop->setPosterStyle(heroPosterStyle());
             page->add(backdrop);
+            buildShowcase();   // above the backdrop's fades: the poster is never faded
             buildHero();
             if (!playlist) {
                 rails.push_back({RailKind::Continue});
@@ -774,19 +776,24 @@ namespace {
             }
         }
 
-        static ui::Backdrop::PosterStyle heroPosterStyle() {
-            ui::Backdrop::PosterStyle st;
-            st.heightScale = L::HERO_POSTER_SCALE;
-            st.maxUpscale = L::HERO_POSTER_MAX_UPSCALE;
-            st.maxWidth = L::HERO_POSTER_MAX_W;
-            st.minHeight = L::HERO_POSTER_MIN_H;
-            st.rightBleed = L::HERO_POSTER_BLEED;
-            st.leftFade = L::HERO_POSTER_LEFT_FADE;
-            st.bottomFade = L::HERO_POSTER_BOTTOM_FADE;
-            st.washLength = L::HERO_WASH_LENGTH;
-            st.washMinX = L::HERO_TEXT_RIGHT - L::BACKDROP_X;
-            st.anchorY = 0;   // top at the screen's top edge (a natural crop); the bottom dissolves
-            return st;
+        // the showcase poster: a soft shadow, the poster (rounded like the poster tiles), a thin frame
+        void buildShowcase() {
+            showcase = new RectangleShape(FloatRect(0, 0, 1, 1));
+            showcase->setFillColor(theme::none());
+            page->add(showcase);
+            showcaseShadow = ui::box(showcase, FloatRect(0, L::SHOWCASE_SHADOW_Y, 1, 1),
+                                     theme::withAlpha(theme::videoBackground(), (uint8_t) L::SHOWCASE_SHADOW_ALPHA),
+                                     L::SHOWCASE_RADIUS + 4);
+            showcaseImage = new RectangleShape(FloatRect(0, 0, 1, 1));
+            showcaseImage->setCornersRadius(L::SHOWCASE_RADIUS);
+            showcaseImage->setCornerPointCount(8);
+            const uint8_t t = (uint8_t) L::SHOWCASE_TINT;
+            showcaseImage->setFillColor(Color(t, t, t, 255));   // texture modulation: 94 %, nearly untouched
+            showcase->add(showcaseImage);
+            showcaseFrame = ui::box(showcase, FloatRect(0, 0, 1, 1), theme::none(), L::SHOWCASE_RADIUS);
+            showcaseFrame->setOutlineColor(theme::divider());
+            showcaseFrame->setOutlineThickness(1.5f);
+            showcase->setVisibility(Visibility::Hidden);
         }
 
         // ---- hero artwork (see the top of this file)
@@ -795,8 +802,23 @@ namespace {
             std::string backdropUrl;         // the provider's backdrop_path ("" when none or not known yet)
             bool backdropFailed = false;
             std::shared_ptr<ImageSet> backdropSet;
+            std::string coverUrl;            // the detail cover when it differs from the list image ("" otherwise)
             images::hero::Plan plan;
         };
+
+        // the detail cover of the hero item (movies: cover_big / movie_image of get_vod_info; series: the cover of
+        // get_series_info), when the provider has one that differs from the list image
+        std::string heroCoverUrl() const {
+            std::string c;
+            if (hero->type == ContentType::Movie) {
+                std::shared_ptr<const MovieInfo> info = app.vod().movieInfo(hero->id);
+                c = info ? info->coverBig : "";
+            } else if (hero->type == ContentType::Series) {
+                std::shared_ptr<const SeriesInfo> info = app.vod().seriesInfo(hero->seriesId);
+                c = info ? info->series.cover : "";
+            }
+            return c == hero->icon ? "" : c;
+        }
 
         HeroArt heroArt() {
             HeroArt h;
@@ -813,34 +835,84 @@ namespace {
                 in.backdropW = h.backdropSet ? h.backdropSet->source.x : 0;
                 in.backdropH = h.backdropSet ? h.backdropSet->source.y : 0;
             }
+            h.coverUrl = heroCoverUrl();
+            in.coverKnown = !h.coverUrl.empty();
+            std::shared_ptr<ImageSet> cover;
+            if (in.coverKnown) {
+                in.coverFailed = app.images().failed(ImageKind::HeroPoster, h.coverUrl);
+                cover = app.images().get(ImageKind::HeroPoster, h.coverUrl);
+                in.coverLoaded = (bool) cover;
+            }
             in.posterKnown = !hero->icon.empty();
-            std::shared_ptr<ImageSet> poster = in.posterKnown ? app.images().get(ImageKind::HeroPoster, hero->icon)
-                                                              : nullptr;
-            in.posterLoaded = (bool) poster;
+            std::shared_ptr<ImageSet> poster;
+            if (in.posterKnown) {
+                in.posterFailed = app.images().failed(ImageKind::HeroPoster, hero->icon);
+                poster = app.images().get(ImageKind::HeroPoster, hero->icon);
+                in.posterLoaded = (bool) poster;
+            }
             h.plan = images::hero::plan(in);
-            if (h.plan.show == images::hero::Show::Backdrop) {
-                h.art = h.backdropSet;
-            } else if (h.plan.show == images::hero::Show::Poster) {
-                h.art = poster;
+            switch (h.plan.show) {
+                case images::hero::Show::Backdrop:
+                    h.art = h.backdropSet;
+                    break;
+                case images::hero::Show::Cover:
+                    h.art = cover;
+                    break;
+                case images::hero::Show::Poster:
+                    h.art = poster;
+                    break;
+                default:
+                    break;
             }
             return h;
         }
 
-        // the hero layer: the usable backdrop, else the sharp poster on its colour field, else the clean dark hero
+        // the hero layer: the usable backdrop full-bleed, else the showcase poster on its ambient field, else the
+        // clean dark hero
         void bindHeroImages() {
             HeroArt h = heroArt();
             if (h.plan.wantBackdrop != heroBackdropWanted) {
                 requestImages();   // the backdrop failed / turned out unusable: ask for the poster instead
             }
+            showcaseShown = {};
             if (!h.art) {
-                backdrop->set(nullptr, Vector2i(), ui::Backdrop::Art::Poster);
+                backdrop->set(nullptr, Vector2i(), ui::Backdrop::Art::Landscape);
+                showcase->setVisibility(Visibility::Hidden);
                 logHeroArt(h);
                 return;
             }
-            const bool landscape = h.plan.show == images::hero::Show::Backdrop;
-            const fit::Rgb average = {h.art->average.r, h.art->average.g, h.art->average.b};
-            backdrop->set(h.art->at(0).texture, h.art->at(0).size,
-                          landscape ? ui::Backdrop::Art::Landscape : ui::Backdrop::Art::Poster, landscape ? nullptr : &average);
+            if (h.plan.show == images::hero::Show::Backdrop) {
+                backdrop->setLevel((uint8_t) L::HERO_BACKDROP_TINT, (uint8_t) L::HERO_BACKDROP_SHADE);
+                backdrop->set(h.art->at(0).texture, h.art->at(0).size, ui::Backdrop::Art::Landscape);
+                showcase->setVisibility(Visibility::Hidden);
+                logHeroArt(h);
+                return;
+            }
+            // the showcase: the ambient field in the poster's colour, the poster as a sharp object on the right
+            const Color page = theme::background();
+            images::hero::Rgb amb = images::hero::ambient({h.art->average.r, h.art->average.g, h.art->average.b},
+                                                          {(float) page.r, (float) page.g, (float) page.b});
+            backdrop->setAmbient(Color((uint8_t) amb.r, (uint8_t) amb.g, (uint8_t) amb.b, 255));
+            const ImageVariant &v = h.art->at(0);
+            showcaseShown = images::hero::showcase(v.size.x, v.size.y);
+            if (!showcaseShown.shown) {
+                showcase->setVisibility(Visibility::Hidden);   // too small: the ambient field alone (clean dark hero)
+                logHeroArt(h);
+                return;
+            }
+            if (showcaseTexture != v.texture) {
+                showcaseImage->setTexture(v.texture.get(), true);
+                showcaseTexture = v.texture;   // kept alive while it is shown
+            }
+            showcaseImage->setTextureRect(IntRect(0, 0, v.size.x, v.size.y));
+            const float w = showcaseShown.w;
+            const float hh = showcaseShown.h;
+            showcase->setPosition(showcaseShown.x, showcaseShown.y);
+            showcaseImage->setSize(w, hh);
+            showcaseImage->setCornersRadius(L::SHOWCASE_RADIUS);
+            showcaseShadow->setSize(w, hh);
+            showcaseFrame->setSize(w, hh);
+            showcase->setVisibility(Visibility::Visible);
             logHeroArt(h);
         }
 
@@ -848,7 +920,7 @@ namespace {
         void logHeroArt(const HeroArt &h) {
             const void *id = h.art ? h.art->at(0).texture.get() : nullptr;
             std::string key = std::string(hero ? hero->id : "") + (h.backdropUrl.empty() ? "0" : "1")
-                              + (h.backdropFailed ? "f" : "") + (h.backdropSet ? "l" : "");
+                              + (h.backdropFailed ? "f" : "") + (h.backdropSet ? "l" : "") + (h.coverUrl.empty() ? "" : "c");
             if (id == heroArtLogged && key == heroArtKey) {
                 return;
             }
@@ -864,25 +936,31 @@ namespace {
             const char *available = h.backdropUrl.empty() ? (detailsKnown ? "no" : "unknown (details pending)") : "yes";
             const char *usable = h.backdropUrl.empty() ? "-" : h.backdropFailed ? "no (failed to load)"
                                  : !h.backdropSet ? "loading" : h.plan.backdropUsable ? "yes" : "no (portrait or too small)";
-            const ui::Backdrop::Shown &s = backdrop->shownArt();
             if (!h.art) {
-                LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s, fallback %s - clean dark hero",
-                      type, available, usable, hero->icon.empty() ? "none (no poster)" : "poster (loading / failed)");
+                LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s, detail cover %s - clean dark hero",
+                      type, available, usable, h.coverUrl.empty() ? "none" : "loading / failed");
                 return;
             }
             const ImageVariant &v = h.art->at(0);
-            const bool landscape = h.plan.show == images::hero::Show::Backdrop;
-            if (!s.visible) {
-                LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s, fallback ambient-only: poster "
-                              "source %dx%d, texture %dx%d too small (under %.0f px at %.2fx) - omitted, clean dark hero",
-                      type, available, usable, h.art->source.x, h.art->source.y, v.size.x, v.size.y,
-                      L::HERO_POSTER_MIN_H, L::HERO_POSTER_MAX_UPSCALE);
+            if (h.plan.show == images::hero::Show::Backdrop) {
+                const ui::Backdrop::Shown &s = backdrop->shownArt();
+                LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s -> backdrop: source %dx%d, texture "
+                              "%dx%d, drawn %.0fx%.0f (visible %.0fx%.0f, %.2fx), brightness tint %d shade %d", type,
+                      available, usable, h.art->source.x, h.art->source.y, v.size.x, v.size.y, s.drawn.w, s.drawn.h,
+                      s.inBox.w, s.inBox.h, s.scale, L::HERO_BACKDROP_TINT, L::HERO_BACKDROP_SHADE);
                 return;
             }
-            LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s, fallback %s: source %dx%d, texture "
-                          "%dx%d, no blur, drawn %.0fx%.0f (visible %.0fx%.0f, %.2fx of the texture)%s", type, available,
-                  usable, landscape ? "backdrop" : "poster", h.art->source.x, h.art->source.y, v.size.x, v.size.y,
-                  s.drawn.w, s.drawn.h, s.inBox.w, s.inBox.h, s.scale, s.limited ? " (kept smaller: quality limit)" : "");
+            const char *which = h.plan.show == images::hero::Show::Cover ? "detail cover" : "list image";
+            if (!showcaseShown.shown) {
+                LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s -> showcase %s: source %dx%d, "
+                              "texture %dx%d under %.0f px - omitted, ambient field only", type, available, usable, which,
+                      h.art->source.x, h.art->source.y, v.size.x, v.size.y, images::hero::SHOWCASE_MIN_H);
+                return;
+            }
+            LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s -> showcase %s: source %dx%d, texture "
+                          "%dx%d, drawn %.0fx%.0f at %.0f,%.0f (%.2fx, never enlarged)", type, available, usable, which,
+                  h.art->source.x, h.art->source.y, v.size.x, v.size.y, showcaseShown.w, showcaseShown.h,
+                  showcaseShown.x, showcaseShown.y, showcaseShown.scale);
             // i18n-exempt-end
         }
 
@@ -898,6 +976,9 @@ namespace {
                 heroBackdropWanted = h.plan.wantBackdrop;
                 if (heroBackdropWanted) {
                     req.push_back({ImageKind::Backdrop, h.backdropUrl});
+                }
+                if (h.plan.wantCover) {
+                    req.push_back({ImageKind::HeroPoster, h.coverUrl});
                 }
                 if (h.plan.wantPoster) {
                     req.push_back({ImageKind::HeroPoster, hero->icon});
@@ -1253,6 +1334,12 @@ namespace {
         bool heroBackdropWanted = false; // the last request asked for the backdrop (else the hero poster)
         const void *heroArtLogged = nullptr;
         std::string heroArtKey;           // what the last hero art log line described
+        RectangleShape *showcase = nullptr;        // the showcase poster: shadow, image, frame
+        RectangleShape *showcaseShadow = nullptr;
+        RectangleShape *showcaseImage = nullptr;
+        RectangleShape *showcaseFrame = nullptr;
+        std::shared_ptr<c2d::Texture> showcaseTexture;
+        images::hero::Showcase showcaseShown;
         std::vector<Rail> rails;
         size_t favoritesTotal = 0;
         bool imagesDue = false;

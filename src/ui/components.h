@@ -267,6 +267,15 @@ namespace ui {
         // which part of a taller image is kept: 0 = its top .. 1 = its bottom (default 0.3: above the centre)
         void setAnchor(float anchorY);
 
+        // how strongly the artwork is dimmed: texture modulation (255 = untouched) and the uniform shade's alpha.
+        // Default: theme::backdropTint() / backdropShade() (~24 %, detail pages). The Home hero's real backdrop is drawn
+        // brighter (layout::home::HERO_BACKDROP_TINT / _SHADE); its left fade keeps the text readable.
+        void setLevel(uint8_t tint, uint8_t shadeAlpha);
+
+        // no artwork, a colour field instead: `color` fills the box under its fades (left / bottom / top) - the Home
+        // hero's ambient field behind the showcase poster (images/hero_art.h). set() / set(nullptr) end it.
+        void setAmbient(const c2d::Color &color);
+
         // the area the artwork covers (box coordinates; empty without artwork): for tests and layout checks
         c2d::FloatRect artRect() const;
 
