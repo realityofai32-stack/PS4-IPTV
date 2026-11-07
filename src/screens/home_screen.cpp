@@ -385,9 +385,9 @@ namespace {
             r.empty->setMaxLines(2);
             if (r.kind == RailKind::Continue || r.kind == RailKind::Recent) {
                 // a quiet chevron in the margin right of the cards when more items lie off-screen (never accent)
-                r.more = ui::label(page, "\xE2\x80\xBA", theme::DISPLAY, theme::SAFE_RIGHT + L::RAIL_MORE_GAP, 0,
+                r.more = ui::label(page, "\xE2\x80\xBA", theme::DISPLAY, layout::SAFE_RIGHT + L::RAIL_MORE_GAP, 0,
                                    ui::Weight::Regular, theme::textMuted());
-                r.more->setPosition(theme::SAFE_RIGHT + L::RAIL_MORE_GAP,
+                r.more->setPosition(layout::SAFE_RIGHT + L::RAIL_MORE_GAP,
                                     y + L::RAIL_HEADING_H + std::round((L::CARD_H - r.more->height()) / 2));
                 r.more->setVisibility(Visibility::Hidden);
             }
