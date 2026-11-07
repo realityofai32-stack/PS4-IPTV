@@ -14,6 +14,7 @@
 #include <cctype>
 
 #include "common.h"
+#include "../images/hero_art.h"
 #include "../app/offline.h"
 #include "../app/series_plan.h"
 #include "../core/format.h"
@@ -119,16 +120,24 @@ namespace {
     public:
         MovieDetailScreen(App &a, Movie m) : Screen(a), movie(std::move(m)) {
             ui::background(this);
-            // ambient artwork from the poster: the right of the page, dissolving behind the text column
+            // artwork (screens::bindDetailArt): the provider's landscape backdrop on the right, dissolving before the
+            // text column; without one, the poster's colour as a subtle tint around the poster (clean dark page)
+            art.tint = new ui::Backdrop(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H), 0, 0, 0);
+            add(art.tint);
             backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, theme::SCREEN_H),
                                         L::BACKDROP_FADE_LEFT, L::M_BACKDROP_FADE_BOTTOM, L::BACKDROP_FADE_TOP);
             backdrop->setAnchor(BACKDROP_ANCHOR);
             add(backdrop);
+            art.backdrop = backdrop;
+            art.posterRect = FloatRect(L::M_POSTER_X, L::M_POSTER_Y, L::M_POSTER_W, L::M_POSTER_H);
+            art.textX = L::M_TEXT_X;
             screens::breadcrumb(this, tr("home.movies"));
-            poster = new ui::PosterView(FloatRect(L::M_POSTER_X, L::M_POSTER_Y, L::M_POSTER_W, L::M_POSTER_H),
-                                        theme::HEADING);
+            // the poster as a framed object (Home's showcase language): soft shadow, rounded, a thin frame
+            screens::posterShadow(this, art.posterRect);
+            poster = new ui::PosterView(art.posterRect, theme::HEADING);
             poster->setCornersRadius(theme::RADIUS);
             add(poster);
+            screens::posterFrame(this, art.posterRect);
             const float x = L::M_TEXT_X;
             const float w = L::M_TEXT_W;
             // the title is the largest text on the page; long titles step down to the title size
@@ -407,7 +416,7 @@ namespace {
                 LOG_I("detail", "movie info: provider backdrop %s", backdropUrl.empty() ? "none" : "present");
                 requestImages();
             }
-            screens::bindBackdrop(app, backdrop, movie.icon, backdropUrl);
+            screens::bindDetailArt(app, art, movie.icon, backdropUrl);
             std::string error = app.vod().detailError("m" + movie.streamId);
             float rating = info && info->rating > 0 ? info->rating : movie.rating;
             int duration = info ? info->durationSeconds : 0;
@@ -514,6 +523,7 @@ namespace {
         }
 
         Movie movie;
+        screens::DetailArt art;
         ui::Backdrop *backdrop;
         std::string backdropUrl;                          // the provider's landscape backdrop ("" = none)
         std::shared_ptr<const MovieInfo> backdropInfo;    // the info backdropUrl was read from
@@ -549,15 +559,23 @@ namespace {
     public:
         SeriesDetailScreen(App &a, Series s) : Screen(a), series(std::move(s)) {
             ui::background(this);
-            // the backdrop ends above the seasons: the episodes sit on the clean page
+            // artwork (screens::bindDetailArt): the provider's landscape backdrop above the seasons (the episodes sit
+            // on the clean page); without one, the cover's colour as a subtle tint around the cover
+            art.tint = new ui::Backdrop(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H), 0, 0, 0);
+            add(art.tint);
             backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, L::S_BACKDROP_H),
                                         L::BACKDROP_FADE_LEFT, L::S_BACKDROP_FADE_BOTTOM, L::BACKDROP_FADE_TOP);
             backdrop->setAnchor(BACKDROP_ANCHOR);
             add(backdrop);
+            art.backdrop = backdrop;
+            art.posterRect = FloatRect(L::S_COVER_X, L::S_COVER_Y, L::S_COVER_W, L::S_COVER_H);
+            art.textX = L::S_TEXT_X;
             screens::breadcrumb(this, tr("home.series"));
-            cover = new ui::PosterView(FloatRect(L::S_COVER_X, L::S_COVER_Y, L::S_COVER_W, L::S_COVER_H), theme::BODY);
+            screens::posterShadow(this, art.posterRect);
+            cover = new ui::PosterView(art.posterRect, theme::BODY);
             cover->setCornersRadius(theme::RADIUS);
             add(cover);
+            screens::posterFrame(this, art.posterRect);
             const float x = L::S_TEXT_X;
             title = ui::label(this, series.title, theme::TITLE, x, L::S_COVER_Y - 6, ui::Weight::SemiBold,
                               theme::textStrong());
@@ -644,7 +662,7 @@ namespace {
             if (app.images().generation() != imageGen) {
                 imageGen = app.images().generation();
                 bindPoster(app, cover, series.title, series.cover, false);
-                screens::bindBackdrop(app, backdrop, series.cover, backdropUrl());
+                screens::bindDetailArt(app, art, series.cover, backdropUrl());
                 episodes->reload();   // episode stills
                 redraw();
             }
@@ -699,6 +717,9 @@ namespace {
                     continue;
                 }
                 std::shared_ptr<ImageSet> still = ep.image.empty() ? nullptr : app.images().get(ImageKind::Poster, ep.image);
+                if (still && !images::hero::landscapeStill(still->source.x, still->source.y)) {
+                    still = nullptr;   // the repeated portrait cover: the clean "E 3" number tile instead
+                }
                 r.thumb->set(tr("episode.short", {std::to_string(ep.number)}), still ? still->at(0).texture : nullptr,
                              still ? still->at(0).size : Vector2i());
                 r.code->setText(fmt::episodeCode(ep.season, ep.number));
@@ -1101,7 +1122,26 @@ namespace {
             refreshFocus();
         }
 
+        // the header's short text: the series plot, or - while the episodes have the focus - the focused episode's
+        // own synopsis (when the provider has one), so the top tells what the selected row is about
+        void showPlot() {
+            const Episode *ep = nullptr;
+            if (focus == 2 && info && seasonIndex < (int) info->seasons.size()) {
+                const auto &eps = info->seasons[(size_t) seasonIndex].episodes;
+                int i = episodes->selected();
+                if (i >= 0 && i < (int) eps.size() && !eps[(size_t) i].plot.empty()) {
+                    ep = &eps[(size_t) i];
+                }
+            }
+            std::string text = ep ? fmt::episodeCode(ep->season, ep->number) + "  \xC2\xB7  " + ep->plot : series.plot;
+            if (text != plot->getText()) {
+                plot->setText(text);
+                plot->setColor(ep ? theme::textSecondary() : theme::textPrimary());
+            }
+        }
+
         void refreshFocus() {
+            showPlot();
             for (int i = 0; i < 2; i++) {
                 buttons[i]->setVisibility(i < buttonCount ? Visibility::Visible : Visibility::Hidden);
                 buttons[i]->setFocused(focus == 0 && i == buttonFocus);
@@ -1201,12 +1241,12 @@ namespace {
             }
             imageGen = app.images().generation();
             bindPoster(app, cover, series.title, series.cover, false);
-            screens::bindBackdrop(app, backdrop, series.cover, backdropUrl());
+            screens::bindDetailArt(app, art, series.cover, backdropUrl());
             meta->setText(join({series.year > 0 ? std::to_string(series.year) : "", fmt::rating(series.rating),
                                 series.genre,
                                 series.runtimeMinutes > 0 ? tr("detail.per_episode", {std::to_string(series.runtimeMinutes)}) : "",
                                 hasSeasons() ? i18n::count("detail.seasons", (long long) info->seasons.size()) : ""}));
-            plot->setText(series.plot);
+            showPlot();
             // title, facts, short plot; the actions are bottom-aligned with the cover (people are left out:
             // the top stays compact so four episodes are on screen)
             float y = L::S_COVER_Y - 6 + title->height() + 10;
@@ -1250,6 +1290,7 @@ namespace {
         }
 
         Series series;
+        screens::DetailArt art;
         std::shared_ptr<const SeriesInfo> info;
         ui::Backdrop *backdrop;
         ui::PosterView *cover;

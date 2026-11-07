@@ -236,3 +236,49 @@ TEST(hero_art_cache_stale_results_and_repeated_home_visits) {
     CHECK(bind(l, "c") == "c" && bind(l, "b") == "b" && l.loads == 4);
     CHECK(bind(l, "").empty() && l.pending.empty());         // no poster: nothing requested
 }
+
+// ---- v7-ux-11: the detail pages use the same provider-only artwork rules
+
+TEST(detail_art_tint_around_the_left_poster) {
+    namespace H = images::hero;
+    namespace D = layout::detail;
+    struct Page {
+        float x, y, w, h, textX;
+    } pages[] = {{D::M_POSTER_X, D::M_POSTER_Y, D::M_POSTER_W, D::M_POSTER_H, D::M_TEXT_X},
+                 {D::S_COVER_X, D::S_COVER_Y, D::S_COVER_W, D::S_COVER_H, D::S_TEXT_X}};
+    for (const Page &p: pages) {
+        H::Showcase r;
+        r.shown = true;
+        r.x = p.x;
+        r.y = p.y;
+        r.w = p.w;
+        r.h = p.h;
+        H::AmbientArea a = H::ambientAround(r, 0, p.textX - D::TINT_TEXT_GAP);
+        CHECK(a.shown && a.coreX == p.x && a.coreW == p.w && a.coreH == p.h);   // solid only behind the poster
+        CHECK(a.coreX - a.fadeLeft >= 0);                                       // not past the screen's left edge
+        CHECK(a.coreX + a.coreW + a.fadeRight <= p.textX - D::TINT_TEXT_GAP);   // never under the title / plot
+        CHECK(a.coreY - a.fadeY >= 0 && a.fadeY > 0);
+    }
+    // no poster rectangle: no tint
+    CHECK(!H::ambientAround(H::Showcase(), 0, 500).shown);
+}
+
+TEST(detail_episode_tiles_show_only_landscape_stills) {
+    namespace H = images::hero;
+    CHECK(H::landscapeStill(300, 169) && H::landscapeStill(1280, 720) && H::landscapeStill(160, 90));
+    CHECK(!H::landscapeStill(170, 255));    // the repeated portrait series cover: a number tile instead
+    CHECK(!H::landscapeStill(400, 400) && !H::landscapeStill(0, 0) && !H::landscapeStill(-1, 5));
+}
+
+TEST(detail_art_levels_and_layout) {
+    namespace D = layout::detail;
+    // a real backdrop: brighter than the old ghost poster (~24 %), dimmer than Home's hero (~42 %): text over it
+    const float level = D::BACKDROP_TINT / 255.0f * (1 - D::BACKDROP_SHADE / 255.0f);
+    CHECK(level > 0.30f && level < 0.38f);
+    // it starts right of the plot's start and has dissolved before most of the plot line (movie)
+    CHECK(D::BACKDROP_X > D::M_TEXT_X + 150 && D::BACKDROP_X + D::BACKDROP_FADE_LEFT < layout::SCREEN_W);
+    CHECK(D::M_TEXT_X + D::M_PLOT_W <= D::BACKDROP_X + D::BACKDROP_FADE_LEFT + 200);
+    // the framed poster: Home's showcase shadow
+    CHECK(D::POSTER_SHADOW_Y == layout::home::SHOWCASE_SHADOW_Y
+          && D::POSTER_SHADOW_ALPHA == layout::home::SHOWCASE_SHADOW_ALPHA);
+}

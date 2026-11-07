@@ -226,7 +226,9 @@ void ImageLoader::start(const std::string &k) {
             return f;
         };
         pending->outcome = images::loadImage(pending->url, *cache, fetch, clockx::unixNow(), variantBoxes, maxSource);
-        if (pending->kind == ImageKind::HeroPoster && !pending->outcome.variants.empty()) {
+        if ((pending->kind == ImageKind::HeroPoster || pending->kind == ImageKind::PosterLarge
+             || pending->kind == ImageKind::Poster) && !pending->outcome.variants.empty()) {
+            // the poster's mean colour (64 x 64 samples at most): the tint around it on Home / detail pages
             pending->average = images::averageColor(pending->outcome.variants[0]);
         }
     }, [this, weak, pending]() {

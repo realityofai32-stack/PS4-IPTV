@@ -149,9 +149,17 @@ namespace layout {
 
     // ---------------------------------------------------------------- details
     namespace detail {
-        // shared: a poster-derived backdrop on the right, faded into the page on every side
-        constexpr float BACKDROP_X = 560;
-        constexpr float BACKDROP_FADE_LEFT = 700;      // 560..1260
+        // v7-ux-11 artwork (screens::bindDetailArt): the provider's usable landscape backdrop on the right, faded into
+        // the page (starts further right than before: the plot column stays on the clean page), at ~34 % brightness
+        // (175 / 255 x (1 - 128 / 255)); without one the page stays clean dark with the poster's colour as a subtle
+        // tint hugging the poster (images/hero_art.h ambientAround). The poster is framed like Home's showcase.
+        constexpr float BACKDROP_X = 680;
+        constexpr float BACKDROP_FADE_LEFT = 700;      // 680..1380
+        constexpr int BACKDROP_TINT = 175;
+        constexpr int BACKDROP_SHADE = 128;
+        constexpr float TINT_TEXT_GAP = 24;            // the poster's tint stops this far before the text column
+        constexpr float POSTER_SHADOW_Y = 10;          // the poster's soft shadow (as Home's showcase)
+        constexpr int POSTER_SHADOW_ALPHA = 120;
         constexpr float BACKDROP_FADE_TOP = 200;
         constexpr float CRUMB_MARK_H = 26;
 
@@ -187,7 +195,7 @@ namespace layout {
         constexpr float S_ROW_H = 108;
         constexpr float S_ROW_GAP = 12;
         constexpr float S_EPISODES_H = 4 * S_ROW_H + 3 * S_ROW_GAP;   // 468: four rows, 486..954
-        constexpr float S_THUMB_W = 160;               // 16:9
+        constexpr float S_THUMB_W = 160;               // 16:9: a real landscape still, else the episode number tile
         constexpr float S_THUMB_H = 90;
     }
 

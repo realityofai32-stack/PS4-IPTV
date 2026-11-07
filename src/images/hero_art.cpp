@@ -44,9 +44,9 @@ namespace images {
             return c;
         }
 
-        AmbientArea ambientArea(const Showcase &p) {
+        AmbientArea ambientAround(const Showcase &p, float leftLimit, float rightLimit) {
             AmbientArea a;
-            if (!p.shown) {
+            if (!p.shown || p.w <= 0 || p.h <= 0) {
                 return a;
             }
             a.shown = true;
@@ -54,10 +54,18 @@ namespace images {
             a.coreY = p.y;
             a.coreW = p.w;
             a.coreH = p.h;
-            a.fadeLeft = std::max(0.0f, std::min(AMBIENT_SPREAD_X, p.x - TEXT_RIGHT));
-            a.fadeRight = std::max(0.0f, std::min(AMBIENT_SPREAD_RIGHT, SCREEN_RIGHT - (p.x + p.w)));
-            a.fadeY = std::min(AMBIENT_SPREAD_Y, p.y);   // never above the top of the screen
+            a.fadeLeft = std::max(0.0f, std::min(AMBIENT_SPREAD_X, p.x - leftLimit));
+            a.fadeRight = std::max(0.0f, std::min(AMBIENT_SPREAD_RIGHT, rightLimit - (p.x + p.w)));
+            a.fadeY = std::max(0.0f, std::min(AMBIENT_SPREAD_Y, p.y));   // never above the top of the screen
             return a;
+        }
+
+        AmbientArea ambientArea(const Showcase &p) {
+            return ambientAround(p, TEXT_RIGHT, SCREEN_RIGHT);
+        }
+
+        bool landscapeStill(int w, int h) {
+            return w > 0 && h > 0 && (float) w >= (float) h * 1.3f;
         }
 
         Plan plan(const Inputs &in) {

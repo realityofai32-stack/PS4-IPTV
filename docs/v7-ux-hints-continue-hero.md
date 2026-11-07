@@ -227,6 +227,23 @@ The tint is now:
 
 There are no textures, no blur and no per-frame work.
 
+### v7-ux-11: Movie and Series details in the same language
+
+The detail pages use the same provider-only artwork rules as Home (`screens::bindDetailArt`):
+
+- **A usable landscape backdrop** is drawn on the right, from x 680 with a 700 px fade (it started at 560 before),
+  at about 34 % brightness. That is brighter than the old 24 % and dimmer than Home's 42 %, because text runs over it.
+- **Otherwise** the page stays clean dark, with the poster's colour as a subtle tint hugging the poster
+  (`hero::ambientAround`). The tint stops 24 px before the text column. The dimmed "ghost poster" background is gone.
+- **The poster / cover** is framed like Home's showcase: a soft shadow (alpha 120, 10 px down), 12 px corners and a
+  1.5 px divider frame. Poster and average colours come from the existing image pipeline (`PosterLarge` / `Poster`
+  averages).
+- **Series episode rows** show the provider image only when it is a landscape still (≥ 1.3:1). The repeated portrait
+  cover becomes a clean "E n" number tile.
+- **Series synopsis:** while the episodes have the focus, the header's short text shows the focused episode's synopsis.
+
+Layout, navigation, buttons, resume logic and hints are unchanged.
+
 ## 5. Hardware diagnostics
 
 Each Home hero art change logs one line (no URL, host, credential or path):

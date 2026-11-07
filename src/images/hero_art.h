@@ -75,6 +75,14 @@ namespace images {
 
         AmbientArea ambientArea(const Showcase &poster);
 
+        // the same around any poster rectangle: the fades stop at leftLimit / rightLimit (detail pages: the screen's
+        // left edge and their text column) and at the top of the screen
+        AmbientArea ambientAround(const Showcase &poster, float leftLimit, float rightLimit);
+
+        // an episode image worth showing as a 16:9 still: landscape (>= 1.3:1) - providers often repeat the portrait
+        // series cover as every episode's image; those get a clean number tile instead
+        bool landscapeStill(int w, int h);
+
         struct Inputs {
             bool backdropKnown = false;     // the provider's details name a backdrop_path
             bool backdropFailed = false;    // it could not be loaded

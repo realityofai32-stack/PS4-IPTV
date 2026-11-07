@@ -69,13 +69,24 @@ namespace screens {
     Screen *playSeriesEpisode(App &app, const VodItem &episode, bool resume,
                               std::function<void(const std::string &)> onExit = nullptr);
 
-    // Hero / detail artwork: the provider's real landscape backdrop (backdropUrl, ImageKind::Backdrop) when it is
-    // loaded; otherwise the large portrait poster as Poster art (ratio kept, at the right edge); otherwise nothing
-    // (a faint glow). The small grid poster is never blown up to backdrop size.
-    void bindBackdrop(App &app, ui::Backdrop *backdrop, const std::string &posterUrl,
-                      const std::string &backdropUrl = "");
+    // ---- detail pages' artwork (v7-ux-11): the provider's usable landscape backdrop (`backdrop`: the right side,
+    // faded, layout::detail BACKDROP_TINT / _SHADE) when it is loaded; otherwise a clean dark page with the poster's
+    // colour as a subtle tint hugging `posterRect` (`tint`: a full-screen Backdrop without fades), never reaching
+    // the text column at `textX`. Never a dimmed / stretched poster as background, nothing generated.
+    struct DetailArt {
+        ui::Backdrop *backdrop = nullptr;
+        ui::Backdrop *tint = nullptr;
+        c2d::FloatRect posterRect;
+        float textX = 0;
+    };
 
-    // a bottom hint bar owned by `parent` (a screen passes itself): its actions are that screen's keyboard shortcuts
+    void bindDetailArt(App &app, const DetailArt &art, const std::string &posterUrl, const std::string &backdropUrl);
+
+    // a framed poster like Home's showcase: posterShadow() before adding the poster, posterFrame() after it
+    void posterShadow(c2d::C2DObject *parent, const c2d::FloatRect &rect);
+
+    void posterFrame(c2d::C2DObject *parent, const c2d::FloatRect &rect);
+
     ui::HintBar *hintBar(c2d::C2DObject *parent, const Hints &hints);
 
     // the key / button that performs an action on the active device, for sentences ("Press {0} to try again"):
