@@ -1,0 +1,10 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX-14: NO FOG AROUND THE DETAILS COVER
+=======================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Install OVER the existing V7 IPTV.
+
+ 1. MOVIE / SERIES DETAILS: the colour halo around the poster / cover is removed (on the TV it showed as a light, foggy
+    rectangle behind the cover and the "Series" breadcrumb). The page is the plain dark background; the poster / cover
+    is sharp with its dark soft shadow and thin frame. No backdrop layer.
+ 2. Unchanged: episode images (as in v7-ux-13), synopsis, buttons, focus, seasons, downloads, hints; the Home hero
+    keeps its approved showcase halo.

@@ -49,7 +49,7 @@ struct ImageVariant {
 struct ImageSet {
     std::vector<ImageVariant> variants;
     c2d::Vector2i source;            // the decoded source image, before any downscale
-    images::Average average;         // HeroPoster / PosterLarge / Poster: the image's mean colour (the tint)
+    images::Average average;         // HeroPoster: the image's mean colour (the Home showcase's tint)
 
     const ImageVariant &at(size_t i) const { return variants[i < variants.size() ? i : 0]; }
 };

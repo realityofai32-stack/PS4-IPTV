@@ -69,19 +69,6 @@ namespace screens {
     Screen *playSeriesEpisode(App &app, const VodItem &episode, bool resume,
                               std::function<void(const std::string &)> onExit = nullptr);
 
-    // ---- detail pages' artwork (v7-ux-13): the clean dark page, the sharp poster, and only a small halo of the
-    // poster's colour hugging `posterRect` (`tint`: a full-screen Backdrop without fades; images/hero_art.h
-    // ambientAround, Home's showcase idea), never reaching the text column at `textX`. No page-wide layer: the
-    // provider backdrop is not drawn (`backdrop` stays hidden), never a dimmed / stretched poster, nothing generated.
-    struct DetailArt {
-        ui::Backdrop *backdrop = nullptr;   // its box decides whether a backdrop can be drawn sharp (BACKDROP_MAX_SCALE)
-        ui::Backdrop *tint = nullptr;
-        c2d::FloatRect posterRect;
-        float textX = 0;
-    };
-
-    void bindDetailArt(App &app, const DetailArt &art, const std::string &posterUrl, const std::string &backdropUrl);
-
     // a framed poster like Home's showcase: posterShadow() before adding the poster, posterFrame() after it
     void posterShadow(c2d::C2DObject *parent, const c2d::FloatRect &rect);
 

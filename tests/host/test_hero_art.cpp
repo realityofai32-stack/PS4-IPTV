@@ -237,49 +237,14 @@ TEST(hero_art_cache_stale_results_and_repeated_home_visits) {
     CHECK(bind(l, "").empty() && l.pending.empty());         // no poster: nothing requested
 }
 
-// ---- v7-ux-11: the detail pages use the same provider-only artwork rules
+// ---- detail pages (v7-ux-14): no backdrop, no tint around the poster - the clean dark page and the sharp framed
+// poster (any tint read as fog on the TV). The poster keeps Home's showcase shadow.
 
-TEST(detail_art_tint_around_the_left_poster) {
-    namespace H = images::hero;
+TEST(detail_poster_frame_like_the_home_showcase) {
     namespace D = layout::detail;
-    struct Page {
-        float x, y, w, h, textX;
-    } pages[] = {{D::M_POSTER_X, D::M_POSTER_Y, D::M_POSTER_W, D::M_POSTER_H, D::M_TEXT_X},
-                 {D::S_COVER_X, D::S_COVER_Y, D::S_COVER_W, D::S_COVER_H, D::S_TEXT_X}};
-    for (const Page &p: pages) {
-        H::Showcase r;
-        r.shown = true;
-        r.x = p.x;
-        r.y = p.y;
-        r.w = p.w;
-        r.h = p.h;
-        H::AmbientArea a = H::ambientAround(r, 0, p.textX - D::TINT_TEXT_GAP);
-        CHECK(a.shown && a.coreX == p.x && a.coreW == p.w && a.coreH == p.h);   // solid only behind the poster
-        CHECK(a.coreX - a.fadeLeft >= 0);                                       // not past the screen's left edge
-        CHECK(a.coreX + a.coreW + a.fadeRight <= p.textX - D::TINT_TEXT_GAP);   // never under the title / plot
-        CHECK(a.coreY - a.fadeY >= 0 && a.fadeY > 0);
-        // v7-ux-13: a small halo near the poster, never a page-wide wash: poster + fades stay under 20 % of the screen
-        const float area = (a.fadeLeft + a.coreW + a.fadeRight) * (a.coreH + 2 * a.fadeY);
-        CHECK(area < 0.20f * layout::SCREEN_W * layout::SCREEN_H);
-        CHECK(a.fadeLeft <= H::AMBIENT_SPREAD_X && a.fadeRight <= H::AMBIENT_SPREAD_RIGHT && a.fadeY <= H::AMBIENT_SPREAD_Y);
-    }
-    // the same colour rule as Home's halo: dark (no channel above AMBIENT_MAX), never a bright / grey wash
-    H::Rgb blue = H::ambient({40, 90, 220}, {5, 6, 8});
-    CHECK(blue.b <= H::AMBIENT_MAX && blue.r <= H::AMBIENT_MAX && blue.g <= H::AMBIENT_MAX);
-    // no poster rectangle: no tint
-    CHECK(!H::ambientAround(H::Showcase(), 0, 500).shown);
-}
-
-TEST(detail_art_levels_and_layout) {
-    namespace D = layout::detail;
-    // a real backdrop: subtle and dark (v7-ux-12: ~28 %, the v7-ux-11 34 % read as haze), dimmer than Home's ~42 %
-    const float level = D::BACKDROP_TINT / 255.0f * (1 - D::BACKDROP_SHADE / 255.0f);
-    CHECK(level > 0.25f && level < 0.30f);
-    CHECK(D::M_BACKDROP_FADE_BOTTOM + D::BACKDROP_FADE_TOP <= D::M_BACKDROP_H);
-    // it starts right of the plot's start and has dissolved before most of the plot line (movie)
-    CHECK(D::BACKDROP_X > D::M_TEXT_X + 150 && D::BACKDROP_X + D::BACKDROP_FADE_LEFT < layout::SCREEN_W);
-    CHECK(D::M_TEXT_X + D::M_PLOT_W <= D::BACKDROP_X + D::BACKDROP_FADE_LEFT + 200);
-    // the framed poster: Home's showcase shadow
     CHECK(D::POSTER_SHADOW_Y == layout::home::SHOWCASE_SHADOW_Y
           && D::POSTER_SHADOW_ALPHA == layout::home::SHOWCASE_SHADOW_ALPHA);
+    // Home's halo rule is unchanged (the detail pages simply do not use it)
+    images::hero::Showcase p = images::hero::showcase(512, 768);
+    CHECK(images::hero::ambientArea(p).shown);
 }

@@ -1,5 +1,4 @@
 #include "common.h"
-#include "../images/hero_art.h"
 #include "../app/auto_next.h"
 #include "../app/offline.h"
 #include "../core/utf8.h"
@@ -111,36 +110,6 @@ namespace screens {
         int position = 0;
         std::vector<VodItem> q = seriesEpisodeQueue(app, episode, position);
         return makeVodPlayer(app, q, position, resume, std::move(onExit));
-    }
-
-    void bindDetailArt(App &app, const DetailArt &art, const std::string &posterUrl, const std::string &backdropUrl) {
-        namespace D = layout::detail;
-        // v7-ux-13 (hardware): any page-wide layer - a provider backdrop or a ghost poster - read as a large blue / foggy
-        // wash on the TV. Detail pages are the clean dark page with the sharp poster and only a small halo of its
-        // colour around it (Home's showcase idea). The provider backdrop is not drawn here.
-        (void) backdropUrl;
-        art.backdrop->setVisibility(Visibility::Hidden);
-        std::shared_ptr<ImageSet> poster = app.images().get(ImageKind::PosterLarge, posterUrl);
-        if (!poster) {
-            poster = app.images().get(ImageKind::Poster, posterUrl);
-        }
-        if (!poster) {
-            art.tint->setVisibility(Visibility::Hidden);
-            return;
-        }
-        const Color page = theme::background();
-        images::hero::Rgb c = images::hero::ambient({poster->average.r, poster->average.g, poster->average.b},
-                                                    {(float) page.r, (float) page.g, (float) page.b});
-        images::hero::Showcase rect;
-        rect.shown = true;
-        rect.x = art.posterRect.left;
-        rect.y = art.posterRect.top;
-        rect.w = art.posterRect.width;
-        rect.h = art.posterRect.height;
-        images::hero::AmbientArea a = images::hero::ambientAround(rect, 0, art.textX - D::TINT_TEXT_GAP);
-        art.tint->setAmbient(Color((uint8_t) c.r, (uint8_t) c.g, (uint8_t) c.b, 255),
-                             FloatRect(a.coreX, a.coreY, a.coreW, a.coreH), a.fadeLeft, a.fadeRight, a.fadeY);
-        art.tint->setVisibility(Visibility::Visible);
     }
 
     void posterShadow(C2DObject *parent, const FloatRect &r) {

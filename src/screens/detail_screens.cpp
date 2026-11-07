@@ -1,5 +1,5 @@
-// Movie and Series detail screens: the clean dark page, the framed poster on the left with only a small halo of its
-// colour around it (screens::bindDetailArt, v7-ux-13 - no page-wide backdrop layer), and the text column next to it.
+// Movie and Series detail screens: the clean dark page, the sharp framed poster on the left (no halo, no backdrop
+// layer: v7-ux-14 - on the TV any tint around the poster read as fog), and the text column next to it.
 // Geometry: ui/layout.h (layout::detail), docs/v7-ui-v2-layouts.md.
 //
 // Both open at once with what the catalog already has (title, year, rating, poster; for series also plot,
@@ -14,7 +14,6 @@
 #include <cctype>
 
 #include "common.h"
-#include "../images/hero_art.h"
 #include "../app/offline.h"
 #include "../app/series_plan.h"
 #include "../core/format.h"
@@ -114,29 +113,20 @@ namespace {
 
     namespace L = layout::detail;
 
-    const float BACKDROP_ANCHOR = 0.24f;
 
     class MovieDetailScreen : public Screen {
     public:
         MovieDetailScreen(App &a, Movie m) : Screen(a), movie(std::move(m)) {
             ui::background(this);
-            // artwork (screens::bindDetailArt): the clean dark page, the framed poster and a small halo of its colour
-            art.tint = new ui::Backdrop(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H), 0, 0, 0);
-            add(art.tint);
-            backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, L::M_BACKDROP_H),
-                                        L::BACKDROP_FADE_LEFT, L::M_BACKDROP_FADE_BOTTOM, L::BACKDROP_FADE_TOP);
-            backdrop->setAnchor(BACKDROP_ANCHOR);
-            add(backdrop);
-            art.backdrop = backdrop;
-            art.posterRect = FloatRect(L::M_POSTER_X, L::M_POSTER_Y, L::M_POSTER_W, L::M_POSTER_H);
-            art.textX = L::M_TEXT_X;
+            // the clean dark page: no backdrop layer, no tint around the poster (v7-ux-14)
+            const FloatRect posterRect(L::M_POSTER_X, L::M_POSTER_Y, L::M_POSTER_W, L::M_POSTER_H);
             screens::breadcrumb(this, tr("home.movies"));
             // the poster as a framed object (Home's showcase language): soft shadow, rounded, a thin frame
-            screens::posterShadow(this, art.posterRect);
-            poster = new ui::PosterView(art.posterRect, theme::HEADING);
+            screens::posterShadow(this, posterRect);
+            poster = new ui::PosterView(posterRect, theme::HEADING);
             poster->setCornersRadius(theme::RADIUS);
             add(poster);
-            screens::posterFrame(this, art.posterRect);
+            screens::posterFrame(this, posterRect);
             const float x = L::M_TEXT_X;
             const float w = L::M_TEXT_W;
             // the title is the largest text on the page; long titles step down to the title size
@@ -254,7 +244,7 @@ namespace {
 
         void requestImages() {
             if (app.settings().get().loadImages) {
-                // the poster only: detail pages draw no backdrop (screens::bindDetailArt)
+                // the poster only: detail pages draw no backdrop
                 std::vector<ImageRequest> req = {{ImageKind::PosterLarge, movie.icon}};
                 req.push_back({ImageKind::Poster, movie.icon});
                 app.images().want(req);
@@ -413,7 +403,6 @@ namespace {
                 LOG_I("detail", "movie info: provider backdrop %s", backdropUrl.empty() ? "none" : "present");
                 requestImages();
             }
-            screens::bindDetailArt(app, art, movie.icon, backdropUrl);
             std::string error = app.vod().detailError("m" + movie.streamId);
             float rating = info && info->rating > 0 ? info->rating : movie.rating;
             int duration = info ? info->durationSeconds : 0;
@@ -520,8 +509,6 @@ namespace {
         }
 
         Movie movie;
-        screens::DetailArt art;
-        ui::Backdrop *backdrop;
         std::string backdropUrl;                          // the provider's landscape backdrop ("" = none)
         std::shared_ptr<const MovieInfo> backdropInfo;    // the info backdropUrl was read from
         ui::PosterView *poster;
@@ -556,22 +543,14 @@ namespace {
     public:
         SeriesDetailScreen(App &a, Series s) : Screen(a), series(std::move(s)) {
             ui::background(this);
-            // artwork (screens::bindDetailArt): the clean dark page, the framed cover and a small halo of its colour
-            art.tint = new ui::Backdrop(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H), 0, 0, 0);
-            add(art.tint);
-            backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, L::S_BACKDROP_H),
-                                        L::BACKDROP_FADE_LEFT, L::S_BACKDROP_FADE_BOTTOM, L::BACKDROP_FADE_TOP);
-            backdrop->setAnchor(BACKDROP_ANCHOR);
-            add(backdrop);
-            art.backdrop = backdrop;
-            art.posterRect = FloatRect(L::S_COVER_X, L::S_COVER_Y, L::S_COVER_W, L::S_COVER_H);
-            art.textX = L::S_TEXT_X;
+            // the clean dark page: no backdrop layer, no tint around the cover (v7-ux-14)
+            const FloatRect coverRect(L::S_COVER_X, L::S_COVER_Y, L::S_COVER_W, L::S_COVER_H);
             screens::breadcrumb(this, tr("home.series"));
-            screens::posterShadow(this, art.posterRect);
-            cover = new ui::PosterView(art.posterRect, theme::BODY);
+            screens::posterShadow(this, coverRect);
+            cover = new ui::PosterView(coverRect, theme::BODY);
             cover->setCornersRadius(theme::RADIUS);
             add(cover);
-            screens::posterFrame(this, art.posterRect);
+            screens::posterFrame(this, coverRect);
             const float x = L::S_TEXT_X;
             title = ui::label(this, series.title, theme::TITLE, x, L::S_COVER_Y - 6, ui::Weight::SemiBold,
                               theme::textStrong());
@@ -658,7 +637,6 @@ namespace {
             if (app.images().generation() != imageGen) {
                 imageGen = app.images().generation();
                 bindPoster(app, cover, series.title, series.cover, false);
-                screens::bindDetailArt(app, art, series.cover, backdropUrl());
                 episodes->reload();   // episode stills
                 redraw();
             }
@@ -876,7 +854,7 @@ namespace {
             if (!app.settings().get().loadImages) {
                 return;
             }
-            // the cover and the episode stills: detail pages draw no backdrop (screens::bindDetailArt)
+            // the cover and the episode stills: detail pages draw no backdrop
             std::vector<ImageRequest> req = {{ImageKind::Poster, series.cover}, {ImageKind::PosterLarge, series.cover}};
             if (info && seasonIndex < (int) info->seasons.size()) {
                 const auto &eps = info->seasons[(size_t) seasonIndex].episodes;
@@ -1230,11 +1208,10 @@ namespace {
                     episodes->setSelected(a.episode);
                 }
                 LOG_I("detail", "series info: provider backdrop %s", backdropUrl().empty() ? "none" : "present");
-                requestImages();   // the backdrop (if any) and the stills of the season shown
+                requestImages();   // the stills of the season shown
             }
             imageGen = app.images().generation();
             bindPoster(app, cover, series.title, series.cover, false);
-            screens::bindDetailArt(app, art, series.cover, backdropUrl());
             meta->setText(join({series.year > 0 ? std::to_string(series.year) : "", fmt::rating(series.rating),
                                 series.genre,
                                 series.runtimeMinutes > 0 ? tr("detail.per_episode", {std::to_string(series.runtimeMinutes)}) : "",
@@ -1283,9 +1260,7 @@ namespace {
         }
 
         Series series;
-        screens::DetailArt art;
         std::shared_ptr<const SeriesInfo> info;
-        ui::Backdrop *backdrop;
         ui::PosterView *cover;
         ui::Label *title;
         ui::Label *meta;
