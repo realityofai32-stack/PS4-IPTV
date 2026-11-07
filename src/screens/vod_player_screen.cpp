@@ -12,7 +12,8 @@
 //     * Continue Watching: once 45 s or less remain, the episode is complete for Continue Watching (CompletionLatch)
 //       and the next episode becomes the series' Continue Watching entry at 0 s right away (LibraryStore::markUpNext),
 //       whatever happens next - exit, end of file, Auto-play off, Watch credits.
-//     * The Next Episode card (Settings > Playback > Auto-play next episode, on by default): 45 s before the end a
+//     * The Next Episode card (Settings > Playback > Auto-play next episode, on by default): 45 s before the end (or
+//       the time chosen in Settings > Playback > Show the Next Episode card: 15 / 30 / 45 / 60 / 90 s) a
 //       compact card bottom right (NEXT EPISODE / S02 E05 · title / [Play now]  Watch credits / a thin bar) counts
 //       its 7 seconds and then starts the next episode without waiting for the end of file. Play now (Cross /
 //       Enter) starts it at once, Watch credits (Circle / Esc) dismisses it for this playback. Only while it is shown
@@ -45,6 +46,7 @@
 #include "../app/vod_progress.h"
 #include "../player/display.h"
 #include "../player/hud_logic.h"
+#include "../ui/option_input.h"
 #include "../player/pplay/video_texture.h"
 
 using namespace c2d;
@@ -576,7 +578,7 @@ namespace {
             pb.stop();
             const bool wasShown = countdown.visible();
             logEndOfFile(wasShown);
-            // the Next Episode card after the end (also when the end came before its 45 s window: a reported duration
+            // the Next Episode card after the end (also when the end came before its window: a reported duration
             // longer than the media, or no duration at all): Auto-play ON counts its 7 s, OFF waits for Play now
             if (countdown.endOfFile(nextIdx >= 0, autoPlay(), app.now())) {
                 centre->setVisibility(Visibility::Hidden);
@@ -760,7 +762,7 @@ namespace {
 
         // once per episode, ~48 s before the reported end: the state the card depends on (no URL, no credentials)
         void logEndApproach(const autonext::Frame &f, double position, double duration) {
-            if (endApproachLogged || !isEpisode() || f.remaining < 0 || f.remaining > autonext::CARD_SHOW_REMAINING + 3) {
+            if (endApproachLogged || !isEpisode() || f.remaining < 0 || f.remaining > f.showRemaining + 3) {
                 return;
             }
             endApproachLogged = true;
@@ -784,7 +786,7 @@ namespace {
             } else if (cardWasShown) {
                 card = autoPlay() ? "was shown, its count continues after the end" : "was shown, stays (manual)";
             } else {
-                card = autoPlay() ? "shown after the end (the end came before the 45 s window), 7 s countdown"
+                card = autoPlay() ? "shown after the end (the end came before the card's window), 7 s countdown"
                                   : "shown after the end (manual, auto-play off)";
             }
             LOG_I("player", "end of file at %.2f s, reported duration %.2f s (from %s, %.2f s short), next %s, auto-play "
@@ -799,6 +801,7 @@ namespace {
             autonext::Frame f;
             f.hasNext = nextIdx >= 0;
             f.autoPlay = autoPlay();
+            f.showRemaining = clampNextCardSeconds(app.settings().get().nextCardSeconds);
             f.running = !panelOpen && pb.started() && recovery.status() == stability::Status::Playing
                         && (pb.state() == PlaybackState::Playing || pb.state() == PlaybackState::Paused);
             f.paused = pb.state() == PlaybackState::Paused;
@@ -1311,8 +1314,7 @@ namespace {
             auto *ph = new ui::HintBar();
             ph->setOwner(this);
             ph->setPosition(P::OPTIONS_PAD, layout::HINTS_Y);
-            ph->setHints({{A::Confirm, tr("common.select")}, {A::Change, tr("settings.hint_change")},
-                          {A::Back, tr("common.back")}});
+            ph->setHints({{A::Confirm, tr("common.select")}, {A::Back, tr("common.back")}});   // the D-pad only navigates
             panel->add(ph);
             panel->setVisibility(Visibility::Hidden);
         }
@@ -1541,17 +1543,74 @@ namespace {
                     return;
                 case PadButton::Left:
                 case PadButton::Right:
-                case PadButton::Cross:
-                    if (e.button == PadButton::Cross && !e.repeat && openPicker(panelItems[(size_t) panelList->selected()].row)) {
-                        return;   // every value of the row in the shared choice picker (Left / Right still step)
+                case PadButton::Cross: {
+                    // the D-pad only navigates (ui/option_input.h): Left = the previous menu, Right = open a menu row;
+                    // values change with Cross only (3+ values: the shared picker; On / Off, 2 values: in place)
+                    const PanelItem &pi = panelItems[(size_t) panelList->selected()];
+                    switch (ui::optionCommand(e, optionKind(pi.row), choiceCount(pi.row))) {
+                        case ui::OptionCommand::Back:
+                            if (panelLevel != MENU_MAIN) {
+                                showMenu(MENU_MAIN, panelLevel == MENU_AUDIO ? 0 : panelLevel == MENU_SUBTITLES ? 1
+                                                    : panelLevel == MENU_VIDEO ? 2 : 3);
+                            }
+                            return;
+                        case ui::OptionCommand::OpenPicker:
+                            openPicker(pi.row);
+                            return;
+                        case ui::OptionCommand::Toggle:
+                        case ui::OptionCommand::Cycle:
+                        case ui::OptionCommand::Activate:
+                            activate(pi, 1, true);
+                            return;
+                        default:
+                            return;
                     }
-                    if (!e.repeat || e.button != PadButton::Cross) {
-                        activate(panelItems[(size_t) panelList->selected()], e.button == PadButton::Left ? -1 : 1,
-                                 e.button == PadButton::Cross);
-                    }
-                    return;
+                }
                 default:
                     return;
+            }
+        }
+
+        static ui::OptionKind optionKind(Row row) {
+            switch (row) {
+                case Row::AudioMenu:
+                case Row::SubtitleMenu:
+                case Row::VideoMenu:
+                case Row::SubtitleStyleMenu:
+                    return ui::OptionKind::Menu;
+                case Row::Aspect:
+                case Row::Crop:
+                case Row::Zoom:
+                case Row::PositionX:
+                case Row::PositionY:
+                case Row::SubtitleSize:
+                case Row::SubtitlePosition:
+                    return ui::OptionKind::Choice;
+                case Row::SubtitleShadow:
+                case Row::TechInfo:
+                    return ui::OptionKind::Toggle;
+                default:
+                    return ui::OptionKind::Action;   // tracks, Reset, Set as default, Back
+            }
+        }
+
+        static int choiceCount(Row row) {
+            switch (row) {
+                case Row::Aspect:
+                    return display::ASPECT_COUNT;
+                case Row::Crop:
+                    return display::CROP_COUNT;
+                case Row::Zoom:
+                    return (int) display::zoomSteps().size();
+                case Row::PositionX:
+                case Row::PositionY:
+                    return 2 * display::POSITION_STEPS + 1;
+                case Row::SubtitleSize:
+                    return 3;
+                case Row::SubtitlePosition:
+                    return 2;
+                default:
+                    return 0;
             }
         }
 

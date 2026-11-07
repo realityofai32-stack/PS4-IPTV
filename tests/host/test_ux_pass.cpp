@@ -294,3 +294,118 @@ TEST(recent_remove_with_ds4_and_keyboard) {
     CHECK(!actions::route(f, home, out));
     CHECK_EQ(actions::keyLabel(actions::binding(actions::Action::Remove).keys[0]), std::string("Del"));
 }
+
+// ---- v7-ux-5: the D-pad only navigates option lists; the Next Episode card's timing is a setting
+
+#include "../../src/app/auto_next.h"
+#include "../../src/storage/settings_store.h"
+#include "../../src/ui/option_input.h"
+
+TEST(options_dpad_never_changes_a_value) {
+    const ui::OptionKind kinds[] = {ui::OptionKind::Toggle, ui::OptionKind::Choice, ui::OptionKind::Action,
+                                    ui::OptionKind::Menu};
+    for (ui::OptionKind k: kinds) {
+        for (int choices: {0, 2, 3, 11}) {
+            for (PadButton b: {PadButton::Up, PadButton::Down, PadButton::Left, PadButton::Right}) {
+                for (bool repeat: {false, true}) {
+                    ui::OptionCommand c = ui::optionCommand(pad(b, repeat), k, choices);
+                    CHECK(!ui::changesValue(c));   // Left / Right (and held arrows) never edit a value
+                }
+            }
+            // Up / Down move, Left goes back, Right only opens a menu row
+            CHECK(ui::optionCommand(pad(PadButton::Up), k, choices) == ui::OptionCommand::Up);
+            CHECK(ui::optionCommand(pad(PadButton::Down, true), k, choices) == ui::OptionCommand::Down);
+            CHECK(ui::optionCommand(pad(PadButton::Left), k, choices) == ui::OptionCommand::Back);
+            CHECK(ui::optionCommand(pad(PadButton::Right), k, choices)
+                  == (k == ui::OptionKind::Menu ? ui::OptionCommand::Activate : ui::OptionCommand::None));
+            // a held Cross never changes anything (one change per press)
+            CHECK(ui::optionCommand(pad(PadButton::Cross, true), k, choices) == ui::OptionCommand::None);
+        }
+    }
+    // the keyboard's arrows are the same buttons (universal routing): no value change either
+    for (kbd::Key k: {kbd::Key::Left, kbd::Key::Right}) {
+        CHECK(!ui::changesValue(ui::optionCommand(key(k), ui::OptionKind::Choice, 5)));
+        CHECK(!ui::changesValue(ui::optionCommand(key(k), ui::OptionKind::Toggle)));
+    }
+}
+
+TEST(options_cross_changes_values) {
+    CHECK(ui::optionCommand(pad(PadButton::Cross), ui::OptionKind::Toggle) == ui::OptionCommand::Toggle);
+    CHECK(ui::optionCommand(pad(PadButton::Cross), ui::OptionKind::Choice, 2) == ui::OptionCommand::Cycle);
+    CHECK(ui::optionCommand(pad(PadButton::Cross), ui::OptionKind::Choice, 3) == ui::OptionCommand::OpenPicker);
+    CHECK(ui::optionCommand(pad(PadButton::Cross), ui::OptionKind::Choice, 11) == ui::OptionCommand::OpenPicker);
+    CHECK(ui::optionCommand(pad(PadButton::Cross), ui::OptionKind::Action) == ui::OptionCommand::Activate);
+    CHECK(ui::optionCommand(pad(PadButton::Cross), ui::OptionKind::Menu) == ui::OptionCommand::Activate);
+    CHECK(ui::optionCommand(key(kbd::Key::Enter), ui::OptionKind::Choice, 5) == ui::OptionCommand::OpenPicker);
+    CHECK(ui::optionCommand(pad(PadButton::Circle), ui::OptionKind::Choice, 5) == ui::OptionCommand::Cancel);
+    // the Next Episode timing (5 values) opens the picker
+    CHECK(ui::optionCommand(pad(PadButton::Cross), ui::OptionKind::Choice, (int) nextCardChoices().size())
+          == ui::OptionCommand::OpenPicker);
+}
+
+TEST(next_card_timing_setting_persists) {
+    CHECK((nextCardChoices() == std::vector<int>{15, 30, 45, 60, 90}));
+    SettingsStore fresh("unused");
+    CHECK(fresh.get().nextCardSeconds == 45);                       // the default
+    // every choice round-trips
+    for (int v: nextCardChoices()) {
+        SettingsStore a("unused");
+        a.get().nextCardSeconds = v;
+        SettingsStore b("unused");
+        CHECK(b.deserialize(a.serialize(), nullptr) && b.get().nextCardSeconds == v);
+    }
+    // older files without it: 45; odd or broken values: the nearest choice / 45
+    SettingsStore old("unused");
+    CHECK(old.deserialize("{\"version\":2,\"autoPlayNext\":true}", nullptr) && old.get().nextCardSeconds == 45);
+    CHECK(clampNextCardSeconds(20) == 15 && clampNextCardSeconds(50) == 45 && clampNextCardSeconds(75) == 60);
+    CHECK(clampNextCardSeconds(600) == 90 && clampNextCardSeconds(0) == 45 && clampNextCardSeconds(-5) == 45);
+    SettingsStore odd("unused");
+    CHECK(odd.deserialize("{\"version\":2,\"nextEpisodeCardSeconds\":\"x\"}", nullptr) && odd.get().nextCardSeconds == 45);
+    // Auto-play off keeps the chosen timing for when it is turned on again
+    SettingsStore off("unused");
+    off.get().autoPlayNextEpisode = false;
+    off.get().nextCardSeconds = 90;
+    SettingsStore back("unused");
+    CHECK(back.deserialize(off.serialize(), nullptr) && !back.get().autoPlayNextEpisode && back.get().nextCardSeconds == 90);
+}
+
+TEST(next_card_appears_at_the_chosen_time_and_counts_7) {
+    for (int show: nextCardChoices()) {
+        autonext::Countdown c;
+        double now = 0;
+        autonext::Frame f;
+        f.hasNext = true;
+        f.autoPlay = true;
+        f.running = true;
+        f.showRemaining = show;
+        // not before the chosen time
+        f.remaining = show + 0.05;
+        f.now = now;
+        CHECK(!c.update(f) && !c.visible());
+        // at it: shown, 7 s countdown started
+        f.remaining = show;
+        CHECK(!c.update(f) && c.visible() && c.counting() && c.seconds() == 7);
+        // the decision is always 7 s, whatever the appearance time
+        int frames = 0;
+        bool started = false;
+        while (!started && frames < 20 * 60) {
+            now += 1.0 / 60;
+            f.now = now;
+            f.remaining = std::max(0.0, f.remaining - 1.0 / 60);
+            started = c.update(f);
+            frames++;
+        }
+        CHECK(started && std::abs(frames - 7 * 60) <= 1);
+        // a seek back beyond the chosen time + 1 s hides it
+        autonext::Countdown s;
+        f.remaining = show - 1;
+        s.update(f);
+        f.remaining = show + 1.2;
+        s.update(f);
+        CHECK(!s.visible() && s.phase() == autonext::Phase::Idle);
+    }
+    // the default frame is the 45 s of v7-ux-4
+    CHECK(autonext::Frame().showRemaining == 45 && autonext::CARD_SECONDS == 7);
+    // Continue Watching's completion stays at 45 s whatever the card's timing is
+    CHECK(progress::COMPLETION_REMAINING == 45);
+}

@@ -12,6 +12,7 @@
 #include <algorithm>
 
 #include "common.h"
+#include "../ui/option_input.h"
 #include "build_info.h"
 #include "../downloads/download_model.h"
 #include "../platform/log.h"
@@ -320,13 +321,8 @@ namespace {
                         }
                         return;
                     }
-                    if (e.repeat) {
-                        return;
-                    }
-                    // values change with Left / Right; on actions Left goes back to the categories
-                    if (item.kind == Kind::Choice || item.kind == Kind::Toggle) {
-                        change(item, e.button == PadButton::Right ? 1 : -1, false);
-                    } else if (e.button == PadButton::Left) {
+                    // the D-pad only navigates (ui/option_input.h): Left goes back to the categories, Right does nothing
+                    if (ui::optionCommand(e, optionKind(item)) == ui::OptionCommand::Back) {
                         setFocus(0);
                     }
                     return;
@@ -337,12 +333,18 @@ namespace {
                     }
                     return;
                 case PadButton::Cross:
-                    if (!e.repeat) {
-                        if (item.kind == Kind::Choice && item.options.size() >= 3) {
-                            openPicker(list->selected());   // every value at once (Left / Right still step)
-                        } else {
-                            change(item, 1, true);          // On / Off and two-value choices toggle in place
-                        }
+                    // a value changes only here: 3+ values in the shared picker, On / Off and 2 values in place
+                    switch (ui::optionCommand(e, optionKind(item), (int) item.options.size())) {
+                        case ui::OptionCommand::OpenPicker:
+                            openPicker(list->selected());
+                            break;
+                        case ui::OptionCommand::Toggle:
+                        case ui::OptionCommand::Cycle:
+                        case ui::OptionCommand::Activate:
+                            change(item, 1, true);
+                            break;
+                        default:
+                            break;
                     }
                     return;
                 case PadButton::Circle:
@@ -464,15 +466,39 @@ namespace {
                                  {A::Tabs, tr("live.category")}, {A::Back, tr("common.back")}});
             } else {
                 bool swatches = catIndex == CAT_APPEARANCE;
-                hints->setHints({{A::Confirm, tr(swatches ? "settings.hint_apply" : "common.select")},
-                                 {A::Change, tr("settings.hint_change")},
-                                 {A::Tabs, tr("live.category")},
-                                 {A::Back, tr("settings.hint_categories")}});
+                // the D-pad only navigates: Cross changes a value (Change is shown only for the palette's swatches)
+                screens::Hints h = {{A::Confirm, tr(swatches ? "settings.hint_apply" : "common.select")}};
+                if (swatches) {
+                    h.push_back({A::Change, tr("settings.hint_change")});
+                }
+                h.push_back({A::Tabs, tr("live.category")});
+                h.push_back({A::Back, tr("settings.hint_categories")});
+                hints->setHints(h);
             }
             refreshPanel();
         }
 
+        bool playbackRebuild = false;   // Auto-play changed: Playback's rows are built again after the toggle
+
         std::vector<SettingItem> &items() { return cats[(size_t) catIndex].items; }
+
+        // Playback's rows depend on Auto-play (the card timing row): built again, the selection kept on its row
+        void rebuildPlayback() {
+            playbackRebuild = false;
+            int at = list->selected();
+            cats[CAT_PLAYBACK].items.clear();
+            buildPlayback(cats[CAT_PLAYBACK].items);
+            if (catIndex == CAT_PLAYBACK) {
+                list->reload();
+                list->setSelected(std::min(at, (int) items().size() - 1));
+                refreshPanel();
+            }
+        }
+
+        static ui::OptionKind optionKind(const SettingItem &item) {
+            return item.kind == Kind::Toggle ? ui::OptionKind::Toggle : item.kind == Kind::Choice ? ui::OptionKind::Choice
+                                                                                                 : ui::OptionKind::Action;
+        }
 
         // the shared choice picker for a Choice row; the value applies when it closes (the row shows it at once)
         void openPicker(int row) {
@@ -507,6 +533,10 @@ namespace {
                     return;
                 }
                 item.setToggle(want);
+                if (playbackRebuild) {
+                    rebuildPlayback();   // `item` belongs to the old list: nothing of it is used after this
+                    return;
+                }
             } else if (activate && item.kind == Kind::Palette) {
                 if (paletteColumn < (int) item.swatches.size()) {
                     applyAccent(item.swatches[(size_t) paletteColumn]);
@@ -727,9 +757,37 @@ namespace {
             autoNext.setToggle = [this, &s](bool on) {
                 s.autoPlayNextEpisode = on;
                 save();
+                playbackRebuild = true;   // the card timing row appears / disappears (after this call: change())
             };
             autoNext.describe = [] { return tr("settings.autoplay.desc"); };
             items.push_back(autoNext);
+
+            // when the Next Episode card appears (only with Auto-play on); its 7 s countdown never changes
+            if (s.autoPlayNextEpisode) {
+                SettingItem cardTime;
+                cardTime.kind = Kind::Choice;
+                cardTime.caption = tr("settings.next_card_time");
+                for (int v: nextCardChoices()) {
+                    cardTime.options.push_back(i18n::count("settings.next_card_seconds", (long long) v));
+                }
+                cardTime.choice = [&s] {
+                    const std::vector<int> &c = nextCardChoices();
+                    int v = clampNextCardSeconds(s.nextCardSeconds);
+                    for (size_t i = 0; i < c.size(); i++) {
+                        if (c[i] == v) {
+                            return (int) i;
+                        }
+                    }
+                    return 0;
+                };
+                cardTime.setChoice = [this, &s](int i) {
+                    const std::vector<int> &c = nextCardChoices();
+                    s.nextCardSeconds = c[(size_t) std::min(std::max(i, 0), (int) c.size() - 1)];
+                    save();
+                };
+                cardTime.describe = [] { return tr("settings.next_card_time.desc"); };
+                items.push_back(cardTime);
+            }
 
             SettingItem tech;
             tech.kind = Kind::Toggle;

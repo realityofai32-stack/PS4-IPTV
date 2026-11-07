@@ -5,6 +5,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "../iptv/sorting.h"
 #include "../player/display.h"
@@ -18,15 +19,24 @@ enum class StreamFormat {
     Hls     // Prefer HLS: HLS first, TS once if HLS cannot be opened
 };
 
+// the choices of Settings > Playback > Show the Next Episode card (seconds before the end), shortest first
+const std::vector<int> &nextCardChoices();
+
+// a stored / chosen value -> one of nextCardChoices() (the nearest; 45 when it is not a number of seconds)
+int clampNextCardSeconds(int seconds);
+
 struct Settings {
     StreamFormat streamFormat = StreamFormat::Auto;
     StabilityPreset stability = StabilityPreset::Balanced;
     bool retryOnStall = true;
     bool resumeVod = true;
-    // Settings > Playback > Auto-play next episode: the 45 s countdown at the end of an episode (app/auto_next.h).
+    // Settings > Playback > Auto-play next episode: the Next Episode card's 7 s countdown (app/auto_next.h).
     // Stored as "autoPlayNext"; files without it get ON - including v0.2.0 files, whose "autoPlayNextEpisode"
     // (a different, opt-in feature that defaulted to off) is only written for older builds and never read.
     bool autoPlayNextEpisode = true;
+    // Settings > Playback > Show the Next Episode card: seconds before the end of an episode (one of
+    // nextCardChoices(), default 45). Stored as "nextEpisodeCardSeconds"; older builds ignore it.
+    int nextCardSeconds = 45;
     bool showTechnicalInfo = false;
     bool loadImages = true;
     // lists and grids glide to their new position (off: they jump row by row, as before Checkpoint 3.2)

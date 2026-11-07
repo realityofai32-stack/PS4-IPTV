@@ -272,7 +272,7 @@ namespace autonext {
             return false;
         }
         if (state == Phase::Idle) {
-            if (!f.running || !known || f.remaining > CARD_SHOW_REMAINING) {
+            if (!f.running || !known || f.remaining > f.showRemaining) {
                 return false;
             }
             state = Phase::Counting;
@@ -281,7 +281,7 @@ namespace autonext {
             held = false;
             return false;
         }
-        if (known && f.remaining > CARD_SHOW_REMAINING + RESET_MARGIN) {
+        if (known && f.remaining > f.showRemaining + RESET_MARGIN) {
             reset();   // seeked back: it may come again at the end
             return false;
         }

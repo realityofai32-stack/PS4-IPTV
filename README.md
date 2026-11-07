@@ -118,7 +118,8 @@ not distributed with V7 IPTV.</sub>
 
 ### Next Episode
 
-When **45 seconds** of an episode that has a next episode remain, a compact card appears in the lower-right corner
+When **45 seconds** (adjustable: *Settings › Playback › Show the Next Episode card*, 15 / 30 / 45 / 60 / 90 s) of an
+episode that has a next episode remain, a compact card appears in the lower-right corner
 (*NEXT EPISODE · S02E05 · title*), clear of the subtitles:
 
 - **Play now** (✕ / Enter): play the next episode at once

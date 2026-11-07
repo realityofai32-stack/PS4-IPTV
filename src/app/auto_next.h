@@ -32,7 +32,9 @@
 //    nothing is created: the existing completion behaviour applies.
 //
 // 2. The visible Next Episode card (Countdown). Two separate numbers:
-//      CARD_SHOW_REMAINING = 45 s  when the card appears (the same moment as the Continue Watching completion above)
+//      CARD_SHOW_REMAINING = 45 s  when the card appears by default; Settings > Playback > Show the Next Episode card
+//                                  chooses 15 / 30 / 45 / 60 / 90 s (Frame::showRemaining). Continue Watching's
+//                                  completion stays at 45 s whatever this setting is.
 //      CARD_SECONDS        = 7 s   the decision countdown, started as soon as the card appears - never a 45 s count
 //    Shown whenever a valid next episode exists - with Auto-play ON it counts its 7 s and then starts the next episode
 //    (about 38 s before the end: the rest of the credits is skipped unless Watch credits is chosen); with Auto-play OFF
@@ -140,6 +142,7 @@ namespace autonext {
         bool paused = false;       // paused: the card stays, its count waits
         double remaining = -1;     // duration - position (the pending seek target when one is pending); < 0 unknown
         double now = 0;            // monotonic seconds
+        double showRemaining = CARD_SHOW_REMAINING;   // Settings: the card appears with this much left (15 .. 90 s)
     };
 
     class Countdown {

@@ -1,4 +1,25 @@
+#include <cstdlib>
+
 #include "settings_store.h"
+
+const std::vector<int> &nextCardChoices() {
+    static const std::vector<int> choices = {15, 30, 45, 60, 90};
+    return choices;
+}
+
+int clampNextCardSeconds(int seconds) {
+    const std::vector<int> &c = nextCardChoices();
+    if (seconds <= 0) {
+        return 45;
+    }
+    int best = c.front();
+    for (int v: c) {
+        if (std::abs(v - seconds) < std::abs(best - seconds)) {
+            best = v;
+        }
+    }
+    return best;
+}
 #include "../core/json.h"
 #include "../platform/fs.h"
 #include "../ui/palette.h"
@@ -92,6 +113,7 @@ std::string SettingsStore::serialize() const {
     root.set("resumeVod", json::Value::makeBool(settings.resumeVod));
     root.set("autoPlayNext", json::Value::makeBool(settings.autoPlayNextEpisode));
     root.set("autoPlayNextEpisode", json::Value::makeBool(settings.autoPlayNextEpisode));   // older builds
+    root.set("nextEpisodeCardSeconds", json::Value::makeInt(clampNextCardSeconds(settings.nextCardSeconds)));
     root.set("showTechnicalInfo", json::Value::makeBool(settings.showTechnicalInfo));
     root.set("loadImages", json::Value::makeBool(settings.loadImages));
     root.set("smoothScrolling", json::Value::makeBool(settings.smoothScrolling));
@@ -137,6 +159,7 @@ bool SettingsStore::deserialize(const std::string &text, std::string *error) {
     s.subtitlePosition = indexOf(root["subtitlePosition"].asString(), SUB_POSITIONS, 2, 0);
     s.subtitleShadow = root["subtitleShadow"].asBool(false);
     s.autoPlayNextEpisode = root["autoPlayNext"].asBool(true);
+    s.nextCardSeconds = clampNextCardSeconds((int) root["nextEpisodeCardSeconds"].asInt(45));
     s.showTechnicalInfo = root["showTechnicalInfo"].asBool(s.showTechnicalInfo);
     s.loadImages = root["loadImages"].asBool(s.loadImages);
     s.smoothScrolling = root["smoothScrolling"].asBool(s.smoothScrolling);

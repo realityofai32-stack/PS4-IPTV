@@ -1,0 +1,19 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX-5: NEXT EPISODE CARD TIMING SETTING, D-PAD ONLY NAVIGATES
+=============================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file.
+Install OVER the existing V7 IPTV: profiles, settings, history and downloads are kept.
+
+ 1. Settings > Playback: with Auto-play next episode ON a new row "Show the Next Episode card" (default 45 seconds
+    before the end) is right under it. X / Enter opens the picker: 15 / 30 / 45 / 60 / 90 seconds. Turn Auto-play OFF:
+    the row disappears; ON again: it is back with the chosen value. Restart the app: the value is kept.
+ 2. Play an episode to its end with e.g. 15 s and 90 s: the card appears at that time and always counts 7 seconds
+    (then the next episode starts; Play now / Watch credits as before). Continue Watching still moves on in the last
+    45 seconds whatever the card's timing is.
+ 3. D-PAD ONLY NAVIGATES: in Settings, Left / Right on any row never changes a value (Left goes back to the categories);
+    X / Enter toggles On / Off rows, switches two-value rows, opens the picker for 3+ values. The hint bar no longer
+    shows the D-pad "Change" hint (except on the accent colour swatches, where Left / Right pick a swatch and X applies).
+    Playback options (OPTIONS in the player): Left goes back to the main menu from Audio / Subtitles / Video / Subtitle
+    style, Right opens a menu row, Left / Right never change aspect / crop / zoom / position / subtitle settings;
+    X / Enter does (picker for aspect, crop, zoom, position, subtitle size; in place for position / shadow / info).
+    The same with a keyboard (arrows navigate, Enter changes).

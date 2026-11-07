@@ -703,7 +703,11 @@ namespace i18n {
                                      "Devam Et). Kapalı: her zaman baştan başlar; ilerleme yine de hatırlanır. Canlı "
                                      "TV için geçerli değildir."},
             {"settings.autoplay", "Sonraki bölümü otomatik oynat"},
-            {"settings.autoplay.desc", "Açık: bölüm bitmeden 45 saniye önce küçük bir kart sonraki bölümü gösterir ve 7 saniyelik geri sayımdan sonra oynatır (bölüm bildirilen süresinden önce bitse de). Şimdi oynat hemen başlatır, Jeneriği izle izlemeye devam eder. Kapalı: aynı kart sonraki bölümü başlatmadan önerir."},
+            {"settings.autoplay.desc", "Açık: bölüm bitmeden önce (varsayılan 45 saniye, bkz. Sonraki Bölüm kartını göster) küçük bir kart sonraki bölümü gösterir ve 7 saniyelik geri sayımdan sonra oynatır (bölüm bildirilen süresinden önce bitse de). Şimdi oynat hemen başlatır, Jeneriği izle izlemeye devam eder. Kapalı: aynı kart, bitişten 45 saniye önce sonraki bölümü başlatmadan önerir."},
+            {"settings.next_card_time", "Sonraki Bölüm kartını göster"},
+            {"settings.next_card_time.desc", "Sonraki Bölüm kartının bölüm bitmeden ne kadar önce görüneceği. Ardından 7 saniyelik geri sayımı başlar; Jeneriği izle izlemeye devam eder. İzlemeye Devam Et, bu ayardan bağımsız olarak son 45 saniyede sonraki bölüme geçer."},
+            {"settings.next_card_seconds.one", "Bitişten {0} saniye önce"},
+            {"settings.next_card_seconds.other", "Bitişten {0} saniye önce"},
             {"settings.retry_downloads", "İndirmeleri otomatik yeniden dene"},
             {"settings.retry_downloads.desc", "Açık: bağlantı koptuğunda indirmeler bekler ve giderek daha seyrek "
                                               "deneyerek kaldıkları yerden kendiliğinden devam eder. Kapalı: kesilen "

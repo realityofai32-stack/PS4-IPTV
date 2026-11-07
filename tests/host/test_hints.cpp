@@ -77,7 +77,7 @@ namespace {
                 {"series-detail", {Action::Confirm, Action::Tabs, Action::Favorite, Action::Back}},
                 {"search-typing", {Action::Type, Action::TextBackspace, Action::TextSpace, Action::Tabs, Action::Back}},
                 {"search-results", {Action::Confirm, Action::Tabs, Action::Page, Action::Back}},
-                {"settings", {Action::Confirm, Action::Change, Action::Tabs, Action::Back}},
+                {"settings", {Action::Confirm, Action::Tabs, Action::Back}},   // Change: the palette's swatches only
                 {"local-media", {Action::Confirm, Action::Refresh, Action::Back}},
                 {"downloads", {Action::Confirm, Action::PauseResume, Action::MoreOptions, Action::Tabs, Action::Back}},
                 {"favorites", {Action::Confirm, Action::Tabs, Action::Remove, Action::Back}},
@@ -87,7 +87,7 @@ namespace {
                 {"live-player", {Action::Confirm, Action::Tabs, Action::Favorite, Action::Info, Action::Back}},
                 {"vod-player", {Action::PlayPause, Action::Seek, Action::Options, Action::NextEpisode, Action::Back,
                                 Action::Info, Action::Favorite, Action::PreviousEpisode, Action::SeekMinute}},
-                {"vod-player-options", {Action::Confirm, Action::Change, Action::Back}},
+                {"vod-player-options", {Action::Confirm, Action::Back}},
                 {"next-episode-card", {Action::PlayNow, Action::Seek, Action::Options, Action::NextEpisode,
                                        Action::WatchCredits, Action::Info, Action::Favorite, Action::PreviousEpisode,
                                        Action::SeekMinute}},
