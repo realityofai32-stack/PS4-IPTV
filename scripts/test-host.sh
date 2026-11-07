@@ -56,7 +56,7 @@ build app_tests \
     "$h/test_layout.cpp" "$h/test_image_fit.cpp" "$h/test_clock.cpp" "$h/test_autonext.cpp" \
     "$h/test_https.cpp" "$h/test_keyboard.cpp" "$h/test_stalker.cpp" "$h/test_localmedia.cpp" \
     "$h/test_subtitles.cpp" "$h/test_http_policy.cpp" "$h/test_hints.cpp" "$h/test_continue.cpp" \
-    "$h/test_hero_art.cpp" "$h/test_ux_pass.cpp" "$h/test_grid_binding.cpp" \
+    "$h/test_hero_art.cpp" "$h/test_ux_pass.cpp" "$h/test_grid_binding.cpp" "$h/test_home_rails.cpp" \
     "$h/stb_impl.cpp" \
     "$s/core/utf8.cpp" "$s/core/json.cpp" "$s/core/url.cpp" "$s/iptv/xtream.cpp" "$s/iptv/catalog.cpp" \
     "$s/iptv/m3u.cpp" \
@@ -73,7 +73,7 @@ build app_tests \
     "$s/downloads/download_manager.cpp" "$s/app/offline.cpp" "$s/app/auto_next.cpp" \
     "$s/player/protocols.cpp" "$s/platform/keyboard_logic.cpp" "$s/core/hash.cpp" "$s/iptv/stalker.cpp" \
     "$s/media/local_media.cpp" "$s/player/subtitle_font.cpp" "$s/player/mpv_log_filter.cpp" "$s/network/http_policy.cpp" \
-    "$s/platform/input_actions.cpp" "$s/images/hero_art.cpp" "$s/ui/choice_model.cpp"
+    "$s/platform/input_actions.cpp" "$s/images/hero_art.cpp" "$s/ui/choice_model.cpp" "$s/app/home_cards.cpp"
 
 t="$repo/tests/playback-test"
 build host_tests "$t/host-tests/host_tests.cpp" "$t/src/redact.cpp" "$t/src/stream_config.cpp"

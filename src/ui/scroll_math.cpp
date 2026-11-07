@@ -120,4 +120,8 @@ namespace scroll {
         float y = ((float) r - frac) * pitch;
         return y < shownExtent && y + cellHeight > 0 && (r < drawn || frac > 0);
     }
+
+    bool moreAfter(int first, int visible, int count) {
+        return visible > 0 && std::max(0, first) + visible < count;
+    }
 }

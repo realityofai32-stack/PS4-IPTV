@@ -119,6 +119,7 @@ namespace layout {
         constexpr float RAIL_GAP = 52;
         constexpr float RAIL_PITCH = RAIL_HEADING_H + CARD_H + RAIL_GAP;   // 363
         constexpr int CARDS_VISIBLE = 3;
+        constexpr float RAIL_MORE_GAP = 18;            // the "more" chevron: this far right of the last card (1842)
         constexpr float VIEW_BOTTOM = 958;             // a focused rail's lowest text edge
     }
 

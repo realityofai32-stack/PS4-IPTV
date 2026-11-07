@@ -44,6 +44,8 @@
 #include "common.h"
 #include "../app/offline.h"
 #include "../images/hero_art.h"
+#include "../app/home_cards.h"
+#include "../ui/scroll_math.h"
 #include "../core/format.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
@@ -97,6 +99,7 @@ namespace {
         ItemKind kind = ItemKind::History;
         HistoryEntry history;
         int index = -1;
+        bool recent = false;   // a Recently Watched card: identity only (app/home_cards.h)
     };
 
     // one media card of a rail: [poster or logo area | title, second line, third line, progress] on a neutral surface
@@ -118,6 +121,7 @@ namespace {
         RailKind kind;
         RectangleShape *layer = nullptr;   // the cards, moved horizontally by whole cards
         ui::Label *heading = nullptr;
+        ui::Label *more = nullptr;          // "›" right of the cards: more items off-screen (Continue / Recent)
         ui::Label *empty = nullptr;
         std::vector<RailItem> items;
         std::vector<Card> cards;
@@ -379,6 +383,14 @@ namespace {
                                 theme::textMuted());
             r.empty->setMaxWidth(theme::CONTENT_W);
             r.empty->setMaxLines(2);
+            if (r.kind == RailKind::Continue || r.kind == RailKind::Recent) {
+                // a quiet chevron in the margin right of the cards when more items lie off-screen (never accent)
+                r.more = ui::label(page, "\xE2\x80\xBA", theme::DISPLAY, theme::SAFE_RIGHT + L::RAIL_MORE_GAP, 0,
+                                   ui::Weight::Regular, theme::textMuted());
+                r.more->setPosition(theme::SAFE_RIGHT + L::RAIL_MORE_GAP,
+                                    y + L::RAIL_HEADING_H + std::round((L::CARD_H - r.more->height()) / 2));
+                r.more->setVisibility(Visibility::Hidden);
+            }
         }
 
         // ------------------------------------------------------------------ data
@@ -396,23 +408,12 @@ namespace {
             return h.type == ContentType::Series && !h.seriesName.empty() ? h.seriesName : h.name;
         }
 
-        // "S01E03 · Title" for an episode
         static std::string episodeLine(const HistoryEntry &h) {
-            std::string code = fmt::episodeCode(h.season, h.episode);
-            return code + " \xC2\xB7 " + (h.name.empty() ? tr("episode.number", {std::to_string(h.episode)}) : h.name);
+            return homecards::episodeLine(h);
         }
 
-        // one line under a history card: episode code or the type
-        static std::string kindLine(const HistoryEntry &h) {
-            if (h.type == ContentType::Series) {
-                return episodeLine(h);
-            }
-            return tr(h.type == ContentType::Movie ? "home.kind_movie" : "home.kind_live");
-        }
-
-        // a series' Continue Watching entry that points at its next episode (not started yet)
         static bool isUpNext(const HistoryEntry &h) {
-            return h.type == ContentType::Series && h.upNext && !progress::inProgress(h);
+            return homecards::isUpNext(h);
         }
 
         static std::string timeLine(const HistoryEntry &h) {
@@ -438,6 +439,7 @@ namespace {
                         for (const HistoryEntry *h: app.library().recentlyWatched(RECENT_MAX, RECENT_LIVE_MAX)) {
                             RailItem it;
                             it.history = *h;
+                            it.recent = true;
                             r.items.push_back(it);
                         }
                         break;
@@ -500,17 +502,19 @@ namespace {
                 case ItemKind::History: {
                     const HistoryEntry &h = it.history;
                     title = titleOf(h);
-                    second = kindLine(h);
                     image = h.icon;
                     live = h.type == ContentType::Live;
-                    if (!live && isUpNext(h)) {
-                        third = tr("home.up_next");   // the series' next episode (Continue Watching), not started
-                    } else if (!live && progress::inProgress(h)) {
-                        third = fmt::remaining(h.position, h.duration);
-                        progress = std::max(0.02f, (float) progress::fraction(h.position, h.duration));
-                    } else if (h.watched) {
-                        third = "\xE2\x9C\x93 " + tr("progress.watched");
+                    std::string number;
+                    if (live && it.recent) {
+                        const LiveChannel *c = app.session().live.find(h.id);
+                        number = c && c->num > 0 ? std::to_string(c->num) : "";
                     }
+                    // Continue Watching: where playback stopped; Recently Watched: what it is (app/home_cards.h)
+                    homecards::Text t = homecards::historyCard(h, it.recent ? homecards::Rail::Recent
+                                                                            : homecards::Rail::Continue, number);
+                    second = t.second;
+                    third = t.third;
+                    progress = t.progress;
                     return;
                 }
                 case ItemKind::Channel: {
@@ -1248,6 +1252,11 @@ namespace {
                     imagesDue = true;   // other cards came on screen
                 }
                 r.layer->setPosition(theme::SAFE_X - (float) r.first * (L::CARD_W + L::CARD_GAP), r.y + L::RAIL_HEADING_H);
+                if (r.more) {
+                    // more cards to the right: after every move, rebuild and removal (refresh runs after each)
+                    bool more = scroll::moreAfter(r.first, L::CARDS_VISIBLE, (int) r.items.size());
+                    r.more->setVisibility(more ? Visibility::Visible : Visibility::Hidden);
+                }
                 for (int i = 0; i < (int) r.cards.size(); i++) {
                     Card &c = r.cards[(size_t) i];
                     bool f = active && i == r.index;

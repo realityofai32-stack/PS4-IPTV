@@ -1,0 +1,12 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX-9: RECENTLY WATCHED CARDS, "MORE" CHEVRON ON HOME RAILS
+============================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Install OVER the existing V7 IPTV.
+
+ 1. RECENTLY WATCHED: cards show the title and what it is only - an episode "S01E03 · title" + Series, a movie
+    "Movie", a channel "Live TV" + its number. No time left, no progress bar, no "Watched", no "Next episode".
+    Continue Watching cards are unchanged (time left + progress bar / Next episode).
+ 2. "MORE" CHEVRON: with more than three cards in Continue Watching or Recently Watched, a quiet grey "›" sits right of
+    the last visible card. Move right to the end of the rail: it disappears; move back: it returns. A rail with three
+    or fewer cards never shows it. It never looks focused (grey, no accent, no ring).
+ 3. Remove cards (Square / Del) until three or fewer remain: the chevron disappears at once.

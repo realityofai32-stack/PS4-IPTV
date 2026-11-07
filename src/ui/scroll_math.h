@@ -70,6 +70,10 @@ namespace scroll {
         std::vector<int> bound;
     };
 
+    // a rail / row showing `visible` items from `first` has more items to the right (the "more" chevron); false when
+    // everything fits or the end is on screen
+    bool moreAfter(int first, int visible, int count);
+
     // whether slot r (0 .. drawn, drawn = the extra slot that enters while gliding) is on screen at the fractional
     // offset frac (0 <= frac < 1): its top at (r - frac) * pitch, a part of it inside 0 .. shownExtent
     bool slotShown(int r, int drawn, float frac, float pitch, float cellHeight, float shownExtent);
