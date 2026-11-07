@@ -124,7 +124,7 @@ namespace {
             // text column; without one, the poster's colour as a subtle tint around the poster (clean dark page)
             art.tint = new ui::Backdrop(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H), 0, 0, 0);
             add(art.tint);
-            backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, theme::SCREEN_H),
+            backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, L::M_BACKDROP_H),
                                         L::BACKDROP_FADE_LEFT, L::M_BACKDROP_FADE_BOTTOM, L::BACKDROP_FADE_TOP);
             backdrop->setAnchor(BACKDROP_ANCHOR);
             add(backdrop);
@@ -717,8 +717,17 @@ namespace {
                     continue;
                 }
                 std::shared_ptr<ImageSet> still = ep.image.empty() ? nullptr : app.images().get(ImageKind::Poster, ep.image);
-                if (still && !images::hero::landscapeStill(still->source.x, still->source.y)) {
-                    still = nullptr;   // the repeated portrait cover: the clean "E 3" number tile instead
+                if (still) {
+                    // a real still is shown; the series cover repeated as the episode image (or any image several
+                    // episodes share), a portrait poster or a tiny image get the clean "E 3" number tile instead
+                    int shared = 0;
+                    for (const Episode &other: season.episodes) {
+                        shared += other.image == ep.image;
+                    }
+                    if (!images::hero::episodeStillUsable(still->source.x, still->source.y, ep.image == series.cover,
+                                                          shared)) {
+                        still = nullptr;
+                    }
                 }
                 r.thumb->set(tr("episode.short", {std::to_string(ep.number)}), still ? still->at(0).texture : nullptr,
                              still ? still->at(0).size : Vector2i());

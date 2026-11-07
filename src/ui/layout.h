@@ -153,10 +153,14 @@ namespace layout {
         // the page (starts further right than before: the plot column stays on the clean page), at ~34 % brightness
         // (175 / 255 x (1 - 128 / 255)); without one the page stays clean dark with the poster's colour as a subtle
         // tint hugging the poster (images/hero_art.h ambientAround). The poster is framed like Home's showcase.
+        // v7-ux-12: the backdrop is never enlarged into fog - the movie box is 16:9 (it was the full screen height:
+        // a 1280 x 720 backdrop drawn 1.5x, a 780 x 439 one 2.5x), a backdrop that would be enlarged more than
+        // BACKDROP_MAX_SCALE is not used (the clean page instead), and it is dimmer (~28 %)
         constexpr float BACKDROP_X = 680;
         constexpr float BACKDROP_FADE_LEFT = 700;      // 680..1380
-        constexpr int BACKDROP_TINT = 175;
-        constexpr int BACKDROP_SHADE = 128;
+        constexpr int BACKDROP_TINT = 160;
+        constexpr int BACKDROP_SHADE = 140;            // 160 / 255 x (1 - 140 / 255) = 28 %
+        constexpr float BACKDROP_MAX_SCALE = 1.1f;
         constexpr float TINT_TEXT_GAP = 24;            // the poster's tint stops this far before the text column
         constexpr float POSTER_SHADOW_Y = 10;          // the poster's soft shadow (as Home's showcase)
         constexpr int POSTER_SHADOW_ALPHA = 120;
@@ -172,7 +176,8 @@ namespace layout {
         constexpr float M_TEXT_W = SAFE_RIGHT - M_TEXT_X;          // 1344
         constexpr float M_PLOT_W = 1040;
         constexpr float M_BUTTONS_MIN_Y = 540;
-        constexpr float M_BACKDROP_FADE_BOTTOM = 440;  // 640..1080
+        constexpr float M_BACKDROP_H = 720;            // 1240 x 720: a 1280 x 720 backdrop at 0.97x (sharp)
+        constexpr float M_BACKDROP_FADE_BOTTOM = 320;  // 400..720
 
         // series: a compact top so four episode rows are on screen at once
         constexpr float S_COVER_X = SAFE_X;

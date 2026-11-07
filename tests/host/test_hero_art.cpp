@@ -263,18 +263,50 @@ TEST(detail_art_tint_around_the_left_poster) {
     CHECK(!H::ambientAround(H::Showcase(), 0, 500).shown);
 }
 
-TEST(detail_episode_tiles_show_only_landscape_stills) {
+// v7-ux-12 regression: on the hardware every episode got the "E n" tile. The v7-ux-11 rule judged by shape only
+// (>= 1.3:1), so real stills that are 5:4, 4:3-ish crops or square were dropped, and it could not tell a real still from
+// the repeated cover. The rule now judges identity first (the series cover / an image shared by several episodes),
+// then only rejects clearly portrait or tiny images.
+TEST(detail_episode_stills_are_shown_when_usable) {
     namespace H = images::hero;
-    CHECK(H::landscapeStill(300, 169) && H::landscapeStill(1280, 720) && H::landscapeStill(160, 90));
-    CHECK(!H::landscapeStill(170, 255));    // the repeated portrait series cover: a number tile instead
-    CHECK(!H::landscapeStill(400, 400) && !H::landscapeStill(0, 0) && !H::landscapeStill(-1, 5));
+    // real stills: 16:9 (TMDB w300 / w500), 4:3, 5:4, a square crop - all shown
+    for (auto wh: {std::pair<int, int>{300, 169}, {500, 281}, {1280, 720}, {400, 300}, {500, 400}, {320, 320},
+                   {160, 90}}) {
+        CHECK(H::episodeStillUsable(wh.first, wh.second, false, 1));
+    }
+    // the cases the old shape-only rule dropped (it accepted only >= 1.3:1)
+    CHECK(H::episodeStillUsable(500, 400, false, 1) && H::episodeStillUsable(320, 320, false, 1));
+    CHECK(H::episodeStillUsable(375, 300, false, 1));                 // 1.25:1
+    // not usable: the series cover itself, one image repeated for several episodes (even a landscape one), a
+    // portrait poster, a tiny image
+    CHECK(!H::episodeStillUsable(170, 255, true, 1));
+    CHECK(!H::episodeStillUsable(1280, 720, false, 2) && !H::episodeStillUsable(300, 169, false, 12));
+    CHECK(!H::episodeStillUsable(300, 450, false, 1) && !H::episodeStillUsable(200, 240, false, 1));
+    CHECK(!H::episodeStillUsable(40, 22, false, 1) && !H::episodeStillUsable(0, 0, false, 0));
+}
+
+TEST(detail_backdrop_is_never_enlarged_into_fog) {
+    namespace H = images::hero;
+    namespace D = layout::detail;
+    const float w = layout::SCREEN_W - D::BACKDROP_X;
+    // v7-ux-12 cause: the movie box was the full screen height (1240 x 1080): a 1280 x 720 backdrop was drawn 1.5x,
+    // the usual 780 x 439 one 2.5x - a soft haze over the right half. Now both boxes draw a 1280 x 720 one 1:1.
+    CHECK(H::coverScale(1280, 720, w, 1080) >= 1.49f);                 // the old movie box
+    CHECK(H::coverScale(1280, 720, w, D::M_BACKDROP_H) <= 1.0f);
+    CHECK(H::coverScale(1280, 720, w, D::S_BACKDROP_H) <= 1.0f);
+    // small backdrops would be enlarged past BACKDROP_MAX_SCALE: not used (the clean page instead)
+    CHECK(H::coverScale(780, 439, w, D::M_BACKDROP_H) > D::BACKDROP_MAX_SCALE);
+    CHECK(H::coverScale(640, 360, w, D::S_BACKDROP_H) > D::BACKDROP_MAX_SCALE);
+    CHECK(H::coverScale(1200, 675, w, D::M_BACKDROP_H) <= D::BACKDROP_MAX_SCALE);
+    CHECK(H::coverScale(0, 0, w, 720) == 0);
 }
 
 TEST(detail_art_levels_and_layout) {
     namespace D = layout::detail;
-    // a real backdrop: brighter than the old ghost poster (~24 %), dimmer than Home's hero (~42 %): text over it
+    // a real backdrop: subtle and dark (v7-ux-12: ~28 %, the v7-ux-11 34 % read as haze), dimmer than Home's ~42 %
     const float level = D::BACKDROP_TINT / 255.0f * (1 - D::BACKDROP_SHADE / 255.0f);
-    CHECK(level > 0.30f && level < 0.38f);
+    CHECK(level > 0.25f && level < 0.30f);
+    CHECK(D::M_BACKDROP_FADE_BOTTOM + D::BACKDROP_FADE_TOP <= D::M_BACKDROP_H);
     // it starts right of the plot's start and has dissolved before most of the plot line (movie)
     CHECK(D::BACKDROP_X > D::M_TEXT_X + 150 && D::BACKDROP_X + D::BACKDROP_FADE_LEFT < layout::SCREEN_W);
     CHECK(D::M_TEXT_X + D::M_PLOT_W <= D::BACKDROP_X + D::BACKDROP_FADE_LEFT + 200);

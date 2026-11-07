@@ -1,0 +1,12 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX-12: DETAILS WITHOUT HAZE, EPISODE STILLS BACK
+==================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Install OVER the existing V7 IPTV.
+
+ 1. MOVIE DETAILS with a provider backdrop: the backdrop is drawn sharp (never enlarged more than 1.1x) in the top
+    right, dimmer (~28 %), dissolving before the text - no misty haze over the right half. A provider backdrop too
+    small to be drawn sharp is not used: the page stays clean dark with the poster's subtle halo.
+ 2. SERIES DETAILS: the same rules for the backdrop above the seasons.
+ 3. EPISODE ROWS: real episode stills are back (16:9, 4:3, 5:4 or square images). The "E 3" tile appears only when the
+    episode image is the series cover, the same image repeated for several episodes, a portrait poster or a tiny image.
+ 4. Unchanged: framed posters, poster halo, episode synopsis, buttons, focus, resume logic, hints.

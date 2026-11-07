@@ -74,7 +74,7 @@ namespace screens {
     // colour as a subtle tint hugging `posterRect` (`tint`: a full-screen Backdrop without fades), never reaching
     // the text column at `textX`. Never a dimmed / stretched poster as background, nothing generated.
     struct DetailArt {
-        ui::Backdrop *backdrop = nullptr;
+        ui::Backdrop *backdrop = nullptr;   // its box decides whether a backdrop can be drawn sharp (BACKDROP_MAX_SCALE)
         ui::Backdrop *tint = nullptr;
         c2d::FloatRect posterRect;
         float textX = 0;

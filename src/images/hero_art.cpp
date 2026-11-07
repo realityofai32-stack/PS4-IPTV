@@ -64,8 +64,18 @@ namespace images {
             return ambientAround(p, TEXT_RIGHT, SCREEN_RIGHT);
         }
 
-        bool landscapeStill(int w, int h) {
-            return w > 0 && h > 0 && (float) w >= (float) h * 1.3f;
+        float coverScale(int texW, int texH, float boxW, float boxH) {
+            if (texW <= 0 || texH <= 0) {
+                return 0;
+            }
+            return std::max(boxW / (float) texW, boxH / (float) texH);
+        }
+
+        bool episodeStillUsable(int w, int h, bool sameAsCover, int sharedBy) {
+            if (sameAsCover || sharedBy >= 2 || w < STILL_MIN_SIDE || h < STILL_MIN_SIDE) {
+                return false;
+            }
+            return (float) w >= (float) h * STILL_MIN_ASPECT;
         }
 
         Plan plan(const Inputs &in) {

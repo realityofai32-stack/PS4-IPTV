@@ -116,7 +116,10 @@ namespace screens {
     void bindDetailArt(App &app, const DetailArt &art, const std::string &posterUrl, const std::string &backdropUrl) {
         namespace D = layout::detail;
         std::shared_ptr<ImageSet> bd = backdropUrl.empty() ? nullptr : app.images().get(ImageKind::Backdrop, backdropUrl);
-        if (bd && images::hero::usableBackdrop(bd->source.x, bd->source.y)) {
+        const c2d::Vector2f box = art.backdrop->getSize();
+        if (bd && images::hero::usableBackdrop(bd->source.x, bd->source.y)
+            && images::hero::coverScale(bd->at(0).size.x, bd->at(0).size.y, box.x, box.y) <= D::BACKDROP_MAX_SCALE) {
+            // sharp only: a small backdrop enlarged across the page reads as fog (v7-ux-12)
             art.backdrop->setLevel((uint8_t) D::BACKDROP_TINT, (uint8_t) D::BACKDROP_SHADE);
             art.backdrop->set(bd->at(0).texture, bd->at(0).size, ui::Backdrop::Art::Landscape);
             art.backdrop->setVisibility(Visibility::Visible);
