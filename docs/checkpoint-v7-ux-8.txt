@@ -1,0 +1,15 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX-8: GRID / LIST CELLS ALWAYS SHOW THE RIGHT ITEM
+====================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Install OVER the existing V7 IPTV.
+
+Root cause of the duplicated rows: recycled cells were bound only on the frame the scroll offset crossed a whole row,
+and only the cells visible on that frame; gliding up, the top row could still be clipped on that frame and slide into
+view a frame later still showing the row below it. Now a cell is bound whenever it is shown for another item.
+
+ 1. Movies and Series grids: scroll down several rows, press Up once - the top two rows always show different, correct
+    items while gliding and after it; no duplicate row. Repeat many times (the bug depended on frame timing).
+ 2. Hold Up / Down, and tap Up / Down quickly in both directions: every visible poster / title is right at every
+    moment; the focus ring and scroll position stay correct.
+ 3. Same in Favorites (grid), Live TV channel list, Settings, Downloads, Search results and Local Media lists (the
+    same fix applies to every list); with Settings > Appearance > Smooth scrolling on and off.

@@ -92,4 +92,32 @@ namespace scroll {
             pos = target;   // under a pixel away: settled, whole-pixel rows again
         }
     }
+
+    void SlotBinder::resize(int slots) {
+        bound.assign((size_t) std::max(0, slots), -1);
+    }
+
+    void SlotBinder::invalidate() {
+        std::fill(bound.begin(), bound.end(), -1);
+    }
+
+    bool SlotBinder::needsBind(int slot, int index) {
+        if (slot < 0 || slot >= (int) bound.size()) {
+            return true;
+        }
+        if (bound[(size_t) slot] == index) {
+            return false;
+        }
+        bound[(size_t) slot] = index;
+        return true;
+    }
+
+    int SlotBinder::boundIndex(int slot) const {
+        return slot >= 0 && slot < (int) bound.size() ? bound[(size_t) slot] : -1;
+    }
+
+    bool slotShown(int r, int drawn, float frac, float pitch, float cellHeight, float shownExtent) {
+        float y = ((float) r - frac) * pitch;
+        return y < shownExtent && y + cellHeight > 0 && (r < drawn || frac > 0);
+    }
 }

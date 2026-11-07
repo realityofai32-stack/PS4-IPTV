@@ -341,7 +341,7 @@ namespace ui {
         float pitchY = 0;
         float extent = 0;
         scroll::Smooth smooth;
-        int boundBase = -1;
+        scroll::SlotBinder binder;   // the item each recycled slot shows (bound when shown for another item)
         double lastUpdate = -1;
     };
 
@@ -409,7 +409,7 @@ namespace ui {
         float pitch = 0;
         float extent = 0;
         scroll::Smooth smooth;
-        int boundBase = -1;
+        scroll::SlotBinder binder;   // the item each recycled slot shows (bound when shown for another item)
         double lastUpdate = -1;
     };
 }

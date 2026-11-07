@@ -797,6 +797,7 @@ namespace ui {
         }
         bar = new ScrollBar(rect.width - ScrollBar::WIDTH, 0, rect.height);
         add(bar);
+        binder.resize((int) cells.size());
         reload();
     }
 
@@ -851,23 +852,23 @@ namespace ui {
         } else {
             smooth.pos = std::min(std::max(smooth.pos, 0.0f), maxPos);
         }
-        boundBase = -1;   // data or selection changed: bind every cell again
+        binder.invalidate();   // data, selection or focus changed: every shown cell binds again
         place();
         bar->setRange(totalRows, rows, firstRow);
     }
 
-    // positions and binds the cells for the drawn position smooth.pos
+    // positions and binds the cells for the drawn position smooth.pos: a cell is bound whenever it is shown for an
+    // item it was not bound to (scroll::SlotBinder) - also a cell that becomes visible frames after the row offset
+    // changed (the top row while gliding up)
     void GridView::place() {
         int count = adapter->count();
         int base = (int) std::floor(smooth.pos);
         float frac = smooth.pos - (float) base;
-        bool rebind = base != boundBase;
-        boundBase = base;
         const int drawn = rows + peek;
         const float drawnExtent = extent + (float) peek * pitchY;
         for (int r = 0; r <= drawn; r++) {
             float y = ((float) r - frac) * pitchY;
-            bool rowShown = y < drawnExtent && y + cellHeight > 0 && (r < drawn || frac > 0);
+            bool rowShown = scroll::slotShown(r, drawn, frac, pitchY, cellHeight, drawnExtent);
             for (int c = 0; c < cols; c++) {
                 int i = r * cols + c;
                 int index = (base + r) * cols + c;
@@ -875,7 +876,7 @@ namespace ui {
                 ((Transformable *) cell)->setPosition(std::round((float) c * (cellWidth + gapX)), std::round(y));
                 if (rowShown && index < count) {
                     cell->setVisibility(Visibility::Visible);
-                    if (rebind) {
+                    if (binder.needsBind(i, index)) {
                         adapter->bindCell(cell, index, focus && index == sel);
                     }
                 } else {
@@ -926,6 +927,7 @@ namespace ui {
         // the bar spans exactly the rows, not the leftover space below the last one
         bar = new ScrollBar(rect.width - ScrollBar::WIDTH, 0, extent);
         add(bar);
+        binder.resize((int) rows.size());
         reload();
     }
 
@@ -973,7 +975,7 @@ namespace ui {
         } else {
             smooth.pos = std::min(std::max(smooth.pos, 0.0f), maxPos);
         }
-        boundBase = -1;
+        binder.invalidate();   // data, selection or focus changed: every shown row binds again
         place();
         bar->setRange(count, visibleRows, first);
     }
@@ -982,17 +984,15 @@ namespace ui {
         int count = adapter->count();
         int base = (int) std::floor(smooth.pos);
         float frac = smooth.pos - (float) base;
-        bool rebind = base != boundBase;
-        boundBase = base;
         for (int i = 0; i <= visibleRows; i++) {
             int index = base + i;
             auto *row = rows[(size_t) i];
             float y = ((float) i - frac) * pitch;
             ((Transformable *) row)->setPosition(0, std::round(y));
-            bool shown = y < extent && y + rowH > 0 && (i < visibleRows || frac > 0);
+            bool shown = scroll::slotShown(i, visibleRows, frac, pitch, rowH, extent);
             if (shown && index < count) {
                 row->setVisibility(Visibility::Visible);
-                if (rebind) {
+                if (binder.needsBind(i, index)) {   // shown for another item than it was bound to (scroll::SlotBinder)
                     adapter->bindRow(row, index, index == sel, focus && index == sel);
                 }
             } else {

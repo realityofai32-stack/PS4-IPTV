@@ -3,6 +3,8 @@
 #ifndef PS4IPTV_UI_SCROLL_MATH_H
 #define PS4IPTV_UI_SCROLL_MATH_H
 
+#include <vector>
+
 namespace scroll {
 
     struct Thumb {
@@ -45,6 +47,32 @@ namespace scroll {
 
         bool settled(float target) const { return pos == target; }
     };
+
+    // Which item each recycled cell slot of a list / grid shows (v7-ux-8 fix). Slots are drawn at the eased position:
+    // slot r shows row floor(pos) + r. A slot is bound when it is SHOWN for an item it was not bound to - not only
+    // when floor(pos) changes: while gliding up, the top slot can still be clipped (hidden) on the frame floor(pos)
+    // changes and become visible a frame later; binding only on that frame left it showing the row below
+    // (duplicated / stale top rows in Movies / Series until the next key press).
+    class SlotBinder {
+    public:
+        void resize(int slots);
+
+        // data, selection or focus changed: every slot binds again when it is shown
+        void invalidate();
+
+        // slot `slot` is shown for item `index` this frame: true = bind it now (remembered)
+        bool needsBind(int slot, int index);
+
+        // the item slot `slot` was last bound to (-1: none)
+        int boundIndex(int slot) const;
+
+    private:
+        std::vector<int> bound;
+    };
+
+    // whether slot r (0 .. drawn, drawn = the extra slot that enters while gliding) is on screen at the fractional
+    // offset frac (0 <= frac < 1): its top at (r - frac) * pitch, a part of it inside 0 .. shownExtent
+    bool slotShown(int r, int drawn, float frac, float pitch, float cellHeight, float shownExtent);
 }
 
 #endif // PS4IPTV_UI_SCROLL_MATH_H
