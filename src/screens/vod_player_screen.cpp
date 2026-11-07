@@ -12,7 +12,7 @@
 //     * Continue Watching: once 45 s or less remain, the episode is complete for Continue Watching (CompletionLatch)
 //       and the next episode becomes the series' Continue Watching entry at 0 s right away (LibraryStore::markUpNext),
 //       whatever happens next - exit, end of file, Auto-play off, Watch credits.
-//     * The Next Episode card (Settings > Playback > Auto-play next episode, on by default): ~7 s before the end a
+//     * The Next Episode card (Settings > Playback > Auto-play next episode, on by default): 45 s before the end a
 //       compact card bottom right (NEXT EPISODE / S02 E05 · title / [Play now]  Watch credits / a thin bar) counts
 //       its 7 seconds and then starts the next episode without waiting for the end of file. Play now (Cross /
 //       Enter) starts it at once, Watch credits (Circle / Esc) dismisses it for this playback. Only while it is shown
@@ -576,7 +576,7 @@ namespace {
             pb.stop();
             const bool wasShown = countdown.visible();
             logEndOfFile(wasShown);
-            // the Next Episode card after the end (also when the end came before its 7 s window: a reported duration
+            // the Next Episode card after the end (also when the end came before its 45 s window: a reported duration
             // longer than the media, or no duration at all): Auto-play ON counts its 7 s, OFF waits for Play now
             if (countdown.endOfFile(nextIdx >= 0, autoPlay(), app.now())) {
                 centre->setVisibility(Visibility::Hidden);
@@ -758,9 +758,9 @@ namespace {
             return app.playback().duration() > 0 ? "mpv" : tracker.duration() > 0 ? "provider hint" : "unknown";
         }
 
-        // once per episode, ~10 s before the reported end: the state the card depends on (no URL, no credentials)
+        // once per episode, ~48 s before the reported end: the state the card depends on (no URL, no credentials)
         void logEndApproach(const autonext::Frame &f, double position, double duration) {
-            if (endApproachLogged || !isEpisode() || f.remaining < 0 || f.remaining > autonext::CARD_SECONDS + 3) {
+            if (endApproachLogged || !isEpisode() || f.remaining < 0 || f.remaining > autonext::CARD_SHOW_REMAINING + 3) {
                 return;
             }
             endApproachLogged = true;
@@ -784,7 +784,7 @@ namespace {
             } else if (cardWasShown) {
                 card = autoPlay() ? "was shown, its count continues after the end" : "was shown, stays (manual)";
             } else {
-                card = autoPlay() ? "shown after the end (the end came before the 7 s window), 7 s countdown"
+                card = autoPlay() ? "shown after the end (the end came before the 45 s window), 7 s countdown"
                                   : "shown after the end (manual, auto-play off)";
             }
             LOG_I("player", "end of file at %.2f s, reported duration %.2f s (from %s, %.2f s short), next %s, auto-play "

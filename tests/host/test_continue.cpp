@@ -334,10 +334,12 @@ TEST(continue_kept_after_eof_autoplay_off_watch_credits_and_exit) {
         LibraryStore lib("unused");
         Player p(lib, &info);
         p.open(byId(info, "101"), false);
-        p.playTo(DUR - 6);
-        CHECK(p.card.visible());
+        p.playTo(DUR - 45.25);
+        CHECK(!p.card.visible());                 // the card appears with 45 s left ...
+        p.playTo(DUR - 42);
+        CHECK(p.card.visible() && p.card.counting() && p.card.seconds() == 4);   // ... counting 7 s at once (3 s gone)
         CHECK(p.card.cancel() && !p.card.visible());
-        p.playTo(DUR - 2);
+        p.playTo(DUR - 2);                        // the credits play on: no automatic next episode
         CHECK(p.transitions == 0);
         p.exit();
         const HistoryEntry *cw = continueEntry(lib);
@@ -347,15 +349,24 @@ TEST(continue_kept_after_eof_autoplay_off_watch_credits_and_exit) {
         p.endOfFile();
         CHECK(p.transitions == 0 && continueEntry(lib)->id == "102");
     }
-    // 3. Back in the last 45 s before the card appears
+    // 3. Back while the card is counting (before its 7 s ran out): the series moves on all the same
     {
         LibraryStore lib("unused");
         Player p(lib, &info);
         p.open(byId(info, "101"), false);
-        p.playTo(DUR - 30);
-        CHECK(!p.cardSeen);
+        p.playTo(DUR - 41);
+        CHECK(p.cardSeen && p.card.visible() && p.transitions == 0);
         p.exit();
         CHECK(continueEntry(lib)->id == "102");
+    }
+    // 4. no input: the next episode starts 7 s after the card appeared (~38 s before the end), once
+    {
+        LibraryStore lib("unused");
+        Player p(lib, &info);
+        p.open(byId(info, "101"), false);
+        CHECK(p.playTo(DUR));
+        CHECK(p.transitions == 1 && p.queue[(size_t) p.index].id == "102");
+        CHECK(lib.progressOf(ContentType::Series, "101")->watched);
     }
 }
 

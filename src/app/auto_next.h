@@ -31,17 +31,20 @@
 //    older episode is replayed. Without a valid next episode (final episode, offline and not downloaded, unknown)
 //    nothing is created: the existing completion behaviour applies.
 //
-// 2. The visible Next Episode card (Countdown, CARD_SECONDS = 7 s). Shown whenever a valid next episode exists -
-//    with Auto-play ON it counts 7 s and then starts the next episode; with Auto-play OFF it is a manual card (Play
-//    now / Watch credits, no countdown, no automatic transition):
-//      Idle          -> Counting       remaining <= CARD_SECONDS while the episode plays normally (the card is shown
-//                                      before the end; its count runs on its own clock, a pause pauses it, buffering
-//                                      or the Options panel hide it and hold the count)
-//      Counting      -> Idle           seeked back: remaining > CARD_SECONDS + RESET_MARGIN, or no next episode
-//      Idle/Counting -> PostPlay       the end of file came first (v7-ux hardware bug: a file whose reported duration
-//                                      is longer than its media ends while more than 7 s "remain"; an unknown duration
-//                                      never gets the card before the end): the card is shown after the end and
-//                                      counts its 7 s from there (continuing a count already running)
+// 2. The visible Next Episode card (Countdown). Two separate numbers:
+//      CARD_SHOW_REMAINING = 45 s  when the card appears (the same moment as the Continue Watching completion above)
+//      CARD_SECONDS        = 7 s   the decision countdown, started as soon as the card appears - never a 45 s count
+//    Shown whenever a valid next episode exists - with Auto-play ON it counts its 7 s and then starts the next episode
+//    (about 38 s before the end: the rest of the credits is skipped unless Watch credits is chosen); with Auto-play OFF
+//    it is a manual card (Play now / Watch credits, no countdown, no automatic transition):
+//      Idle          -> Counting       remaining <= CARD_SHOW_REMAINING while the episode plays normally (the count
+//                                      runs on its own clock, a pause pauses it, buffering or the Options panel hide
+//                                      the card and hold the count)
+//      Counting      -> Idle           seeked back: remaining > CARD_SHOW_REMAINING + RESET_MARGIN, or no next episode
+//      Idle/Counting -> PostPlay       the end of file came first (a file whose reported duration is longer than its
+//                                      media ends while more "remains"; an unknown duration never gets the card
+//                                      before the end): the card is shown after the end and counts its 7 s from there
+//                                      (continuing a count already running)
 //      Counting/PostPlay -> Cancelled  Watch credits (Circle / Esc; after the end: Cancel): no automatic next episode
 //      Counting/PostPlay -> Transitioning  Play now (Cross / Enter), or Auto-play ON and the card's 7 s ran out
 // Transitioning is final: every trigger after the first returns false, so the next episode starts exactly once.
@@ -58,7 +61,8 @@
 
 namespace autonext {
 
-    constexpr double CARD_SECONDS = 7;       // the Next Episode card: shown with ~7 s left, counts 7 .. 1
+    constexpr double CARD_SHOW_REMAINING = 45;   // the Next Episode card appears with this much of the episode left
+    constexpr double CARD_SECONDS = 7;       // ... and counts 7 .. 1 from that moment (Auto-play ON), then starts next
     constexpr double RESET_MARGIN = 1;       // a seek back must leave this much more than a window to reset it
     constexpr double MAX_STEP = 0.25;        // the card's clock never jumps more than this per frame (a hitch)
 

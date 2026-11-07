@@ -202,6 +202,21 @@ Each Home hero art change logs one line (no URL, host, credential or path):
 - `fallback` is `backdrop`, `poster`, or `ambient-only` (the poster was too small and omitted).
 - When nothing could be drawn, the line ends "- clean dark hero".
 
+## 7. v7-ux-4: the card appears at 45 s, decides in 7 s
+
+The appearance threshold and the decision countdown are two separate numbers:
+
+- `autonext::CARD_SHOW_REMAINING` = 45 s: when the card appears. It is the same moment as the Continue Watching
+  completion latch (`progress::COMPLETION_REMAINING`), so the series' Continue Watching entry has already moved on
+  when the card shows.
+- `autonext::CARD_SECONDS` = 7 s: the countdown, started as soon as the card appears.
+
+With Auto-play ON and no input, the next episode starts about 38 s before the end. *Watch credits* dismisses the
+card, disables auto-next for this playback, and lets the episode play to its end.
+
+- A seek back beyond 46 s left hides the card; reaching 45 s again shows it with a fresh 7 s count.
+- The EOF fallback (the card after the end, with 7 s from there) and the Auto-play OFF manual card are unchanged.
+
 ## 6. v7-ux-3: choice picker, one focus owner, Recently Watched removal
 
 **Choice picker.**

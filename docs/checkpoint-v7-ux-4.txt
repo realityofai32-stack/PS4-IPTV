@@ -1,0 +1,19 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX-4: NEXT EPISODE CARD AT 45 SECONDS, 7-SECOND DECISION
+==========================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Details: docs/v7-ux-hints-continue-hero.md
+(section 7). Install OVER the existing V7 IPTV: profiles, settings, history and downloads are kept.
+Log lines: [player] next episode card shown: R s left, 7 s countdown | manual;  [player] end approach: ... (~48 s left)
+
+ 1. AUTO-PLAY ON: play a series episode to its last minute. With 45 s left the compact card appears bottom right and
+    its thin bar starts filling at once (7s .. 1s). Do nothing: after 7 s (about 38 s before the end) the next episode
+    starts. Play now: starts it at once. Watch credits: the card disappears and the episode plays to its end (then the
+    Up next panel); no automatic next episode in this playback.
+ 2. Seek back (Left / L2) while the card is shown, beyond 46 s left: the card disappears; reaching 45 s again shows it
+    with a fresh 7 s count.
+ 3. AUTO-PLAY OFF (Settings > Playback): the same card at 45 s left, no seconds / bar, never starts by itself; Play now
+    works.
+ 4. A file that ends earlier than its reported length / without a duration: the card appears at the end and counts
+    7 s there (as in v7-ux-2).
+ 5. Continue Watching: exit with more than 45 s left -> resumes there; after the card appeared (45 s) -> the next
+    episode at 0. Final episode: no card.
