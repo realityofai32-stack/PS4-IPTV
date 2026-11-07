@@ -9,18 +9,15 @@
 // Geometry: ui/layout.h (layout::home), docs/v7-ui-v2-layouts.md. Cards are landscape media cards (v3): the whole
 // portrait poster on the left at the size of its texture (no 16:9 crop, no upscaling), title / episode / time left /
 // progress on a neutral surface beside it; channels show their logo contained in a neutral logo area instead.
-// The hero's artwork (images/hero_art.h), always one full-bleed landscape layer behind the text (ui::Backdrop
-// Landscape: dimmed, shaded, a strong fade into the page on the left):
+// The hero's artwork (images/hero_art.h - provider artwork only, never generated):
 //   1. the provider's real landscape backdrop (get_vod_info / get_series_info backdrop_path) when it loads and is
-//      usable (landscape, >= 640 x 300) - unchanged 1280 x 720 handling
-//   2. otherwise a background generated once on a worker from the poster / cover (ImageKind::HeroAmbient): a blurred,
-//      darkened, desaturated 16:9 crop (640 x 360), or a large wide cover itself
-//   3. a poster too small to show even blurred: a clean dark wash of its average colour; no artwork at all: the
-//      plain dark hero
-// The portrait poster is never pasted on the right any more. Every hero art change is logged with what the provider
-// sent and what was chosen (sizes, mode, crop - never a URL). Generated backgrounds are cached by the image loader,
-// so going back to Home never generates the same one again; a result that arrives for another hero is never shown
-// (binding always asks for the current hero's images).
+//      usable (landscape, >= 640 x 300): cover-cropped 1280 x 720, dimmed, a strong fade into the page on the left
+//   2. otherwise the dark hero with the sharp portrait poster on the right, dissolving into the page, on a subtle
+//      field of its own average colour (ui::Backdrop Poster art, v3.1): never stretched, never drawn larger than
+//      layout::home::HERO_POSTER_MAX_UPSCALE x its texture; under HERO_POSTER_MIN_H it is omitted (clean dark hero)
+//   3. no artwork: the clean dark hero
+// Every hero art change is logged with what the provider sent and what was chosen (sizes - never a URL). Binding
+// always asks for the current hero's images, so a late result for an earlier hero is never shown.
 //
 // Continue Watching comes from the progress store (LibraryStore::continueWatching): movies and episodes in
 // progress, most recent playback first, one card per series. It is rebuilt whenever the store changes
@@ -41,6 +38,7 @@
 
 #include "common.h"
 #include "../app/offline.h"
+#include "../images/hero_art.h"
 #include "../core/format.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
@@ -139,6 +137,7 @@ namespace {
             backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, L::BACKDROP_H),
                                         L::BACKDROP_FADE_LEFT, L::BACKDROP_FADE_BOTTOM, L::BACKDROP_FADE_TOP);
             backdrop->setAnchor(HERO_ANCHOR);
+            backdrop->setPosterStyle(heroPosterStyle());
             page->add(backdrop);
             buildHero();
             if (!playlist) {
@@ -765,15 +764,27 @@ namespace {
             }
         }
 
+        static ui::Backdrop::PosterStyle heroPosterStyle() {
+            ui::Backdrop::PosterStyle st;
+            st.heightScale = L::HERO_POSTER_SCALE;
+            st.maxUpscale = L::HERO_POSTER_MAX_UPSCALE;
+            st.maxWidth = L::HERO_POSTER_MAX_W;
+            st.minHeight = L::HERO_POSTER_MIN_H;
+            st.rightBleed = L::HERO_POSTER_BLEED;
+            st.leftFade = L::HERO_POSTER_LEFT_FADE;
+            st.bottomFade = L::HERO_POSTER_BOTTOM_FADE;
+            st.washLength = L::HERO_WASH_LENGTH;
+            st.washMinX = L::HERO_TEXT_RIGHT - L::BACKDROP_X;
+            st.anchorY = 0;   // top at the screen's top edge (a natural crop); the bottom dissolves
+            return st;
+        }
+
         // ---- hero artwork (see the top of this file)
         struct HeroArt {
-            std::shared_ptr<ImageSet> art;   // what to draw (nullptr: the plain dark hero)
-            const char *source = "none";     // backdrop / generated / none (the log) i18n-exempt
+            std::shared_ptr<ImageSet> art;   // what to draw (nullptr: the clean dark hero)
             std::string backdropUrl;         // the provider's backdrop_path ("" when none or not known yet)
             bool backdropFailed = false;
-            bool backdropUsable = false;     // loaded and landscape / large enough
             std::shared_ptr<ImageSet> backdropSet;
-            std::string fallbackUrl;         // the poster / cover the generated background is made from
             images::hero::Plan plan;
         };
 
@@ -792,61 +803,41 @@ namespace {
                 in.backdropW = h.backdropSet ? h.backdropSet->source.x : 0;
                 in.backdropH = h.backdropSet ? h.backdropSet->source.y : 0;
             }
-            // the generated background's source: the poster / cover, else (rare) an unusable backdrop itself
-            h.fallbackUrl = !hero->icon.empty() ? hero->icon : h.backdropUrl;
-            in.fallbackKnown = !h.fallbackUrl.empty();
-            std::shared_ptr<ImageSet> generated = in.fallbackKnown ? app.images().get(ImageKind::HeroAmbient, h.fallbackUrl)
-                                                                   : nullptr;
-            in.generatedLoaded = (bool) generated;
+            in.posterKnown = !hero->icon.empty();
+            std::shared_ptr<ImageSet> poster = in.posterKnown ? app.images().get(ImageKind::HeroPoster, hero->icon)
+                                                              : nullptr;
+            in.posterLoaded = (bool) poster;
             h.plan = images::hero::plan(in);
-            h.backdropUsable = h.plan.backdropUsable;
-            switch (h.plan.show) {
-                case images::hero::Show::Backdrop:
-                    h.art = h.backdropSet;
-                    h.source = "backdrop";   // i18n-exempt: log value
-                    break;
-                case images::hero::Show::Generated:
-                    h.art = generated;
-                    h.source = "generated";   // i18n-exempt: log value
-                    break;
-                default:
-                    h.source = "none";   // i18n-exempt: log value
-                    break;
+            if (h.plan.show == images::hero::Show::Backdrop) {
+                h.art = h.backdropSet;
+            } else if (h.plan.show == images::hero::Show::Poster) {
+                h.art = poster;
             }
             return h;
         }
 
-        // a backdrop is still worth waiting for: known, not failed, not loaded yet or usable
-        bool heroWantsBackdrop(const HeroArt &h) const {
-            return h.plan.wantBackdrop;
-        }
-
-        // the hero layer: the real backdrop when usable, else the generated background (while a backdrop loads, the
-        // generated one stays if it is in memory)
+        // the hero layer: the usable backdrop, else the sharp poster on its colour field, else the clean dark hero
         void bindHeroImages() {
             HeroArt h = heroArt();
-            bool wantsBackdrop = heroWantsBackdrop(h);
-            if (wantsBackdrop != heroBackdropWanted) {
-                requestImages();   // the backdrop failed / turned out unusable: ask for the generated one instead
+            if (h.plan.wantBackdrop != heroBackdropWanted) {
+                requestImages();   // the backdrop failed / turned out unusable: ask for the poster instead
             }
             if (!h.art) {
-                backdrop->set(nullptr, Vector2i(), ui::Backdrop::Art::Landscape);
+                backdrop->set(nullptr, Vector2i(), ui::Backdrop::Art::Poster);
                 logHeroArt(h);
                 return;
             }
-            if (h.art == h.backdropSet) {
-                backdrop->setLevel(theme::backdropTint().r, theme::backdropShade().a);   // sharp art: as approved
-            } else {
-                backdrop->setLevel(L::HERO_GENERATED_TINT, L::HERO_GENERATED_SHADE);   // blurred: lighter
-            }
-            backdrop->set(h.art->at(0).texture, h.art->at(0).size, ui::Backdrop::Art::Landscape);
+            const bool landscape = h.plan.show == images::hero::Show::Backdrop;
+            const fit::Rgb average = {h.art->average.r, h.art->average.g, h.art->average.b};
+            backdrop->set(h.art->at(0).texture, h.art->at(0).size,
+                          landscape ? ui::Backdrop::Art::Landscape : ui::Backdrop::Art::Poster, landscape ? nullptr : &average);
             logHeroArt(h);
         }
 
-        // once per hero art change: why the hero looks the way it does (sizes, modes - never a URL or a host)
+        // once per hero art change: why the hero looks the way it does (sizes - never a URL or a host)
         void logHeroArt(const HeroArt &h) {
             const void *id = h.art ? h.art->at(0).texture.get() : nullptr;
-            std::string key = std::string(h.source) + (hero ? hero->id : "") + (h.backdropUrl.empty() ? "0" : "1")
+            std::string key = std::string(hero ? hero->id : "") + (h.backdropUrl.empty() ? "0" : "1")
                               + (h.backdropFailed ? "f" : "") + (h.backdropSet ? "l" : "");
             if (id == heroArtLogged && key == heroArtKey) {
                 return;
@@ -862,30 +853,26 @@ namespace {
                                                                         : (bool) app.vod().movieInfo(hero->id);
             const char *available = h.backdropUrl.empty() ? (detailsKnown ? "no" : "unknown (details pending)") : "yes";
             const char *usable = h.backdropUrl.empty() ? "-" : h.backdropFailed ? "no (failed to load)"
-                                 : !h.backdropSet ? "loading" : h.backdropUsable ? "yes" : "no (portrait or too small)";
+                                 : !h.backdropSet ? "loading" : h.plan.backdropUsable ? "yes" : "no (portrait or too small)";
             const ui::Backdrop::Shown &s = backdrop->shownArt();
             if (!h.art) {
-                LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s, fallback %s - plain dark hero",
-                      type, available, usable, h.fallbackUrl.empty() ? "none (no poster)" : "waiting / unavailable");
+                LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s, fallback %s - clean dark hero",
+                      type, available, usable, hero->icon.empty() ? "none (no poster)" : "poster (loading / failed)");
                 return;
             }
             const ImageVariant &v = h.art->at(0);
-            if (h.art == h.backdropSet) {
-                LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s, fallback backdrop: source %dx%d, "
-                              "texture %dx%d, no generation, drawn %.0fx%.0f (visible %.0fx%.0f, %.2fx)", type, available,
-                      usable, h.art->source.x, h.art->source.y, v.size.x, v.size.y, s.drawn.w, s.drawn.h, s.inBox.w,
-                      s.inBox.h, s.scale);
+            const bool landscape = h.plan.show == images::hero::Show::Backdrop;
+            if (!s.visible) {
+                LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s, fallback ambient-only: poster "
+                              "source %dx%d, texture %dx%d too small (under %.0f px at %.2fx) - omitted, clean dark hero",
+                      type, available, usable, h.art->source.x, h.art->source.y, v.size.x, v.size.y,
+                      L::HERO_POSTER_MIN_H, L::HERO_POSTER_MAX_UPSCALE);
                 return;
             }
-            const HeroArtInfo &g = h.art->hero;
-            const char *fallback = g.mode == images::hero::Mode::Ambient ? "ambient-only" : "poster";
-            LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s, fallback %s (%s): source %dx%d, "
-                          "generator input %dx%d, crop %s %dx%d, blur %s, generated texture %dx%d in %.1f ms, drawn "
-                          "%.0fx%.0f (visible %.0fx%.0f, %.2fx)", type, available, usable, fallback,
-                  images::hero::modeName(g.mode), h.art->source.x, h.art->source.y, g.input.x, g.input.y,
-                  images::hero::cropName(g.crop), g.cropSize.x, g.cropSize.y,
-                  g.mode == images::hero::Mode::Blurred ? "yes" : "no", v.size.x, v.size.y, g.milliseconds, s.drawn.w,
-                  s.drawn.h, s.inBox.w, s.inBox.h, s.scale);
+            LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s, fallback %s: source %dx%d, texture "
+                          "%dx%d, no blur, drawn %.0fx%.0f (visible %.0fx%.0f, %.2fx of the texture)%s", type, available,
+                  usable, landscape ? "backdrop" : "poster", h.art->source.x, h.art->source.y, v.size.x, v.size.y,
+                  s.drawn.w, s.drawn.h, s.inBox.w, s.inBox.h, s.scale, s.limited ? " (kept smaller: quality limit)" : "");
             // i18n-exempt-end
         }
 
@@ -898,13 +885,12 @@ namespace {
             heroBackdropWanted = false;
             if (hero) {
                 HeroArt h = heroArt();
-                heroBackdropWanted = heroWantsBackdrop(h);
+                heroBackdropWanted = h.plan.wantBackdrop;
                 if (heroBackdropWanted) {
                     req.push_back({ImageKind::Backdrop, h.backdropUrl});
                 }
-                if (h.plan.wantGenerated) {
-                    // generated once on a worker (cached): shown until a backdrop is known to be usable
-                    req.push_back({ImageKind::HeroAmbient, h.fallbackUrl});
+                if (h.plan.wantPoster) {
+                    req.push_back({ImageKind::HeroPoster, hero->icon});
                 }
             }
             for (const Rail &r: rails) {

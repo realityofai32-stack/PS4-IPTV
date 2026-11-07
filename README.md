@@ -119,16 +119,17 @@ not distributed with V7 IPTV.</sub>
 ### Next Episode
 
 About **7 seconds** before an episode that has a next episode ends, a compact card appears in the lower-right
-corner (*NEXT EPISODE · S02E05 · title*, with a thin countdown bar), clear of the subtitles:
+corner (*NEXT EPISODE · S02E05 · title*), clear of the subtitles:
 
 - **Play now** (✕ / Enter): play the next episode at once
 - **Watch credits** (○ / Esc): keep watching; no automatic next episode for this playback
 
-If nothing is pressed, the next episode starts when the card's 7 seconds run out. It works for episodes started
-from Series Detail and from Continue Watching, follows the provider's episode order across season boundaries
-(missing episode numbers are never invented), and respects *Settings › Playback › Auto-play next episode* (on by
-default; when off, the usual *Up next* screen appears at the end). In offline mode the next episode must already be
-downloaded.
+With *Settings › Playback › Auto-play next episode* on (the default) a thin bar counts the card's 7 seconds and the
+next episode then starts. If an episode ends before its reported length (some files are shorter than their stated
+duration), the card appears at the end and counts its 7 seconds there. With the setting off the same card offers
+the next episode without starting it. It follows the provider's episode order across season boundaries (missing
+episode numbers are never invented); there is no card after the series' last episode, and in offline mode the next
+episode must already be downloaded.
 
 **Continue Watching** keeps a series in the row: leave an episode with more than 45 seconds to go and it resumes
 there; once its last 45 seconds are reached, the series' Continue Watching card moves to the next episode at once,

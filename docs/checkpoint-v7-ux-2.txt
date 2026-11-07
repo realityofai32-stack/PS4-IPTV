@@ -1,0 +1,26 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX-2: NEXT EPISODE CARD ON THE PS4, HOME HERO POSTER FALLBACK
+=================================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Details: docs/v7-ux-hints-continue-hero.md
+(sections 3 and 4). Install OVER the existing V7 IPTV: profiles, settings, history and downloads are kept.
+Afterwards copy /data/PS4IPTV/logs/log.txt over FTP. The lines that explain the card (no URLs / credentials):
+  [player] next episode: <id> (SxxEyy, catalog)   or   next episode: none - no Next Episode card ... (<reason>)
+  [player] end approach: position P of D s (duration from mpv|provider hint), R s left, ... -> card due|held|none
+  [player] next episode card shown: R s left, 7 s countdown|manual
+  [player] end of file at P s, reported duration D s (..., X s short), next <id>, auto-play on|off: card ...
+  [home] hero art: <type>, provider backdrop available ..., usable ..., fallback backdrop|poster|ambient-only ...
+
+ 1. NEXT EPISODE, AUTO-PLAY ON (Settings > Playback): play the same series episode that showed no card before, to
+    its end. The compact card appears bottom right (~7 s before the end, or right at the end if the file is shorter
+    than its reported length) with a thin bar; after 7 s the next episode starts. Repeat with Play now (starts at
+    once) and Watch credits (card gone, no automatic next episode; at the end the Up next panel).
+    PLEASE SEND the "end approach" and "end of file" lines - they show by how much the provider's duration differs.
+ 2. AUTO-PLAY OFF: the same card appears near / at the end without seconds or bar and never starts by itself;
+    Play now starts the next episode; Back / Watch credits keeps you on the episode / its end.
+ 3. The series' final episode: no card. Offline with the next episode not downloaded: no card.
+ 4. HOME HERO: an item whose provider sends a landscape backdrop: the backdrop as before. An item without one: the
+    dark V7 hero with a subtle colour field and the SHARP portrait poster on the right (no blurred background, never
+    stretched). A provider with tiny posters: the clean dark hero. Send one screenshot per case with its
+    "[home] hero art:" line.
+ 5. Regression: Continue Watching progression (exit before / after the last 45 s, next episode at 0), keyboard /
+    DS4 hints, Arabic subtitles, HTTPS / Stalker / M3U, downloads, Turkish UI.

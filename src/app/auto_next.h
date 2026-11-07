@@ -31,15 +31,19 @@
 //    older episode is replayed. Without a valid next episode (final episode, offline and not downloaded, unknown)
 //    nothing is created: the existing completion behaviour applies.
 //
-// 2. The visible Next Episode card (Countdown, CARD_SECONDS = 7 s): it appears when ~7 s remain and counts its own
-//    7 seconds of playback (a pause pauses it; buffering / the Options panel hide it and hold the count):
-//      Idle          -> Counting       remaining <= CARD_SECONDS while the episode plays normally
-//      Counting      -> Idle           seeked back: remaining > CARD_SECONDS + RESET_MARGIN, or no next episode /
-//                                      Auto-play turned off
-//      Counting      -> Cancelled      Watch Credits (Circle / Esc): no automatic next episode for this playback
-//      Counting      -> Transitioning  Play Now (Cross / Enter); the card's 7 s ran out (no wait for the end of
-//                                      file); or the position reached the duration
-//      Idle/Counting -> Transitioning  a normal end of file (also when the duration was never known)
+// 2. The visible Next Episode card (Countdown, CARD_SECONDS = 7 s). Shown whenever a valid next episode exists -
+//    with Auto-play ON it counts 7 s and then starts the next episode; with Auto-play OFF it is a manual card (Play
+//    now / Watch credits, no countdown, no automatic transition):
+//      Idle          -> Counting       remaining <= CARD_SECONDS while the episode plays normally (the card is shown
+//                                      before the end; its count runs on its own clock, a pause pauses it, buffering
+//                                      or the Options panel hide it and hold the count)
+//      Counting      -> Idle           seeked back: remaining > CARD_SECONDS + RESET_MARGIN, or no next episode
+//      Idle/Counting -> PostPlay       the end of file came first (v7-ux hardware bug: a file whose reported duration
+//                                      is longer than its media ends while more than 7 s "remain"; an unknown duration
+//                                      never gets the card before the end): the card is shown after the end and
+//                                      counts its 7 s from there (continuing a count already running)
+//      Counting/PostPlay -> Cancelled  Watch credits (Circle / Esc; after the end: Cancel): no automatic next episode
+//      Counting/PostPlay -> Transitioning  Play now (Cross / Enter), or Auto-play ON and the card's 7 s ran out
 // Transitioning is final: every trigger after the first returns false, so the next episode starts exactly once.
 // The player calls reset() when it starts any item.
 
@@ -56,7 +60,6 @@ namespace autonext {
 
     constexpr double CARD_SECONDS = 7;       // the Next Episode card: shown with ~7 s left, counts 7 .. 1
     constexpr double RESET_MARGIN = 1;       // a seek back must leave this much more than a window to reset it
-    constexpr double END_TOLERANCE = 0.001;  // remaining seconds that count as "at the end" (rounding only)
     constexpr double MAX_STEP = 0.25;        // the card's clock never jumps more than this per frame (a hitch)
 
     // the player's queue for `current` (see above); position: its index in the result. info: the series' catalog
@@ -114,15 +117,21 @@ namespace autonext {
 
     // ---------------------------------------------------------------- the visible Next Episode card (7 s)
 
+    // why there is no next episode (for the log), "" when nextIndex() finds one
+    const char *noNextReason(const std::vector<screens::VodItem> &queue, int index, const iptv::SeriesInfo *info,
+                             bool offline);
+
     enum class Phase {
         Idle,
-        Counting,
+        Counting,       // the card is shown before the end of file
+        PostPlay,       // the card is shown after the end of file
         Cancelled,
         Transitioning
     };
 
     struct Frame {
-        bool canAdvance = false;   // a next episode exists and Auto-play next episode is on
+        bool hasNext = false;      // a valid next episode exists (nextIndex)
+        bool autoPlay = true;      // Settings > Playback > Auto-play next episode
         bool running = false;      // the episode is playing normally (or paused) and no panel has the controls
         bool paused = false;       // paused: the card stays, its count waits
         double remaining = -1;     // duration - position (the pending seek target when one is pending); < 0 unknown
@@ -140,8 +149,13 @@ namespace autonext {
 
         Phase phase() const { return state; }
 
-        // the card is on screen (counting and playback running normally)
-        bool visible() const { return state == Phase::Counting && !held; }
+        // the card is on screen
+        bool visible() const { return (state == Phase::Counting && !held) || state == Phase::PostPlay; }
+
+        // the card counts down (Auto-play ON): the seconds and the bar are shown
+        bool counting() const { return visible() && autoPlay; }
+
+        bool afterEnd() const { return state == Phase::PostPlay; }
 
         // the number shown while counting: 7 6 .. 2 1 (never 0)
         int seconds() const;
@@ -149,23 +163,24 @@ namespace autonext {
         // how much of the card's 7 s has passed, 0..1 (the thin bar fills), 0 when not counting
         float fraction() const;
 
-        // once per frame; true = start the next episode now (returned once)
+        // once per frame, also after the end of file; true = start the next episode now (returned once)
         bool update(const Frame &frame);
 
-        // Play Now while the card is shown; true = start the next episode now
+        // Play now while the card is shown; true = start the next episode now
         bool playNow();
 
-        // Watch Credits while the card is shown; true = consumed (no automatic next episode for this playback)
+        // Watch credits / Cancel while the card is shown; true = consumed (no automatic next episode)
         bool cancel();
 
-        // a normal end of file (never a playback error); true = start the next episode now
-        bool endOfFile(bool canAdvance);
+        // a normal end of file (never a playback error); true = the card is shown after the end (PostPlay)
+        bool endOfFile(bool hasNext, bool autoPlay, double now);
 
     private:
         Phase state = Phase::Idle;
         double elapsed = 0;
         double lastNow = -1;
         bool held = false;
+        bool autoPlay = true;
     };
 }
 

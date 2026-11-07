@@ -27,7 +27,6 @@
 #include "cross2d/c2d.h"
 #include "disk_cache.h"
 #include "art_sizes.h"
-#include "hero_art.h"
 #include "image_pipeline.h"
 #include "image_scheduler.h"
 #include "lru_cache.h"
@@ -38,8 +37,7 @@ enum class ImageKind {
     Poster,        // movie poster / series cover in grids, Home cards, series detail cover: [0]
     PosterLarge,   // movie detail poster, detail pages' poster-derived backdrops: [0]
     Backdrop,      // real landscape backdrop / fanart (provider backdrop_path): [0]; at most MAX_BACKDROPS in memory
-    HeroPoster,    // the v3.1 Home hero's poster fallback: [0] (images/art_sizes.h)
-    HeroAmbient    // the Home hero's generated background from a poster (images/hero_art.h): [0], made on the worker
+    HeroPoster     // the Home hero's poster fallback: [0] (images/art_sizes.h)
 };
 
 struct ImageVariant {
@@ -48,20 +46,10 @@ struct ImageVariant {
     c2d::Vector2i page;              // the texture itself (== size for exact pages)
 };
 
-// HeroAmbient: what was generated (for the hero's diagnostics line; never the URL)
-struct HeroArtInfo {
-    images::hero::Mode mode = images::hero::Mode::Ambient;
-    images::hero::Crop crop = images::hero::Crop::None;
-    c2d::Vector2i input;             // the poster as decoded and fitted for the generator
-    c2d::Vector2i cropSize;          // the 16:9 part used
-    double milliseconds = 0;         // generation time on the worker
-};
-
 struct ImageSet {
     std::vector<ImageVariant> variants;
     c2d::Vector2i source;            // the decoded source image, before any downscale
-    images::Average average;         // HeroPoster / HeroAmbient: the source's mean colour
-    HeroArtInfo hero;                // HeroAmbient only
+    images::Average average;         // HeroPoster: the source's mean colour (the hero's colour field)
 
     const ImageVariant &at(size_t i) const { return variants[i < variants.size() ? i : 0]; }
 };
@@ -86,9 +74,6 @@ public:
 
     // backdrops are 3.5 MiB textures: only the most recent ones stay in memory (one per screen is the norm)
     static const int MAX_BACKDROPS = images::art::MAX_BACKDROPS;
-
-    // generated hero backgrounds kept in memory (Home going back and forth never generates the same one again)
-    static const int MAX_HERO_ART = 3;
 
     ImageLoader(JobSystem &jobs, const std::string &cacheDir);
 
@@ -134,7 +119,6 @@ private:
         ImageKind kind;
         images::LoadOutcome outcome;
         images::Average average;
-        HeroArtInfo hero;
     };
 
     const std::string &normalized(const std::string &raw);
@@ -152,7 +136,6 @@ private:
     std::unordered_map<std::string, std::string> normalizedUrls;
     std::deque<std::shared_ptr<Pending>> decoded;
     std::deque<std::string> backdropKeys;   // loaded backdrops, oldest first
-    std::deque<std::string> heroArtKeys;    // generated hero backgrounds, oldest first (at most MAX_HERO_ART)
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
     double now = 0;
     unsigned gen = 0;

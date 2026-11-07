@@ -74,10 +74,6 @@ namespace layout {
         // HERO_POSTER_MAX_UPSCALE: a 512 x 768 texture fills the box height at 1.04x, a 400 x 600 one is drawn 750
         // tall, a 300 x 450 one 562 tall - black space instead of a blow-up. Under HERO_POSTER_MIN_H nothing is drawn.
         // Its own dimmed average colour fills the box behind / right of it and fades out before the text column.
-        // the generated hero background (images/hero_art.h) is drawn lighter than sharp art (ui::Backdrop::setLevel):
-        // ~0.82 x 0.61 = 50 % of the blurred image instead of 24 % - the left fade still keeps the text column black
-        constexpr int HERO_GENERATED_TINT = 210;
-        constexpr int HERO_GENERATED_SHADE = 100;
         constexpr float HERO_POSTER_SCALE = 1.0f;          // wanted height / BACKDROP_H (v3: 1.1)
         constexpr float HERO_POSTER_MAX_UPSCALE = 1.25f;
         constexpr float HERO_POSTER_MAX_W = 560;           // square / wide images used as posters

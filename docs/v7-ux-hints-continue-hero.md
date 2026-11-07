@@ -1,4 +1,4 @@
-# V7 IPTV - input hints, series Continue Watching, Next Episode card, Home hero artwork
+# V7 IPTV - input hints, series Continue Watching, Next Episode card, Home hero artwork (v7-ux, v7-ux-2)
 
 Branch `feature/v7-next-features` (local only). Four issues found on the PS4:
 
@@ -108,96 +108,112 @@ In all three cases the series vanished.
 
 ## 3. Next Episode card
 
-The Continue Watching threshold (45 s, above) and the visible card are separate. The card
-(`autonext::Countdown`, `CARD_SECONDS` = 7):
+The Continue Watching threshold (45 s, above) and the visible card are separate. The card (`autonext::Countdown`,
+`CARD_SECONDS` = 7) is shown whenever a valid next episode exists.
 
-- appears at ~7 s left;
-- counts its own 7 seconds of playback time (paused: the count waits; buffering or the Options panel: hidden, the
-  count held);
-- then starts the next episode without waiting for EOF;
-- *Play now* (✕ / Enter) starts it at once;
-- *Watch credits* (○ / Esc) dismisses it and disables auto-next for this playback;
-- has an EOF fallback, and exactly one transition.
+### v7-ux hardware bug: no card on the PS4
 
-Layout (`layout::player::NEXT_*`): 500 × 156 at the lower right (x 1324–1824, y 634–790).
+**Symptom.** Auto-play ON and a valid next episode, yet the episode reached its end with no card at all.
 
-- Card: near-black translucent `overlayPanel`, a 1 px divider outline, `RADIUS` corners.
-- Content: `NEXT EPISODE` with a small `7s`, then `S02E05 · title` (one line), then an accent *Play now* pill with
-  its glyph and a quiet *Watch credits*, then a 3 px accent bar that fills smoothly.
-- It slides in 24 px over 0.22 s (ease-out). No flashing, no scaling. It is text only: no artwork is fetched.
-- It ends at y 790, above raised subtitles (~815) and bottom subtitles (~925), right of the centre.
+**Root cause.** The card only entered when `duration - time-pos <= 7` while playing. The end of file was only a
+direct transition (`reachedEnd` → `startNext`), never a card. Measured with libmpv over HTTP, sampling `time-pos`
+every 0.25 s as `Playback::pollStats` does:
 
-It is never shown for the final episode, with Auto-play off, or offline when the next episode is not downloaded.
+| File | Remaining at `END_FILE` |
+|---|---|
+| clean MKV / TS | 0.1 s |
+| MKV whose duration header is longer than its media (data ends early) | **8.2 s** |
+| TS without a known duration | the card can never trigger |
+
+So a file whose reported duration overshoots its real end by more than 7 s (the code already had to handle "files
+whose position never reaches the duration") reaches EOF before the window opens. The card was skipped, and with
+Auto-play ON the next episode started abruptly. The previous 45-second window always caught that overshoot, which
+is why it never showed before.
+
+### Fix
+
+- **Post-play phase.** End of file before the card shows (or with no duration) shows the card after the end:
+  - Auto-play ON: it counts its full 7 s from the end of file, then starts the next episode.
+  - Auto-play OFF: it waits.
+  - A card already counting when the file ends finishes its count after the end.
+- **Auto-play OFF** is a manual card: the same card near the end and after the end, without the seconds or the bar,
+  and never an automatic transition. Play now works.
+- **Before the end:**
+  - appears at ~7 s left;
+  - counts its own 7 s (pause waits; buffering or the Options panel hide it and hold the count);
+  - starts the next episode when the count runs out, without waiting for EOF.
+- **Keys:** Play now (✕ / Enter) at once. Watch credits (○ / Esc) dismisses the card and disables auto-next for this
+  playback. After the end the second action reads Cancel and opens the Up next panel (Play next / Back).
+- **No card** for the final episode, or offline without the next episode downloaded.
+
+### Diagnostics
+
+No URLs, hosts or credentials are logged. Per episode:
+
+- `next episode: <id> (SxxEyy, catalog | queue order)`, or `next episode: none - no Next Episode card for this
+  episode (<reason>)`. The reason is one of: the series' final episode; offline and the next episode is not
+  downloaded; not in the queue; catalog not in memory, no obvious successor.
+- `end approach: position P of D s (duration from mpv | provider hint), R s left, state, recovery, options panel,
+  next, auto-play -> card due | held | none`, logged once at ~10 s left.
+- `next episode card shown: R s left, 7 s countdown | manual`.
+- `end of file at P s, reported duration D s (from ..., X s short), next <id>, auto-play on/off: card <was shown |
+  shown after the end ... | none: reason>`.
+
+### Layout (unchanged)
+
+`layout::player::NEXT_*`: 500 × 156 at the lower right (x 1324–1824, y 634–790).
+
+- Card: near-black translucent, 1 px outline.
+- Content: `NEXT EPISODE` with a small `7s`, then `S02E05 · title`, then the accent *Play now* pill and *Watch
+  credits*, then a 3 px bar.
+- It slides in 24 px over 0.22 s. Text only.
+- It ends above raised (~815) and bottom (~925) subtitles.
 
 ## 4. Home hero artwork
 
-**Before:** the provider backdrop (1280 × 720) if `get_*_info` had one; otherwise the portrait HeroPoster (512 × 768)
-against the right edge, never enlarged past 1.25×, on a field of its average colour.
+**v7-ux** generated a blurred, darkened 16:9 background from the poster. On the hardware it looked bad, so it was
+**removed** (generator, `ImageKind::HeroAmbient`, `Backdrop::setLevel`).
 
-**Now** (`images/hero_art.{h,cpp}`, `hero::plan`, `screens/home_screen.cpp`):
+Final behaviour (`images/hero_art` `plan()`, `screens/home_screen.cpp`):
 
-1. **The provider backdrop**, when it loads and is usable: landscape (≥ 1.3:1) and ≥ 640 × 300. A portrait poster or
-   a thumbnail sent as `backdrop_path` is rejected. Drawn exactly as before.
-2. **A generated background** (`ImageKind::HeroAmbient`), made once on a worker from the poster or cover and cached
-   like any texture (the last 3 stay in memory). Two modes:
-   - **Blurred** (portrait, square, small or very tall posters):
-     1. a 16:9 crop (a band centred at 32 % of a taller image, the centre of a wider one);
-     2. area-averaged to 160 × 90;
-     3. three box-blur passes of radius 4 (≈ Gaussian σ 4.5 → ~37 px on the 1320 px hero);
-     4. desaturated 30 %, darkened to 0.95, and darker towards the left (0.70 → 1 over 55 %);
-     5. enlarged to **640 × 360** with a 4 × 4 ordered dither, so dark gradients do not band on the TV.
-   - **Wide cover**: a cover that is itself a large wide image (≥ 960 px, ≥ 1.5:1) is shown sharp, cropped to 16:9,
-     at most 1280 × 720, never enlarged on the CPU.
-3. **Ambient only**: when the poster's shorter side is under 80 px, a clean dark 320 × 180 wash of its average
-   colour is drawn, with no picture.
-4. **No artwork, or an image that fails to decode:** the plain dark hero.
+1. **A usable provider landscape backdrop.** Landscape ≥ 1.3:1 and ≥ 640 × 300. Unchanged handling: 1280 × 720,
+   dimmed, strong left fade. A portrait poster or a thumbnail sent as `backdrop_path` is rejected.
+2. **Otherwise the dark V7 hero**, with a subtle field of the poster's average colour and the **sharp portrait
+   poster** on the right (`ImageKind::HeroPoster` 512 × 768, `ui::Backdrop` Poster art, the v3.1 style):
+   - never stretched (ratio kept);
+   - never drawn past 1.25× its texture;
+   - under 400 px tall it is omitted and the clean dark hero stays.
+3. **No artwork:** the clean dark hero.
 
-Every hero layer goes through `ui::Backdrop` Landscape: dimmed, shaded, with the strong eased fade into the page on
-the left. Sharp provider art keeps the approved level, ~24 % (tint 150, shade 150). The blurred background has no
-detail left to compete with the text, so it is drawn at ~50 % (`Backdrop::setLevel`: tint 210, shade 100). A host
-composite preview showed the 24 % level as near-black murk for blurred art. The portrait poster is no longer pasted on
-the right. Detail pages are unchanged.
-
-**Cost**, measured on the host (`hero_art_generation_cost`, -O2):
-
-| Input | Output | Texture | Time |
-|---|---|---|---|
-| Blurred: 400×600 to 1280×1280 posters | 640 × 360 | 900 KiB | 6.8 – 8.7 ms |
-| Wide cover: 1920 × 1080 | 1280 × 720 | 3.5 MiB | 26.7 ms |
-| Ambient: 60 × 90 | 320 × 180 | 225 KiB | 1.5 ms |
-
-The console's Jaguar CPU is several times slower. Generation runs on a job worker; the main thread only uploads the
-finished texture, as for any poster. Each log line gives the generation time measured on the console. Transient
-memory is the poster fitted into 1280 × 1280 (≤ 6.25 MiB RGBA) plus 170 KiB of float buffers. The hero still holds
-one large texture.
-
-**Async / cache.**
-
-- `bindHeroImages` always asks the loader for the *current* hero's URLs, so a late result for an earlier hero can
-  never be shown.
-- Entering Home again hits the cache.
-- `onPause` withdraws the requests; a job already running finishes into the cache.
-- Simulated in `hero_art_cache_stale_results_and_repeated_home_visits`.
+No external artwork service, no generated or blurred image. While a backdrop is loading only the backdrop is
+requested; a poster still in memory stays on screen meanwhile.
 
 ## 5. Hardware diagnostics
 
-Each Home hero art change logs one line with no URL, host, credential or path. Example:
+Each Home hero art change logs one line (no URL, host, credential or path):
 
 ```
-[home] hero art: series, provider backdrop available no, usable -, fallback poster (blurred poster): source
-       600x900, generator input 600x900, crop 16:9 band 600x338, blur yes, generated texture 640x360 in 31.0 ms,
-       drawn 1422x800 (visible 1320x800, 2.22x)
+[home] hero art: series, provider backdrop available no, usable -, fallback poster: source 600x900, texture
+       512x768, no blur, drawn 533x800 (visible 493x800, 1.04x of the texture)
 ```
 
-`available` is `yes`, `no`, or `unknown (details pending)`. `usable` is `yes`, `no (failed to load)`,
-`no (portrait or too small)`, or `loading`. `fallback` is `backdrop`, `poster` or `ambient-only`. When nothing
-could be drawn, the line ends "- plain dark hero".
-
-The loader also logs `[images] hero background <hash> generated: <mode>, crop ... -> WxH texture (KiB) in X ms on a
-worker`. Hardware tests can then tell a bad or missing provider backdrop from a wrong choice by V7.
+- `available` is `yes`, `no`, or `unknown (details pending)`.
+- `usable` is `yes`, `no (failed to load)`, `no (portrait or too small)`, or `loading`.
+- `fallback` is `backdrop`, `poster`, or `ambient-only` (the poster was too small and omitted).
+- When nothing could be drawn, the line ends "- clean dark hero".
 
 ## Tests
 
-The host suite gains `test_hints`, `test_continue` and `test_hero_art`. `test_autonext` was rewritten for the 7 s
-card. `test_keyboard` and `test_layout` were updated. The keyboard fuzz target now also routes every decoded key
-through `actions::route` with random declared sets.
+The host suite has:
+
+- `test_hints`
+- `test_continue`
+- `test_hero_art`: backdrop usability, the priority plan, and the async / stale / cache simulation.
+- `test_autonext`, with the 7 s card and the regressions:
+  - Auto-play ON shows the card;
+  - end of file before the window (the measured 8.2 s case);
+  - unknown or inaccurate duration;
+  - Auto-play OFF manual card;
+  - no card without a next episode (final episode, offline not downloaded) and its log reasons.
+
+`test_keyboard` and `test_layout` were updated. The keyboard fuzz target also routes keys through `actions::route`.

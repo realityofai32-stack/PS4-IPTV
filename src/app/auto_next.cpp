@@ -206,15 +206,43 @@ namespace autonext {
         return UpNext::Moved;
     }
 
+    const char *noNextReason(const std::vector<screens::VodItem> &queue, int index, const iptv::SeriesInfo *info,
+                             bool offline) {
+        // i18n-exempt-begin: log values
+        if (index < 0 || index >= (int) queue.size()) {
+            return "no current item";
+        }
+        const screens::VodItem &cur = queue[(size_t) index];
+        if (cur.type != iptv::ContentType::Series || cur.id.empty() || cur.seriesId.empty()) {
+            return "not a series episode";
+        }
+        if (nextIndex(queue, index, info, offline) >= 0) {
+            return "";
+        }
+        int s = 0, e = 0, ns = 0, ne = 0;
+        if (info != nullptr && seriesplan::locate(*info, cur.id, s, e)) {
+            if (!seriesplan::nextEpisode(*info, s, e, ns, ne)) {
+                return "the series' final episode";
+            }
+            return offline ? "offline and the next episode is not downloaded" : "the next episode is not in the queue";
+        }
+        if (offline) {
+            return "offline: no downloaded episode follows";
+        }
+        return info != nullptr ? "the episode is not in the series' catalog"
+                               : "series catalog not in memory, no obvious successor in the queue";
+        // i18n-exempt-end
+    }
+
     int Countdown::seconds() const {
-        if (state != Phase::Counting) {
+        if (!counting()) {
             return 0;
         }
         return std::min((int) CARD_SECONDS, std::max(1, (int) std::ceil(CARD_SECONDS - elapsed - 1e-9)));
     }
 
     float Countdown::fraction() const {
-        if (state != Phase::Counting) {
+        if (!counting()) {
             return 0;
         }
         return (float) std::min(1.0, std::max(0.0, elapsed / CARD_SECONDS));
@@ -224,8 +252,22 @@ namespace autonext {
         if (state == Phase::Transitioning || state == Phase::Cancelled) {
             return false;
         }
+        autoPlay = f.autoPlay;
+        double step = lastNow >= 0 && std::isfinite(f.now - lastNow) ? std::min(MAX_STEP, std::max(0.0, f.now - lastNow)) : 0;
+        if (state == Phase::PostPlay) {
+            // after the end of file: nothing plays any more, the card's clock runs on its own
+            lastNow = f.now;
+            if (autoPlay) {
+                elapsed += step;
+                if (elapsed >= CARD_SECONDS - 1e-9) {
+                    state = Phase::Transitioning;
+                    return true;
+                }
+            }
+            return false;
+        }
         const bool known = f.remaining >= 0 && std::isfinite(f.remaining);
-        if (!f.canAdvance) {
+        if (!f.hasNext) {
             reset();
             return false;
         }
@@ -237,20 +279,21 @@ namespace autonext {
             elapsed = 0;
             lastNow = f.now;
             held = false;
-        } else if (known && f.remaining > CARD_SECONDS + RESET_MARGIN) {
+            return false;
+        }
+        if (known && f.remaining > CARD_SECONDS + RESET_MARGIN) {
             reset();   // seeked back: it may come again at the end
             return false;
         }
-        double step = lastNow >= 0 ? f.now - lastNow : 0;
         lastNow = f.now;
         held = !f.running;   // buffering, reconnecting, an error, the Options panel: hidden, the count waits
-        if (held) {
+        if (held || !autoPlay) {
             return false;
         }
-        if (!f.paused && std::isfinite(step)) {
-            elapsed += std::min(MAX_STEP, std::max(0.0, step));
+        if (!f.paused) {
+            elapsed += step;
         }
-        if (elapsed >= CARD_SECONDS - 1e-9 || (known && f.remaining <= END_TOLERANCE)) {
+        if (elapsed >= CARD_SECONDS - 1e-9) {
             state = Phase::Transitioning;
             return true;
         }
@@ -273,11 +316,17 @@ namespace autonext {
         return true;
     }
 
-    bool Countdown::endOfFile(bool canAdvance) {
-        if (state == Phase::Transitioning || state == Phase::Cancelled || !canAdvance) {
+    bool Countdown::endOfFile(bool hasNext, bool autoPlayOn, double now) {
+        if (state == Phase::Transitioning || state == Phase::Cancelled || state == Phase::PostPlay || !hasNext) {
             return false;
         }
-        state = Phase::Transitioning;
+        if (state != Phase::Counting) {
+            elapsed = 0;   // the card never showed before the end: its full 7 s from now
+        }
+        state = Phase::PostPlay;
+        held = false;
+        lastNow = now;
+        autoPlay = autoPlayOn;
         return true;
     }
 }

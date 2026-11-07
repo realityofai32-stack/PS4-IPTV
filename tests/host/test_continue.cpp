@@ -126,8 +126,6 @@ namespace {
             pos = tracker.begin(queue[(size_t) index], resume, t);
         }
 
-        bool canAdvance() const { return next >= 0 && autoplay; }
-
         void persist() {
             if (upNextDone || next < 0) {
                 return;
@@ -159,7 +157,8 @@ namespace {
                 tracker.record(t);
             }
             autonext::Frame f;
-            f.canAdvance = canAdvance();
+            f.hasNext = next >= 0;
+            f.autoPlay = autoplay;
             f.running = true;
             f.remaining = DUR - pos;
             f.now = t;
@@ -194,9 +193,20 @@ namespace {
             finished = true;
             tracker.record(t, -1, true);
             persist();
-            if (card.endOfFile(canAdvance())) {
-                transitions++;
-                start(next, true);
+            if (card.endOfFile(next >= 0, autoplay, t)) {
+                // the card after the end: Auto-play ON starts the next episode when its 7 s have run
+                for (int i = 0; i < 8 * 60; i++) {
+                    t += 1.0 / 60;
+                    autonext::Frame f;
+                    f.hasNext = true;
+                    f.autoPlay = autoplay;
+                    f.now = t;
+                    if (card.update(f)) {
+                        transitions++;
+                        start(next, true);
+                        return;
+                    }
+                }
             }
         }
 
@@ -313,9 +323,9 @@ TEST(continue_kept_after_eof_autoplay_off_watch_credits_and_exit) {
         p.autoplay = false;
         p.open(byId(info, "101"), false);
         p.playTo(DUR);
-        CHECK(!p.cardSeen);
+        CHECK(p.cardSeen && !p.card.counting());   // Auto-play OFF: the manual card, no countdown
         p.endOfFile();
-        CHECK(p.transitions == 0);
+        CHECK(p.transitions == 0 && p.card.visible());
         const HistoryEntry *cw = continueEntry(lib);
         CHECK(cw && cw->id == "102" && cw->upNext);
     }

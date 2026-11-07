@@ -700,7 +700,7 @@ namespace i18n {
                                      "Off: they always start from the beginning; progress is still remembered. Never "
                                      "applies to Live TV."},
             {"settings.autoplay", "Auto-play next episode"},
-            {"settings.autoplay.desc", "On: 7 seconds before an episode ends a small card shows the next one and plays it when its countdown runs out (Play now starts it at once, Watch credits keeps watching). Off: the next episode is offered when the episode ends."},
+            {"settings.autoplay.desc", "On: about 7 seconds before an episode ends a small card shows the next one and plays it when its countdown runs out (also when the episode ends earlier than its reported length). Play now starts it at once, Watch credits keeps watching. Off: the same card offers the next episode without starting it."},
             {"settings.retry_downloads", "Retry downloads automatically"},
             {"settings.retry_downloads.desc", "On: when the connection drops, downloads wait and continue by themselves "
                                               "from where they stopped, trying again less and less often. Off: an "

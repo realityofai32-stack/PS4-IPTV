@@ -188,8 +188,12 @@ namespace {
             }
             completeQueue();
             retryAwaitingInfo();
-            if (!finished && updateCountdown()) {
-                advance("countdown");   // log reason i18n-exempt
+            if ((!finished || countdown.afterEnd()) && updateCountdown()) {
+                if (countdown.afterEnd() || finished) {
+                    startNext("card countdown after the end of file");   // log reason i18n-exempt
+                } else {
+                    advance("card countdown");   // log reason i18n-exempt
+                }
                 return;
             }
             bool paused = pb.state() == PlaybackState::Paused;
@@ -568,12 +572,23 @@ namespace {
             app.saveLibrary();
             LOG_I("player", "%s finished", item().id.c_str());
             pb.stop();
-            // EOF fallback: the countdown's transition (no end panel), unless it was cancelled or is off
-            if (countdown.endOfFile(canAdvance())) {
-                showNextPanel(false);
-                startNext("end of file");   // log reason i18n-exempt
+            const bool wasShown = countdown.visible();
+            logEndOfFile(wasShown);
+            // the Next Episode card after the end (also when the end came before its 7 s window: a reported duration
+            // longer than the media, or no duration at all): Auto-play ON counts its 7 s, OFF waits for Play now
+            if (countdown.endOfFile(nextIdx >= 0, autoPlay(), app.now())) {
+                centre->setVisibility(Visibility::Hidden);
+                setOverlay(false);
+                showNextPanel(true);
+                layoutNextActions();
+                refresh(app.now());
                 return;
             }
+            showEndPanel();
+        }
+
+        // the end panel: Up next (after Watch credits / Cancel), or the series' last episode / a movie's end
+        void showEndPanel() {
             showNextPanel(false);
             bool next = isEpisode() && nextIdx >= 0;   // the provider's next episode (never a guess)
             endTitle->setText(tr(next ? "player.up_next" : isEpisode() ? "player.last_episode" : "player.the_end"));
@@ -592,6 +607,16 @@ namespace {
 
         void endInput(const InputEvent &e) {
             if (e.repeat) {
+                return;
+            }
+            if (countdown.afterEnd()) {
+                // the card after the end: Play now, or Cancel (the Up next panel stays: Play next / Back)
+                if (e.button == PadButton::Cross && countdown.playNow()) {
+                    startNext("play now after the end of file");   // log reason i18n-exempt
+                } else if (e.button == PadButton::Circle && countdown.cancel()) {
+                    LOG_I("player", "next episode card after the end: cancelled");
+                    showEndPanel();
+                }
                 return;
             }
             if (e.button == PadButton::Circle) {
@@ -692,9 +717,12 @@ namespace {
                 LOG_I("player", "next episode: %s (S%02dE%02d%s, %s)", n.id.c_str(), n.season, n.episode,
                       n.localPath.empty() ? "" : ", downloaded", info ? "catalog" : "queue order");
             } else {
-                LOG_I("player", "next episode: none (%s)", info ? "catalog" : "no catalog in memory");
+                LOG_I("player", "next episode: none - no Next Episode card for this episode (%s)",
+                      autonext::noNextReason(queue, index, info.get(), app.session().offline));
             }
+            endApproachLogged = false;
             nextShownSeconds = -1;
+            layoutNextActions();   // "Watch credits" again (after the end it reads "Cancel")
         }
 
         // the series' catalog arrived while this episode plays: the same queue the other entry points build
@@ -719,16 +747,56 @@ namespace {
             refresh(app.now());
         }
 
-        // a next episode exists and Auto-play next episode is on
-        bool canAdvance() const {
-            return nextIdx >= 0 && app.settings().get().autoPlayNextEpisode;
+        bool autoPlay() const {
+            return app.settings().get().autoPlayNextEpisode;
         }
+
+        // i18n-exempt-begin: log values
+        const char *durationSource() const {
+            return app.playback().duration() > 0 ? "mpv" : tracker.duration() > 0 ? "provider hint" : "unknown";
+        }
+
+        // once per episode, ~10 s before the reported end: the state the card depends on (no URL, no credentials)
+        void logEndApproach(const autonext::Frame &f, double position, double duration) {
+            if (endApproachLogged || !isEpisode() || f.remaining < 0 || f.remaining > autonext::CARD_SECONDS + 3) {
+                return;
+            }
+            endApproachLogged = true;
+            const char *card = nextIdx < 0 ? "none (no next episode)" : !f.running ? "held (playback not running normally)"
+                               : f.autoPlay ? "due (auto-play)" : "due (manual, auto-play off)";
+            LOG_I("player", "end approach: position %.2f of %.2f s (duration from %s), %.2f s left, state %d, recovery %s, "
+                            "options panel %s, next %s, auto-play %s -> card %s", position, duration, durationSource(),
+                  f.remaining, (int) app.playback().state(), statusName(recovery.status()), panelOpen ? "open" : "closed",
+                  nextIdx >= 0 ? queue[(size_t) nextIdx].id.c_str() : "none", f.autoPlay ? "on" : "off", card);
+        }
+
+        // the end of file: how far from the reported duration it came, and what the card does
+        void logEndOfFile(bool cardWasShown) {
+            double duration = tracker.duration();
+            double position = tracker.position();
+            const char *card;
+            if (nextIdx < 0) {
+                card = "none: no next episode";
+            } else if (countdown.phase() == autonext::Phase::Cancelled) {
+                card = "none: watch credits was chosen (Up next panel)";
+            } else if (cardWasShown) {
+                card = autoPlay() ? "was shown, its count continues after the end" : "was shown, stays (manual)";
+            } else {
+                card = autoPlay() ? "shown after the end (the end came before the 7 s window), 7 s countdown"
+                                  : "shown after the end (manual, auto-play off)";
+            }
+            LOG_I("player", "end of file at %.2f s, reported duration %.2f s (from %s, %.2f s short), next %s, auto-play "
+                            "%s: card %s", position, duration, durationSource(), duration > 0 ? duration - position : -1.0,
+                  nextIdx >= 0 ? queue[(size_t) nextIdx].id.c_str() : "none", autoPlay() ? "on" : "off", card);
+        }
+        // i18n-exempt-end
 
         // the Next Episode card's frame: true = start the next episode now
         bool updateCountdown() {
             Playback &pb = app.playback();
             autonext::Frame f;
-            f.canAdvance = canAdvance();
+            f.hasNext = nextIdx >= 0;
+            f.autoPlay = autoPlay();
             f.running = !panelOpen && pb.started() && recovery.status() == stability::Status::Playing
                         && (pb.state() == PlaybackState::Playing || pb.state() == PlaybackState::Paused);
             f.paused = pb.state() == PlaybackState::Paused;
@@ -736,6 +804,9 @@ namespace {
             double duration = tracker.duration() > 0 ? tracker.duration() : pb.duration();
             double position = pendingSeek ? seekTarget : pb.position();
             f.remaining = duration > 0 && position >= 0 ? std::max(0.0, duration - position) : -1;
+            if (!finished) {
+                logEndApproach(f, position, duration);
+            }
             bool wasVisible = countdown.visible();
             if (countdown.update(f)) {
                 LOG_I("player", "next episode card: countdown finished (%.1f s left in the file)", f.remaining);
@@ -743,11 +814,16 @@ namespace {
             }
             if (countdown.visible()) {
                 if (!wasVisible) {
-                    LOG_I("player", "next episode card shown: %.1f s left", f.remaining);
+                    LOG_I("player", "next episode card shown: %.1f s left, %s", f.remaining,
+                          f.autoPlay ? "7 s countdown" : "manual (auto-play off)");   // i18n-exempt: log value
                     showNextPanel(true);
                     refresh(app.now());
                 }
-                if (countdown.seconds() != nextShownSeconds) {
+                // auto-play OFF: a manual card - no seconds, no bar
+                const bool counting = countdown.counting();
+                nextCount->setVisibility(counting ? Visibility::Visible : Visibility::Hidden);
+                nextTrack->setVisibility(counting ? Visibility::Visible : Visibility::Hidden);
+                if (counting && countdown.seconds() != nextShownSeconds) {
                     nextShownSeconds = countdown.seconds();   // the number changes once per second, not per frame
                     nextCount->setText(tr("player.next_seconds", {std::to_string(nextShownSeconds)}));
                 }
@@ -825,9 +901,9 @@ namespace {
             nextActions->setFillColor(theme::none());
             nextPanel->add(nextActions);
             layoutNextActions();
-            auto *track = ui::box(nextPanel, FloatRect(P::NEXT_PAD, P::NEXT_H - 12 - P::NEXT_BAR_H, inner, P::NEXT_BAR_H),
-                                  theme::progressTrack(), P::NEXT_BAR_H / 2);
-            nextFill = ui::box(track, FloatRect(0, 0, P::NEXT_BAR_H, P::NEXT_BAR_H), theme::accent(), P::NEXT_BAR_H / 2);
+            nextTrack = ui::box(nextPanel, FloatRect(P::NEXT_PAD, P::NEXT_H - 12 - P::NEXT_BAR_H, inner, P::NEXT_BAR_H),
+                                theme::progressTrack(), P::NEXT_BAR_H / 2);
+            nextFill = ui::box(nextTrack, FloatRect(0, 0, P::NEXT_BAR_H, P::NEXT_BAR_H), theme::accent(), P::NEXT_BAR_H / 2);
             nextPanel->setVisibility(Visibility::Hidden);
         }
 
@@ -852,8 +928,8 @@ namespace {
             x += 22;
             float cw = ui::actionGlyph(nextActions, A::WatchCredits, x, (h - glyph) / 2, glyph, device);
             x += cw + 10;
-            ui::label(nextActions, tr("player.watch_credits"), theme::LABEL, x, ui::Label::centerOffset(theme::LABEL, h),
-                      ui::Weight::Regular, theme::textSecondary());
+            ui::label(nextActions, tr(countdown.afterEnd() ? "common.cancel" : "player.watch_credits"), theme::LABEL, x,
+                      ui::Label::centerOffset(theme::LABEL, h), ui::Weight::Regular, theme::textSecondary());
         }
 
         // a row of hints centred in a panel (end of playback / retry)
@@ -1086,7 +1162,8 @@ namespace {
             if (isEpisode()) {
                 h.push_back({A::NextEpisode, tr("player.next_episode")});
             }
-            h.push_back(counting ? ui::Hint{A::WatchCredits, tr("player.watch_credits")} : ui::Hint{A::Back, tr("common.back")});
+            h.push_back(counting ? ui::Hint{A::WatchCredits, tr(countdown.afterEnd() ? "common.cancel" : "player.watch_credits")}
+                                 : ui::Hint{A::Back, tr("common.back")});
             hints->setHints(h);
 
             stability::Status rs = recovery.status();
@@ -1657,6 +1734,8 @@ namespace {
         ui::Label *nextText = nullptr;
         ui::Label *nextCount = nullptr;
         RectangleShape *nextFill = nullptr;
+        RectangleShape *nextTrack = nullptr;
+        bool endApproachLogged = false;    // the "end approach" diagnostics line, once per episode
         bool overlayVisible = true;
         double lastActivity = 0;
         bool wasPlaying = false;

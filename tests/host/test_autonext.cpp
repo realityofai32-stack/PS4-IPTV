@@ -79,9 +79,10 @@ namespace {
     // the player's clock (monotonic seconds) for the card's own 7 s
     double clockNow = 100;
 
-    Frame frame(double remaining, bool canAdvance = true, bool running = true, bool paused = false) {
+    Frame frame(double remaining, bool hasNext = true, bool running = true, bool paused = false, bool autoPlay = true) {
         Frame f;
-        f.canAdvance = canAdvance;
+        f.hasNext = hasNext;
+        f.autoPlay = autoPlay;
         f.running = running;
         f.paused = paused;
         f.remaining = remaining;
@@ -91,10 +92,11 @@ namespace {
 
     // `seconds` of frames at 60 fps at a fixed remaining time (a file stuck short of its end, a pause, buffering);
     // returns true when the card started the next episode
-    bool hold(Countdown &c, double seconds, double remaining, bool running = true, bool paused = false) {
+    bool hold(Countdown &c, double seconds, double remaining, bool running = true, bool paused = false,
+              bool autoPlay = true) {
         for (int i = 0; i < (int) std::lround(seconds * 60); i++) {
             clockNow += 1.0 / 60;
-            if (c.update(frame(remaining, true, running, paused))) {
+            if (c.update(frame(remaining, true, running, paused, autoPlay))) {
                 return true;
             }
         }
@@ -213,11 +215,12 @@ TEST(autonext_card_7_seconds_then_one_transition) {
     // the card is separate from the 45 s Continue Watching completion: shown from 7 s left (reset beyond 8 s)
     CHECK(autonext::CARD_SECONDS == 7 && autonext::RESET_MARGIN == 1);
     CHECK(progress::COMPLETION_REMAINING == 45);
+    // REGRESSION (Auto-play ON, a valid next episode, an accurate duration): the card appears
     Countdown c;
     std::vector<int> shown;
     CHECK(!c.update(frame(60)) && !c.update(frame(45)) && !c.update(frame(7.01)) && !c.visible());
     CHECK(c.phase() == Phase::Idle);
-    CHECK(!c.update(frame(7.0)) && c.visible() && c.seconds() == 7 && c.fraction() == 0);
+    CHECK(!c.update(frame(7.0)) && c.visible() && c.counting() && c.seconds() == 7 && c.fraction() == 0);
     c.reset();
     int starts = playOut(c, 10.0, shown);
     CHECK_EQ(starts, 1);
@@ -227,7 +230,7 @@ TEST(autonext_card_7_seconds_then_one_transition) {
     }
     CHECK(c.phase() == Phase::Transitioning && !c.visible());
     // after the transition nothing triggers again: not the end, not EOF, not Play now
-    CHECK(!c.update(frame(0)) && !c.endOfFile(true) && !c.playNow() && !c.cancel());
+    CHECK(!c.update(frame(0)) && !c.endOfFile(true, true, clockNow) && !c.playNow() && !c.cancel());
     // reset() for the next item: counts again
     c.reset();
     shown.clear();
@@ -236,8 +239,8 @@ TEST(autonext_card_7_seconds_then_one_transition) {
 }
 
 TEST(autonext_card_counts_its_own_seconds_not_eof) {
-    // the file's position never reaches the duration (stops 4 s short, or mpv reports a longer duration): the card's
-    // 7 seconds run out and the next episode starts - no wait for the end of file
+    // the file's position never reaches the duration (stops 4 s short): the card's 7 seconds run out and the next
+    // episode starts - no wait for the end of file
     Countdown c;
     clockNow = 500;
     CHECK(!c.update(frame(7)) && c.visible());
@@ -254,11 +257,13 @@ TEST(autonext_card_counts_its_own_seconds_not_eof) {
     clockNow += 2;
     h.update(frame(1.4));
     CHECK(h.visible() && std::fabs(h.fraction() - (3.75f / 7)) < 2e-3f);
-    // the position reaching the duration first also transitions
+    // the end of file while counting: the card stays after the end and finishes its 7 s
     Countdown e;
-    e.update(frame(0.3));
-    clockNow += 0.1;
-    CHECK(e.update(frame(0)));
+    e.update(frame(2.0));
+    hold(e, 2.0, 0.1);
+    CHECK(e.endOfFile(true, true, clockNow) && e.phase() == Phase::PostPlay && e.visible() && e.seconds() == 5);
+    CHECK(!hold(e, 4.9, -1) && e.visible());
+    CHECK(hold(e, 0.2, -1) && e.phase() == Phase::Transitioning);
 }
 
 TEST(autonext_pause_holds_the_card) {
@@ -284,7 +289,7 @@ TEST(autonext_play_now_and_watch_credits) {
     c.update(frame(4.2));
     CHECK(c.visible() && c.seconds() == 7);           // the card always counts its full 7 s
     CHECK(c.playNow());
-    CHECK(!c.playNow() && !c.update(frame(0.1)) && !c.endOfFile(true));
+    CHECK(!c.playNow() && !c.update(frame(0.1)) && !c.endOfFile(true, true, clockNow));
     // Watch credits: dismissed, the episode plays on to its end without a transition
     Countdown k;
     k.update(frame(3.0));
@@ -292,7 +297,7 @@ TEST(autonext_play_now_and_watch_credits) {
     std::vector<int> shown;
     CHECK_EQ(playOut(k, 3.0, shown), 0);
     CHECK(shown.empty());
-    CHECK(!k.endOfFile(true));                        // EOF: normal end, no auto-next
+    CHECK(!k.endOfFile(true, true, clockNow));        // EOF: the Up next panel, no card, no auto-next
     CHECK(!k.playNow() && !k.cancel());               // Circle means Back again
     // it does not come back in this playback, even after seeking back and reaching the end again
     k.update(frame(600));
@@ -306,6 +311,12 @@ TEST(autonext_play_now_and_watch_credits) {
     hidden.update(frame(5));
     hidden.update(frame(5, true, false));
     CHECK(!hidden.playNow() && !hidden.cancel());
+    // after the end: Play now and Cancel act on the post-play card
+    Countdown post;
+    CHECK(post.endOfFile(true, true, clockNow) && post.playNow() && post.phase() == Phase::Transitioning);
+    Countdown post2;
+    CHECK(post2.endOfFile(true, true, clockNow) && post2.cancel() && !post2.visible());
+    CHECK(!hold(post2, 10, -1));                      // cancelled: never starts by itself
 }
 
 TEST(autonext_seek_back_resets_the_card) {
@@ -327,41 +338,101 @@ TEST(autonext_seek_back_resets_the_card) {
     CHECK(shown == fullSequence());
 }
 
-TEST(autonext_end_of_file_fallback_and_errors) {
-    // EOF without a card (the duration was never known): the same transition, once
+// THE v7-ux HARDWARE BUG: the reported duration is longer than the media (measured with libmpv: an MKV whose data
+// ends 8.2 s before its duration header), so mpv's end of file comes while more than 7 s "remain" - the card never
+// appeared and the end of file jumped straight to the next episode
+TEST(autonext_regression_end_of_file_before_the_7_second_window) {
     Countdown c;
-    CHECK(!c.update(frame(-1)) && !c.visible());
-    CHECK(c.endOfFile(true));
-    CHECK(!c.endOfFile(true) && !c.update(frame(0)) && !c.playNow());
-    // EOF while counting: one transition
-    Countdown d;
-    d.update(frame(1.5));
-    CHECK(d.visible() && d.endOfFile(true) && !d.endOfFile(true));
-    // a playback error never advances: the card hides while playback is not running normally, and an error is never
-    // an end of file (the player only calls endOfFile for a genuine end)
+    std::vector<int> shown;
+    // time-pos stops at 31.80 of a reported 40.02 s
+    CHECK_EQ(playOut(c, 20.0, shown, 8.22), 0);
+    CHECK(shown.empty() && c.phase() == Phase::Idle);
+    // the end of file: the card is shown after the end, with its full 7 s countdown
+    CHECK(c.endOfFile(true, true, clockNow));
+    CHECK(c.visible() && c.afterEnd() && c.counting() && c.seconds() == 7);
+    CHECK(!hold(c, 3.5, -1) && std::fabs(c.fraction() - 0.5f) < 2e-3f && c.seconds() == 4);
+    CHECK(!hold(c, 3.4, -1) && c.visible());
+    CHECK(hold(c, 0.2, -1) && c.phase() == Phase::Transitioning);   // exactly once, after 7 s
+    CHECK(!c.endOfFile(true, true, clockNow) && !c.update(frame(-1)) && !c.playNow());
+}
+
+TEST(autonext_regression_unknown_or_inaccurate_duration) {
+    // no duration at all (some streams): never before the end, always after it
+    Countdown none;
+    for (int i = 0; i < 600; i++) {
+        clockNow += 1.0 / 60;
+        CHECK(!none.update(frame(-1)));
+    }
+    CHECK(!none.visible() && none.endOfFile(true, true, clockNow) && none.visible());
+    CHECK(hold(none, 7.1, -1));
+    // NaN / infinite times are unknown, never a trigger
+    Countdown n;
+    CHECK(!n.update(frame(std::nan(""))) && !n.update(frame(INFINITY)) && !n.visible());
+    CHECK(n.endOfFile(true, true, clockNow));
+    // a duration shorter than the media (the position runs past it): remaining clamps to 0, the card counts its 7 s
+    Countdown shortDur;
+    shortDur.update(frame(0));
+    CHECK(shortDur.visible() && !hold(shortDur, 6.5, 0) && hold(shortDur, 0.6, 0));
+    // a playback error never advances: hidden while not running, and an error is never an end of file
     Countdown e;
     e.update(frame(3.0));
     CHECK(e.visible());
     CHECK(!hold(e, 60, 3.0, false));
     CHECK(!e.visible() && e.phase() == Phase::Counting);
-    // NaN / infinite times are unknown, never a trigger
-    Countdown n;
-    CHECK(!n.update(frame(std::nan(""))) && !n.update(frame(INFINITY)) && !n.visible());
 }
 
-TEST(autonext_setting_off_and_migration) {
-    // 17. Auto-play next episode off: no countdown, EOF ends normally
+TEST(autonext_regression_auto_play_off_shows_a_manual_card) {
+    // Auto-play OFF: the same card near the end, no countdown, no automatic transition; Play now works
     Countdown c;
-    std::vector<int> shown;
-    for (double r = 60; r >= 0; r -= 0.1) {
+    for (double r = 60; r > 7.05; r -= 0.1) {
+        clockNow += 0.1;
+        CHECK(!c.update(frame(r, true, true, false, false)));
+    }
+    CHECK(!c.visible());
+    c.update(frame(7.0, true, true, false, false));
+    CHECK(c.visible() && !c.counting() && c.seconds() == 0 && c.fraction() == 0);
+    CHECK(!hold(c, 30, 3.0, true, false, false) && c.visible());   // never starts by itself
+    CHECK(c.endOfFile(true, false, clockNow) && c.afterEnd() && c.visible() && !c.counting());
+    CHECK(!hold(c, 60, -1, true, false, false) && c.visible());     // after the end: still waiting
+    CHECK(c.playNow() && c.phase() == Phase::Transitioning);
+    // the end of file first (no card before it): the manual card after the end
+    Countdown d;
+    CHECK(d.endOfFile(true, false, clockNow) && d.visible() && !d.counting());
+    CHECK(!hold(d, 30, -1, true, false, false));
+    CHECK(d.cancel() && !d.visible());
+    // Watch credits on the manual card, then the end: the Up next panel (no card)
+    Countdown w;
+    w.update(frame(5, true, true, false, false));
+    CHECK(w.cancel() && !w.endOfFile(true, false, clockNow));
+}
+
+TEST(autonext_regression_no_card_without_a_next_episode) {
+    // the series' final episode, or offline without the next episode downloaded (nextIndex == -1): nothing, before
+    // or after the end
+    Countdown c;
+    for (double r = 30; r >= 0; r -= 0.1) {
+        clockNow += 0.1;
         CHECK(!c.update(frame(r, false)));
     }
-    CHECK(!c.visible() && !c.endOfFile(false));
-    // turned off while counting: hidden at once
+    CHECK(!c.visible() && !c.endOfFile(false, true, clockNow) && !c.visible());
+    CHECK(!c.endOfFile(false, false, clockNow));
+    // the next episode disappears while the card is shown (e.g. a queue change): hidden at once
     Countdown d;
     d.update(frame(3));
     CHECK(d.visible() && !d.update(frame(2.9, false)) && !d.visible());
+    // the reasons the log gives
+    SeriesInfo info = catalog();
+    std::vector<VodItem> q = queueOf(info);
+    CHECK_EQ(std::string(autonext::noNextReason(q, at(q, "303"), &info, false)), std::string("the series' final episode"));
+    CHECK_EQ(std::string(autonext::noNextReason(q, at(q, "202"), &info, true)),
+             std::string("offline and the next episode is not downloaded"));
+    CHECK_EQ(std::string(autonext::noNextReason(q, at(q, "201"), &info, false)), std::string(""));
+    std::vector<VodItem> alone = {q[(size_t) at(q, "201")]};
+    CHECK_EQ(std::string(autonext::noNextReason(alone, 0, nullptr, false)),
+             std::string("series catalog not in memory, no obvious successor in the queue"));
+}
 
+TEST(autonext_setting_off_and_migration) {
     // 16. the setting: fresh install ON; a v0.2.0 file (old key, default false, no new key) ON; the new key wins
     SettingsStore fresh("unused");
     CHECK(fresh.get().autoPlayNextEpisode);
