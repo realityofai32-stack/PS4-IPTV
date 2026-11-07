@@ -115,18 +115,11 @@ namespace screens {
 
     void bindDetailArt(App &app, const DetailArt &art, const std::string &posterUrl, const std::string &backdropUrl) {
         namespace D = layout::detail;
-        std::shared_ptr<ImageSet> bd = backdropUrl.empty() ? nullptr : app.images().get(ImageKind::Backdrop, backdropUrl);
-        const c2d::Vector2f box = art.backdrop->getSize();
-        if (bd && images::hero::usableBackdrop(bd->source.x, bd->source.y)
-            && images::hero::coverScale(bd->at(0).size.x, bd->at(0).size.y, box.x, box.y) <= D::BACKDROP_MAX_SCALE) {
-            // sharp only: a small backdrop enlarged across the page reads as fog (v7-ux-12)
-            art.backdrop->setLevel((uint8_t) D::BACKDROP_TINT, (uint8_t) D::BACKDROP_SHADE);
-            art.backdrop->set(bd->at(0).texture, bd->at(0).size, ui::Backdrop::Art::Landscape);
-            art.backdrop->setVisibility(Visibility::Visible);
-            art.tint->setVisibility(Visibility::Hidden);
-            return;
-        }
-        art.backdrop->setVisibility(Visibility::Hidden);   // no landscape art: the clean page, never a ghost poster
+        // v7-ux-13 (hardware): any page-wide layer - a provider backdrop or a ghost poster - read as a large blue / foggy
+        // wash on the TV. Detail pages are the clean dark page with the sharp poster and only a small halo of its
+        // colour around it (Home's showcase idea). The provider backdrop is not drawn here.
+        (void) backdropUrl;
+        art.backdrop->setVisibility(Visibility::Hidden);
         std::shared_ptr<ImageSet> poster = app.images().get(ImageKind::PosterLarge, posterUrl);
         if (!poster) {
             poster = app.images().get(ImageKind::Poster, posterUrl);

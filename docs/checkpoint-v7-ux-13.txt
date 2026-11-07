@@ -1,0 +1,11 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX-13: EPISODE IMAGES RESTORED, ONLY A SMALL HALO AROUND THE DETAILS POSTER
+=============================================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Install OVER the existing V7 IPTV.
+
+ 1. SERIES DETAILS - EPISODE IMAGES: every episode shows the provider's episode image whenever it has one, exactly as
+    before the redesign; the "E 3" tile appears only for an episode without an image (or one that cannot be loaded).
+ 2. MOVIE / SERIES DETAILS - COVER AREA: the page is the clean dark background; the poster / cover stays sharp and
+    framed with only a small, subtle halo of its own colour right around it (like the Home showcase), fading into the
+    dark page before the title. No large blue / foggy wash, no backdrop layer across the page.
+ 3. Everything else unchanged (episode synopsis, buttons, focus, resume, seasons, downloads, hints).

@@ -71,12 +71,6 @@ namespace images {
             return std::max(boxW / (float) texW, boxH / (float) texH);
         }
 
-        bool episodeStillUsable(int w, int h, bool sameAsCover, int sharedBy) {
-            if (sameAsCover || sharedBy >= 2 || w < STILL_MIN_SIDE || h < STILL_MIN_SIDE) {
-                return false;
-            }
-            return (float) w >= (float) h * STILL_MIN_ASPECT;
-        }
 
         Plan plan(const Inputs &in) {
             Plan p;

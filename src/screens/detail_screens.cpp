@@ -1,6 +1,6 @@
-// Movie and Series detail screens: one composition over a poster-derived backdrop (a full-bleed layer on the
-// right that dissolves into the page on every inner edge; never a framed picture), the poster on the left and
-// the text column next to it. Geometry: ui/layout.h (layout::detail), docs/v7-ui-v2-layouts.md.
+// Movie and Series detail screens: the clean dark page, the framed poster on the left with only a small halo of its
+// colour around it (screens::bindDetailArt, v7-ux-13 - no page-wide backdrop layer), and the text column next to it.
+// Geometry: ui/layout.h (layout::detail), docs/v7-ui-v2-layouts.md.
 //
 // Both open at once with what the catalog already has (title, year, rating, poster; for series also plot,
 // cast, genre) and request their detail response lazily (get_vod_info / get_series_info). The large poster
@@ -120,8 +120,7 @@ namespace {
     public:
         MovieDetailScreen(App &a, Movie m) : Screen(a), movie(std::move(m)) {
             ui::background(this);
-            // artwork (screens::bindDetailArt): the provider's landscape backdrop on the right, dissolving before the
-            // text column; without one, the poster's colour as a subtle tint around the poster (clean dark page)
+            // artwork (screens::bindDetailArt): the clean dark page, the framed poster and a small halo of its colour
             art.tint = new ui::Backdrop(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H), 0, 0, 0);
             add(art.tint);
             backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, L::M_BACKDROP_H),
@@ -255,10 +254,8 @@ namespace {
 
         void requestImages() {
             if (app.settings().get().loadImages) {
+                // the poster only: detail pages draw no backdrop (screens::bindDetailArt)
                 std::vector<ImageRequest> req = {{ImageKind::PosterLarge, movie.icon}};
-                if (!backdropUrl.empty()) {
-                    req.push_back({ImageKind::Backdrop, backdropUrl});
-                }
                 req.push_back({ImageKind::Poster, movie.icon});
                 app.images().want(req);
             }
@@ -559,8 +556,7 @@ namespace {
     public:
         SeriesDetailScreen(App &a, Series s) : Screen(a), series(std::move(s)) {
             ui::background(this);
-            // artwork (screens::bindDetailArt): the provider's landscape backdrop above the seasons (the episodes sit
-            // on the clean page); without one, the cover's colour as a subtle tint around the cover
+            // artwork (screens::bindDetailArt): the clean dark page, the framed cover and a small halo of its colour
             art.tint = new ui::Backdrop(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H), 0, 0, 0);
             add(art.tint);
             backdrop = new ui::Backdrop(FloatRect(L::BACKDROP_X, 0, theme::SCREEN_W - L::BACKDROP_X, L::S_BACKDROP_H),
@@ -716,19 +712,9 @@ namespace {
                 if (r.bg != obj) {
                     continue;
                 }
+                // the provider's episode image whenever one is loaded (the pre-redesign behaviour); the "E 3" tile only
+                // when the episode has none (or it could not be loaded)
                 std::shared_ptr<ImageSet> still = ep.image.empty() ? nullptr : app.images().get(ImageKind::Poster, ep.image);
-                if (still) {
-                    // a real still is shown; the series cover repeated as the episode image (or any image several
-                    // episodes share), a portrait poster or a tiny image get the clean "E 3" number tile instead
-                    int shared = 0;
-                    for (const Episode &other: season.episodes) {
-                        shared += other.image == ep.image;
-                    }
-                    if (!images::hero::episodeStillUsable(still->source.x, still->source.y, ep.image == series.cover,
-                                                          shared)) {
-                        still = nullptr;
-                    }
-                }
                 r.thumb->set(tr("episode.short", {std::to_string(ep.number)}), still ? still->at(0).texture : nullptr,
                              still ? still->at(0).size : Vector2i());
                 r.code->setText(fmt::episodeCode(ep.season, ep.number));
@@ -890,10 +876,8 @@ namespace {
             if (!app.settings().get().loadImages) {
                 return;
             }
+            // the cover and the episode stills: detail pages draw no backdrop (screens::bindDetailArt)
             std::vector<ImageRequest> req = {{ImageKind::Poster, series.cover}, {ImageKind::PosterLarge, series.cover}};
-            if (!backdropUrl().empty()) {
-                req.push_back({ImageKind::Backdrop, backdropUrl()});
-            }
             if (info && seasonIndex < (int) info->seasons.size()) {
                 const auto &eps = info->seasons[(size_t) seasonIndex].episodes;
                 int first = std::max(0, episodes->firstVisible() - 1);

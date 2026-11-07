@@ -82,15 +82,7 @@ namespace images {
         // how much a texture of texW x texH is enlarged to cover a box of boxW x boxH (ui::Backdrop Landscape)
         float coverScale(int texW, int texH, float boxW, float boxH);
 
-        // an episode image worth showing in its 16:9 tile (v7-ux-12: identity first, then shape). Not usable:
-        //   sameAsCover   it is the series' cover (same URL)
-        //   sharedBy >= 2 the same image for several episodes of the season (a repeated cover / backdrop)
-        //   portrait      narrower than STILL_MIN_ASPECT (a poster, the wrong shape for a still)
-        //   tiny          a side under STILL_MIN_SIDE
-        // Everything else is a real still and is shown (16:9, 4:3, 5:4, square crops ...).
-        constexpr float STILL_MIN_ASPECT = 0.9f;
-        constexpr int STILL_MIN_SIDE = 48;
-        bool episodeStillUsable(int w, int h, bool sameAsCover, int sharedBy);
+
 
         struct Inputs {
             bool backdropKnown = false;     // the provider's details name a backdrop_path
