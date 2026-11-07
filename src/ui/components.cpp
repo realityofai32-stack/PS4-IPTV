@@ -3,6 +3,7 @@
 
 #include "components.h"
 #include "focus_colors.h"
+#include "icon_shapes.h"
 
 using namespace c2d;
 
@@ -168,23 +169,19 @@ namespace ui {
                 break;
             }
             case Icon::Settings: {
-                // gear: a thick ring with eight teeth
-                float body = s * 0.14f;
-                auto *ring = new CircleShape(body);
-                ring->setPointCount(28);
-                ring->setOrigin(Origin::Center);
-                ring->setPosition(c, c);
-                addPart(ring, true);
-                ring->setOutlineThickness(std::round(s * 0.065f));
-                for (int i = 0; i < 8; i++) {
-                    float a = (float) i * PI / 4;
-                    auto *tooth = new RectangleShape(FloatRect(0, 0, s * 0.10f, s * 0.09f));
-                    tooth->setOrigin(Origin::Center);
-                    float R = s * 0.235f;
-                    tooth->setPosition(c + R * std::cos(a), c + R * std::sin(a));
-                    tooth->setRotation(a * 180 / PI);
-                    addPart(tooth, false);
+                // a gear (ui/icon_shapes.h): one outlined silhouette with eight teeth + an outlined hub - the same
+                // stroke, size and weight as the search ring and the favorites star
+                std::vector<icons::Point> pts = icons::gear(c, c, s);
+                auto *gear = new ConvexShape(pts.size());
+                for (size_t i = 0; i < pts.size(); i++) {
+                    gear->setPoint(i, Vector2f(pts[i].x, pts[i].y));
                 }
+                addPart(gear, true);
+                auto *hub = new CircleShape(s * icons::GEAR_HUB);
+                hub->setPointCount(20);
+                hub->setOrigin(Origin::Center);
+                hub->setPosition(c, c);
+                addPart(hub, true);
                 break;
             }
         }

@@ -1,0 +1,14 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX-10: RAIL CHEVRON IN THE SAFE AREA, SETTINGS GEAR, L1 / R1 ON HOME
+======================================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Install OVER the existing V7 IPTV.
+
+ 1. CHEVRON: the grey "›" of Continue Watching / Recently Watched now sits on the rail's heading line, its right edge
+    at the rail's right edge (inside the TV-safe area), never over a card. Same look and behaviour (shown while more
+    cards are off-screen to the right).
+ 2. SETTINGS ICON: the top navigation's last icon is a clear outlined gear (eight teeth, a small hub) with the same
+    stroke, size and focus disc as Search / Favorites / Downloads.
+ 3. L1 / R1 ON HOME: R1 moves to the next top-navigation item (Home > Live TV > Movies > Series > Local Media > Search >
+    Favorites > Downloads > Settings), L1 to the previous one; they stop at the ends. From the hero or a rail, L1 / R1
+    jump up to the navigation (the item after / before the one it last had). They no longer scroll a rail (Left /
+    Right still do). Keyboard: Tab / Shift+Tab do the same. Cross opens the focused section as before.

@@ -45,6 +45,7 @@
 #include "../app/offline.h"
 #include "../images/hero_art.h"
 #include "../app/home_cards.h"
+#include "../app/home_nav.h"
 #include "../ui/scroll_math.h"
 #include "../core/format.h"
 #include "../platform/clock.h"
@@ -265,12 +266,19 @@ namespace {
         void handleInput(const InputEvent &e) override {
             switch (e.button) {
                 case PadButton::Left:
-                case PadButton::L1:
                     moveFocus(-1);
                     break;
                 case PadButton::Right:
-                case PadButton::R1:
                     moveFocus(1);
+                    break;
+                case PadButton::L1:
+                case PadButton::R1:
+                    // straight through the top navigation from anywhere on Home (app/home_nav.h); never a rail scroll
+                    if (e.repeat && zone != NAV) {
+                        return;
+                    }
+                    navIndex = homenav::shoulder(navIndex, nav->itemCount(), e.button == PadButton::L1 ? -1 : 1);
+                    zone = NAV;
                     break;
                 case PadButton::Down:
                     if (e.repeat) {
@@ -384,11 +392,11 @@ namespace {
             r.empty->setMaxWidth(theme::CONTENT_W);
             r.empty->setMaxLines(2);
             if (r.kind == RailKind::Continue || r.kind == RailKind::Recent) {
-                // a quiet chevron in the margin right of the cards when more items lie off-screen (never accent)
-                r.more = ui::label(page, "\xE2\x80\xBA", theme::DISPLAY, layout::SAFE_RIGHT + L::RAIL_MORE_GAP, 0,
-                                   ui::Weight::Regular, theme::textMuted());
-                r.more->setPosition(layout::SAFE_RIGHT + L::RAIL_MORE_GAP,
-                                    y + L::RAIL_HEADING_H + std::round((L::CARD_H - r.more->height()) / 2));
+                // a quiet chevron when more items lie off-screen (never accent): on the heading line, its right edge at
+                // the rail's right edge - inside the TV-safe area, never over a card
+                r.more = ui::label(page, "\xE2\x80\xBA", theme::DISPLAY, 0, 0, ui::Weight::Regular, theme::textMuted());
+                r.more->setAlign(ui::Align::Right, L::RAIL_MORE_RIGHT);
+                r.more->setPosition(0, y + L::RAIL_MORE_CENTER_Y - std::round(r.more->height() / 2));
                 r.more->setVisibility(Visibility::Hidden);
             }
         }

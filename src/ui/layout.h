@@ -119,7 +119,10 @@ namespace layout {
         constexpr float RAIL_GAP = 52;
         constexpr float RAIL_PITCH = RAIL_HEADING_H + CARD_H + RAIL_GAP;   // 363
         constexpr int CARDS_VISIBLE = 3;
-        constexpr float RAIL_MORE_GAP = 18;            // the "more" chevron: this far right of the last card (1842)
+        // the "more" chevron (Continue Watching / Recently Watched): on the rail's heading line, right-aligned to the
+        // rail's right edge = the TV-safe edge (v7-ux-10: it was 18 px outside it)
+        constexpr float RAIL_MORE_RIGHT = SAFE_RIGHT;  // 1824
+        constexpr float RAIL_MORE_CENTER_Y = 22;       // below the rail's top: the middle of its heading line
         constexpr float VIEW_BOTTOM = 958;             // a focused rail's lowest text edge
     }
 

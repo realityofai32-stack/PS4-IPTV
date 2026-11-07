@@ -11,6 +11,7 @@
 #include "../../src/i18n/i18n.h"
 #include "../../src/ui/layout.h"
 #include "../../src/ui/scroll_math.h"
+#include "../../src/platform/input_actions.h"
 
 using homecards::Rail;
 using iptv::ContentType;
@@ -154,4 +155,89 @@ TEST(home_rail_more_indicator) {
     // edge values
     CHECK(!scroll::moreAfter(0, 3, 3) && scroll::moreAfter(0, 3, 4) && !scroll::moreAfter(1, 3, 4));
     CHECK(!scroll::moreAfter(0, 0, 10) && scroll::moreAfter(-2, 3, 4));
+}
+
+// ---- v7-ux-10: the chevron inside the TV-safe area, the Settings gear, L1 / R1 through the top navigation
+
+#include <cmath>
+
+#include "../../src/app/home_nav.h"
+#include "../../src/ui/icon_shapes.h"
+
+TEST(home_rail_more_chevron_inside_the_safe_area) {
+    namespace L = layout::home;
+    CHECK(L::RAIL_MORE_RIGHT <= layout::SAFE_RIGHT);                       // never outside the 5 % right margin
+    CHECK(L::RAIL_MORE_RIGHT >= layout::SAFE_RIGHT - 1);                   // at the rail's right edge
+    // the rail's right edge is the third card's right edge: three cards fill the content width
+    CHECK(layout::SAFE_X + L::CARDS_VISIBLE * L::CARD_W + (L::CARDS_VISIBLE - 1) * L::CARD_GAP == layout::SAFE_RIGHT);
+    // on the heading line, not over the cards (they start RAIL_HEADING_H below the rail's top)
+    CHECK(L::RAIL_MORE_CENTER_Y > 0 && L::RAIL_MORE_CENTER_Y < L::RAIL_HEADING_H / 2);
+}
+
+TEST(home_settings_icon_is_a_gear_like_the_other_icons) {
+    const float s = 64, c = s / 2;
+    std::vector<ui::icons::Point> p = ui::icons::gear(c, c, s);
+    CHECK_EQ(p.size(), (size_t) (4 * ui::icons::GEAR_TEETH));
+    float maxR = 0, minR = 1e9f, prev = -1e9f;
+    double turn = 0;
+    for (size_t i = 0; i < p.size(); i++) {
+        float r = std::hypot(p[i].x - c, p[i].y - c);
+        maxR = std::max(maxR, r);
+        minR = std::min(minR, r);
+        // star-shaped around the centre: the angle only ever increases (the fan fill and the outline both work)
+        float a = std::atan2(p[i].y - c, p[i].x - c);
+        if (i > 0) {
+            float d = a - prev;
+            while (d < 0) {
+                d += 2 * 3.14159265f;
+            }
+            CHECK(d > 0 && d < 3.14159265f);
+            turn += d;
+        }
+        prev = a;
+    }
+    // closing the outline (last point -> first) completes exactly one turn around the centre
+    float close = std::atan2(p[0].y - c, p[0].x - c) - prev;
+    while (close < 0) {
+        close += 2 * 3.14159265f;
+    }
+    CHECK(close > 0 && std::fabs(turn + close - 2 * 3.14159265) < 0.001);
+    // the same size as the other icons (the favorites star's points reach 0.24 x the button): teeth stand out
+    CHECK(std::fabs(maxR - 0.235f * s) < 0.01f && std::fabs(minR - 0.175f * s) < 0.01f);
+    CHECK(maxR - minR > 0.05f * s && maxR <= 0.25f * s);
+    CHECK(ui::icons::GEAR_HUB * s > 2 && ui::icons::GEAR_HUB < ui::icons::GEAR_INNER / 2);
+    // inside the round button
+    for (const auto &q: p) {
+        CHECK(q.x > 0 && q.x < s && q.y > 0 && q.y < s);
+    }
+}
+
+TEST(home_l1_r1_through_the_top_navigation) {
+    // Home, Live TV, Movies, Series, Local Media, Search, Favorites, Downloads, Settings
+    const int n = 9;
+    std::vector<int> visited;
+    int at = 0;
+    for (int i = 0; i < 12; i++) {           // R1 from Home to Settings, then it stops
+        at = homenav::shoulder(at, n, 1);
+        visited.push_back(at);
+    }
+    CHECK((std::vector<int>(visited.begin(), visited.begin() + 8) == std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8}));
+    CHECK(at == 8 && homenav::shoulder(8, n, 1) == 8);     // the end: no wrap
+    for (int i = 0; i < 12; i++) {           // L1 back to Home, then it stops
+        at = homenav::shoulder(at, n, -1);
+    }
+    CHECK(at == 0 && homenav::shoulder(0, n, -1) == 0);
+    // from the hero / a rail: the item after / before the navigation's last focus (Home at first)
+    CHECK(homenav::shoulder(0, n, 1) == 1 && homenav::shoulder(0, n, -1) == 0);
+    CHECK(homenav::shoulder(3, n, 1) == 4 && homenav::shoulder(3, n, -1) == 2);
+    // playlist sources (no Movies / Series: 7 items) and odd input
+    CHECK(homenav::shoulder(6, 7, 1) == 6 && homenav::shoulder(20, 7, -1) == 5 && homenav::shoulder(-3, 7, 1) == 1);
+    CHECK(homenav::shoulder(0, 0, 1) == 0);
+    // the keyboard follows the centralized mapping: Tab / Shift+Tab are R1 / L1 everywhere (platform/input_actions.h)
+    kbd::Event tab;
+    tab.key = kbd::Key::Tab;
+    InputEvent out;
+    CHECK(actions::routeUniversal(tab, out) && out.button == PadButton::R1);
+    tab.shift = true;
+    CHECK(actions::routeUniversal(tab, out) && out.button == PadButton::L1);
 }
