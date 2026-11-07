@@ -23,6 +23,8 @@
 // progress, most recent playback first, one card per series. It is rebuilt whenever the store changes
 // (generation), so returning from the player shows the new position at once. Live TV never appears there;
 // Recently Watched shows at most RECENT_LIVE_MAX channels while movies/episodes can fill the row.
+// Remove (Square / Del) on a Recently Watched card forgets its history entry only (LibraryStore::
+// removeFromRecentlyWatched): progress, Continue Watching, favorites and downloads stay.
 // Square on a Continue Watching card removes it from the row only (LibraryStore::dismissFromContinueWatching):
 // the resume position, history, favorite and any download stay; new playback progress brings it back.
 //
@@ -296,10 +298,18 @@ namespace {
                     }
                     return;
                 case PadButton::Square:
-                    if (!e.repeat && zone >= RAIL && rails[(size_t) (zone - RAIL)].kind == RailKind::Continue) {
+                    // Remove (DS4 Square / keyboard Del): the focused card of Continue Watching or Recently Watched.
+                    // A copy of the focused entry is taken now, before the row is rebuilt: the row re-indexes after the
+                    // removal, and a held key never repeats (one card per press).
+                    if (!e.repeat && zone >= RAIL) {
                         Rail &r = rails[(size_t) (zone - RAIL)];
-                        if (r.index < (int) r.items.size()) {
-                            removeFromContinueWatching(r.items[(size_t) r.index].history);
+                        if (r.index < (int) r.items.size() && r.items[(size_t) r.index].kind == ItemKind::History) {
+                            const HistoryEntry focused = r.items[(size_t) r.index].history;
+                            if (r.kind == RailKind::Continue) {
+                                removeFromContinueWatching(focused);
+                            } else if (r.kind == RailKind::Recent) {
+                                removeFromRecentlyWatched(focused);
+                            }
                         }
                     }
                     return;
@@ -1069,6 +1079,20 @@ namespace {
             app.toast(tr("home.cw_removed"));
         }
 
+        // the card disappears at once; only the history entry goes (progress, favorites, downloads stay). The focus
+        // stays at the same place in the row: on the card that moved into it, or the new last one.
+        void removeFromRecentlyWatched(const HistoryEntry &h) {
+            if (!app.library().removeFromRecentlyWatched(h)) {
+                return;
+            }
+            app.saveLibrary();
+            rebuildRows();
+            refresh();
+            requestImages();
+            redraw();
+            app.toast(tr("home.recent_removed"));
+        }
+
         void openRecent(const HistoryEntry &h) {
             switch (h.type) {
                 case ContentType::Live: {
@@ -1190,10 +1214,14 @@ namespace {
         void refreshHints() {
             screens::Hints h;
             bool cw = zone >= RAIL && rails[(size_t) (zone - RAIL)].kind == RailKind::Continue;
+            bool recent = zone >= RAIL && rails[(size_t) (zone - RAIL)].kind == RailKind::Recent
+                          && !rails[(size_t) (zone - RAIL)].items.empty();
             bool resumeAction = cw || (zone == HERO && hero && heroIndex == 0);
             h.push_back({A::Confirm, tr(resumeAction ? "common.resume" : "common.open")});
             if (cw) {
                 h.push_back({A::Remove, tr("home.cw_remove")});
+            } else if (recent) {
+                h.push_back({A::Remove, tr("home.recent_remove")});   // DS4 Square / keyboard Del (input_actions)
             }
             h.push_back({A::Search, tr("home.search")});
             h.push_back({A::Options, tr("home.settings")});

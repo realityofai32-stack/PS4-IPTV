@@ -13,6 +13,7 @@
 #include <unordered_map>
 
 #include "common.h"
+#include "../ui/focus_colors.h"
 #include "../core/format.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
@@ -395,9 +396,11 @@ namespace {
             detailFav->setText(app.library().isFavorite(ContentType::Live, c->id)
                                ? "\xE2\x98\x85  " + tr("favorites.in_favorites") : "");
             detailFav->setPosition(pad, y + 8);
-            // the primary action while a channel is focused: accent fill, caption in the accent's text colour
-            watch->setFillColor(focus == 1 ? theme::accent() : theme::surfaceElevated());
-            watchLabel->setColor(focus == 1 ? theme::onAccent() : theme::textPrimary());
+            // the primary action while a channel is focused - but the focused channel row holds the focus treatment,
+            // so the button is the restrained "primary at rest" look, never a second focused control (ui/focus_style.h)
+            ui::focus::Look l = ui::focus::look(focus == 1 ? ui::focus::Role::Primary : ui::focus::Role::Secondary, false);
+            watch->setFillColor(ui::focus::color(l.fill));
+            watchLabel->setColor(ui::focus::color(l.text));
         }
 
         // ------------------------------------------------------------------ behaviour

@@ -206,6 +206,8 @@ namespace i18n {
             {"home.cw_removed", "İzlemeye Devam Et'ten kaldırıldı. Kaldığınız yer korunuyor."},
             {"home.recently_watched", "Son İzlenenler"},
             {"home.recent_empty", "İzlediğiniz kanallar, filmler ve bölümler burada görünür."},
+            {"home.recent_remove", "Son İzlenenler'den Kaldır"},
+            {"home.recent_removed", "Son İzlenenler'den kaldırıldı. İlerleme, favoriler ve indirmeler korunuyor."},
             {"home.kind_movie", "Film"},
             {"home.kind_series", "Dizi"},
             {"home.kind_live", "Canlı TV"},

@@ -1,0 +1,24 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX-3: CHOICE PICKER, ONE FOCUS OWNER, REMOVE FROM RECENTLY WATCHED
+=====================================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Details: docs/v7-ux-hints-continue-hero.md
+(section 6). Install OVER the existing V7 IPTV: profiles, settings, history and downloads are kept.
+
+ 1. CHOICE PICKER - Settings: on a value with 3+ choices (Default aspect ratio, crop, zoom, audio / subtitle language,
+    subtitle mode / size, stability, Live format, Language, Keyboard layout ...) press X / Enter: a compact list over
+    the darkened screen, the current value checked and selected. Up / Down moves, X / Enter applies it and closes
+    (the row shows the new value at once), O / Esc closes without a change. Left / Right still step values; On / Off
+    rows and two-value rows still toggle in place. Language: the app switches language after choosing.
+ 2. CHOICE PICKER - Playback options (OPTIONS during a movie / episode): Video > Aspect ratio, Crop / Fill, Zoom,
+    Position left-right / up-down, and Subtitle style > Size open the same picker. The video keeps PLAYING visibly
+    behind the darkened picker (no freeze); the choice applies at once without a reload.
+ 3. FOCUS: only one control looks focused at a time. Home: focus "Series" in the navigation - the hero's Play button
+    is a restrained dark accent tint (no ring, not the bright accent); move down to the hero - Play is the bright accent
+    with its ring. Check Movies / Series / Details (Play / Resume while the episode list has focus), Live TV (the Watch
+    button while a channel is focused is restrained), Search, Favorites, Downloads, Settings (the open category shows a
+    quiet edge, the focused row the accent), Local Media, Playback options, the picker, the Next Episode card.
+ 4. REMOVE FROM RECENTLY WATCHED: on Home, focus a Recently Watched card (first, a middle one, the last one): the hint
+    shows "Remove from Recently Watched" ([Square] with the DS4, [Del] after a keyboard key). Press it: the card
+    disappears at once, the focus stays in place (the next card / the new last one). The same title's resume position,
+    Continue Watching card, favorite and download are still there. Holding the button removes only one card.
+ 5. Regression: Continue Watching, Next Episode card, keyboard / DS4 hints, subtitles, HTTPS / Stalker / M3U, downloads.

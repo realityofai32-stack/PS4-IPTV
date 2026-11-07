@@ -338,7 +338,11 @@ namespace {
                     return;
                 case PadButton::Cross:
                     if (!e.repeat) {
-                        change(item, 1, true);
+                        if (item.kind == Kind::Choice && item.options.size() >= 3) {
+                            openPicker(list->selected());   // every value at once (Left / Right still step)
+                        } else {
+                            change(item, 1, true);          // On / Off and two-value choices toggle in place
+                        }
                     }
                     return;
                 case PadButton::Circle:
@@ -469,6 +473,22 @@ namespace {
         }
 
         std::vector<SettingItem> &items() { return cats[(size_t) catIndex].items; }
+
+        // the shared choice picker for a Choice row; the value applies when it closes (the row shows it at once)
+        void openPicker(int row) {
+            const SettingItem &item = items()[(size_t) row];
+            int category = catIndex;
+            app.push(screens::makeChoicePicker(app, item.caption, item.options, item.choice(), whileAlive([this, category, row](int c) {
+                if (c < 0 || category != catIndex || row >= (int) items().size()) {
+                    return;   // cancelled (or the page changed meanwhile)
+                }
+                SettingItem &it = items()[(size_t) row];
+                if (it.kind != Kind::Choice || c == it.choice()) {
+                    return;
+                }
+                it.setChoice(c);   // may rebuild every screen (language): nothing of this screen is used after it
+            })));
+        }
 
         void change(SettingItem &item, int delta, bool activate) {
             if (item.kind == Kind::Choice) {

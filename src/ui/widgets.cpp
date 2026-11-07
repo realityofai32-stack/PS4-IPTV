@@ -4,6 +4,7 @@
 #include "components.h"
 #include "scroll_math.h"
 #include "widgets.h"
+#include "focus_colors.h"
 #include "../i18n/i18n.h"
 #include "../core/utf8.h"
 #include "../platform/clock.h"
@@ -362,23 +363,16 @@ namespace ui {
     }
 
     void Button::refresh() {
+        // ui/focus_style.h: only the focused button gets the accent fill / ring; the primary action at rest keeps a
+        // restrained accent tint so it never looks focused while the focus is elsewhere (v7-ux-2 hardware report)
+        namespace F = focus;
+        F::Look l = F::look(danger ? F::Role::Danger : primary ? F::Role::Primary : F::Role::Secondary, focused, false,
+                            enabled);
         setOutlineThickness(0);
-        ring->setOutlineColor(theme::accent());
-        ring->setVisibility(enabled && focused ? Visibility::Visible : Visibility::Hidden);
-        if (!enabled) {
-            setFillColor(theme::surface());
-            caption->setColor(theme::textMuted());
-        } else if (danger) {
-            setFillColor(theme::dangerSurface());
-            caption->setColor(focused ? theme::textStrong() : theme::textPrimary());
-        } else if (primary) {
-            // the screen's main action stays visually dominant, focused or not
-            setFillColor(theme::accent());
-            caption->setColor(theme::onAccent());
-        } else {
-            setFillColor(focused ? theme::cardHover() : theme::surfaceElevated());
-            caption->setColor(focused ? theme::textStrong() : theme::textPrimary());
-        }
+        ring->setOutlineColor(F::color(F::Edge::Accent));
+        ring->setVisibility(l.edge == F::Edge::Accent ? Visibility::Visible : Visibility::Hidden);
+        setFillColor(F::color(l.fill));
+        caption->setColor(F::color(l.text));
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////

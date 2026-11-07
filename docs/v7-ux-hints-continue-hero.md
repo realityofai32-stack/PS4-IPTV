@@ -202,6 +202,49 @@ Each Home hero art change logs one line (no URL, host, credential or path):
 - `fallback` is `backdrop`, `poster`, or `ambient-only` (the poster was too small and omitted).
 - When nothing could be drawn, the line ends "- clean dark hero".
 
+## 6. v7-ux-3: choice picker, one focus owner, Recently Watched removal
+
+**Choice picker.**
+- One component: `ui::ChoiceModel` holds the logic (host-tested); `screens::makeChoicePicker` draws it, in
+  `screens/choice_picker.cpp`.
+- It is a compact modal card (640 px wide, at most 7 rows of 72 px) over the scrim. The current value is checked
+  and selected first.
+- Up / Down move without wrapping and repeat when held. L2 / R2 page by 6. Cross / Enter confirms; Circle / Esc /
+  OPTIONS cancels; a held Cross never confirms.
+- Keyboard keys reach it through the universal routing. Its hint bar is owned by the picker, so DS4 / keyboard hints
+  follow the active device.
+- Settings: Cross on a Choice row with 3+ options opens it. Two-value rows and toggles stay inline, and Left / Right
+  still step. The value applies after the picker closes, then Settings reloads the row (`onResume`).
+- Playback options: Aspect, Crop, Zoom, Position X / Y and Subtitle size open it. The value applies at once through
+  the same geometry / appearance path, with no reload.
+- `App` ticks screens under a modal that ask for it (`Screen::ticksUnderModal`: the VOD player). Redraws count
+  animating screens visible under modals, so the video keeps playing and drawing behind the picker.
+
+**Focus.** `ui/focus_style.h` has three looks, mapped to existing theme tokens by `ui/focus_colors.h` (no colour
+changes):
+
+| State | Look |
+|---|---|
+| Focused | accent fill and/or accent ring or edge, the only "strong" look |
+| Primary or selected, at rest | `accentMuted` with strong text, no ring |
+| Secondary, at rest | neutral |
+
+- Button, Chip, the navigation tabs, IconButton and RowFrame all use it.
+- `Button`: the primary action used to keep the full accent fill while unfocused, so the hero Play looked focused
+  while the navigation had focus. Now it is restrained at rest.
+- `RowFrame`: a selected row (the open category of an unfocused list) gets a quiet `accentMuted` edge instead of the
+  accent edge.
+- Live TV's Watch button uses the primary-at-rest look while the channel row holds the focus.
+
+**Recently Watched removal.**
+- Remove is DS4 Square, or keyboard Del where Home offers it (the existing `A::Remove` action). On a Recently Watched
+  card it calls `LibraryStore::removeFromRecentlyWatched`.
+- It forgets the history entries of that card only: the channel or movie, or every history entry of the episode's
+  series, so an older episode doesn't take the card's place.
+- Progress, Continue Watching, favorites and downloads are untouched.
+- Home copies the focused entry before rebuilding the row. The focus stays in place, clamped to the new last card.
+  Repeats are ignored, so one press removes one card.
+
 ## Tests
 
 The host suite has:
@@ -209,6 +252,9 @@ The host suite has:
 - `test_hints`
 - `test_continue`
 - `test_hero_art`: backdrop usability, the priority plan, and the async / stale / cache simulation.
+- `test_ux_pass`: picker open / confirm / cancel / current-value highlight with DS4 and keyboard; one strong focus
+  owner; primary-but-unfocused styling; Recently Watched removal of the first / middle / last card with DS4 and
+  keyboard, nothing else deleted.
 - `test_autonext`, with the 7 s card and the regressions:
   - Auto-play ON shows the card;
   - end of file before the window (the measured 8.2 s case);

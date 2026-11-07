@@ -524,6 +524,12 @@ void App::logic() {
     player.update(t);  // mpv events are drained every frame, whichever screen is on top
     if (top()) {
         top()->tick(t);
+        // screens visible under modal screens that need their frame logic (the player under the choice picker)
+        for (int i = (int) stack.size() - 2; i >= 0 && stack[(size_t) i + 1]->isModal(); i--) {
+            if (stack[(size_t) i]->ticksUnderModal()) {
+                stack[(size_t) i]->tick(t);
+            }
+        }
     }
     if (toastBox->isVisible() && t > toastUntil) {
         toastBox->setVisibility(Visibility::Hidden);
@@ -554,7 +560,13 @@ void App::run() {
         }
         double t = now();
         bool timed = redrawAt > 0 && t >= redrawAt;
-        bool animating = (top() && top()->animating()) || ui::scrolling(t);
+        bool animating = ui::scrolling(t);
+        for (int i = (int) stack.size() - 1; i >= 0 && !animating; i--) {
+            animating = stack[(size_t) i]->animating();   // the top screen and those visible under modal ones
+            if (!stack[(size_t) i]->isModal()) {
+                break;
+            }
+        }
         if (dirty || timed || animating || forceContinuousRedraw || t - lastDraw > KEEPALIVE_REDRAW) {
             dirty = false;
             if (timed) {

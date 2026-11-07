@@ -2,6 +2,7 @@
 #include <cmath>
 
 #include "components.h"
+#include "focus_colors.h"
 
 using namespace c2d;
 
@@ -89,10 +90,11 @@ namespace ui {
     void Chip::setState(bool sel, bool foc) {
         selected = sel;
         focused = foc;
-        // focused: the accent fill; selected: the accent's dark tint; rest: a quiet elevated chip
-        setFillColor(focused ? theme::accent() : selected ? theme::accentMuted() : theme::surfaceElevated());
+        // focused: the accent fill; selected: the accent's dark tint; rest: a quiet elevated chip (ui/focus_style.h)
+        focus::Look l = focus::look(focus::Role::Chip, focused, selected);
+        setFillColor(focus::color(l.fill));
         setOutlineThickness(0);
-        caption->setColor(focused ? theme::onAccent() : selected ? theme::textStrong() : theme::textSecondary());
+        caption->setColor(focus::color(l.text));
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -213,8 +215,9 @@ namespace ui {
     void IconButton::setFocused(bool f) {
         focused = f;
         // at rest only the icon is drawn (no disc competing with the content); focused: an accent disc
-        setFillColor(focused ? theme::accent() : theme::none());
-        Color fg = focused ? theme::onAccent() : theme::textSecondary();
+        focus::Look l = focus::look(focus::Role::Icon, focused);
+        setFillColor(focus::color(l.fill));
+        Color fg = focus::color(l.text);
         for (auto &p: parts) {
             if (p.second) {
                 p.first->setFillColor(theme::none());
@@ -255,9 +258,10 @@ namespace ui {
         }
 
         void setState(bool current, bool focused) {
-            setFillColor(focused ? theme::accent() : theme::none());
+            focus::Look l = focus::look(focus::Role::NavTab, focused, current);
+            setFillColor(focus::color(l.fill));
             caption->setWeight(current || focused ? Weight::SemiBold : Weight::Regular);
-            caption->setColor(focused ? theme::onAccent() : current ? theme::textStrong() : theme::textSecondary());
+            caption->setColor(focus::color(l.text));
             underline->setFillColor(theme::accent());
             underline->setVisibility(current && !focused ? Visibility::Visible : Visibility::Hidden);
         }
@@ -413,10 +417,12 @@ namespace ui {
     }
 
     void RowFrame::setState(bool focused, bool selected) {
-        setFillColor(focused ? theme::focus() : theme::none());
+        // focused: the tinted surface and the accent edge; selected (the open item of an unfocused list): a quiet edge
+        focus::Look l = focus::look(focus::Role::Row, focused, selected);
+        setFillColor(focus::color(l.fill));
         setOutlineThickness(0);
-        edge->setFillColor(theme::accent());
-        edge->setVisibility(focused || selected ? Visibility::Visible : Visibility::Hidden);
+        edge->setFillColor(focus::color(l.edge));
+        edge->setVisibility(l.edge != focus::Edge::None ? Visibility::Visible : Visibility::Hidden);
         if (line) {
             line->setVisibility(focused || !divider ? Visibility::Hidden : Visibility::Visible);
         }

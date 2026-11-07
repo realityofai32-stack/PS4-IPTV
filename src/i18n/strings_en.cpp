@@ -206,6 +206,8 @@ namespace i18n {
             {"home.cw_removed", "Removed from Continue Watching. Your resume position is kept."},
             {"home.recently_watched", "Recently Watched"},
             {"home.recent_empty", "Channels, movies and episodes you watch appear here."},
+            {"home.recent_remove", "Remove from Recently Watched"},
+            {"home.recent_removed", "Removed from Recently Watched. Progress, favorites and downloads are kept."},
             {"home.kind_movie", "Movie"},
             {"home.kind_series", "Series"},
             {"home.kind_live", "Live TV"},

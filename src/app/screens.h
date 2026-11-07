@@ -125,6 +125,13 @@ namespace screens {
     Screen *makeMenu(App &app, const std::string &title, const std::vector<std::string> &options, int checked,
                      std::function<void(int)> onChoice, const std::vector<std::string> &details = {});
 
+    // THE choice picker for every setting with 3+ discrete values (Settings, Playback options): a compact list over
+    // a darkened screen (the video stays visible behind it), the current value checked and selected first, Up / Down
+    // to move, Cross / Enter to choose, Circle / Esc to cancel (ui/choice_model.h). onChoice(index) after it closed,
+    // -1 when cancelled.
+    Screen *makeChoicePicker(App &app, const std::string &title, const std::vector<std::string> &options, int current,
+                             std::function<void(int)> onChoice);
+
     Screen *makeDialog(App &app, const std::string &title, const std::string &message,
                        const std::vector<std::string> &buttons, std::function<void(int)> onChoice,
                        bool destructive = false);

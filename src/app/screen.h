@@ -50,6 +50,10 @@ public:
     // true while an animation needs continuous redraws
     virtual bool animating() const { return false; }
 
+    // keeps receiving tick() while a modal screen (the choice picker) is on top of it: the video player's playback
+    // supervision, progress and video frames go on behind the darkened picker
+    virtual bool ticksUnderModal() const { return false; }
+
     bool isModal() const { return modal; }
 
 protected:

@@ -207,6 +207,26 @@ void LibraryStore::clearHistory() {
     gen++;
 }
 
+bool LibraryStore::removeFromRecentlyWatched(const HistoryEntry &card) {
+    if (card.id.empty()) {
+        return false;
+    }
+    ProfileData &d = data();
+    const bool series = card.type == iptv::ContentType::Series && !card.seriesId.empty();
+    size_t before = d.history.size();
+    d.history.erase(std::remove_if(d.history.begin(), d.history.end(), [&](const HistoryEntry &e) {
+        if (series) {
+            return e.type == iptv::ContentType::Series && e.seriesId == card.seriesId;
+        }
+        return e.type == card.type && e.id == card.id;
+    }), d.history.end());
+    if (d.history.size() == before) {
+        return false;
+    }
+    gen++;
+    return true;
+}
+
 const HistoryEntry *LibraryStore::progressOf(iptv::ContentType type, const std::string &id) const {
     const ProfileData *d = current();
     if (d == nullptr || type == iptv::ContentType::Live) {

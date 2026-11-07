@@ -114,6 +114,12 @@ public:
 
     void clearHistory();
 
+    // "Remove from Recently Watched" for a card of that row: forgets the history entries it stands for - the channel /
+    // movie, or for an episode every history entry of its series (the row shows one card per series, so an older
+    // episode never takes its place). Only history: progress / resume positions, Continue Watching, favorites and
+    // downloads stay. False when nothing matched.
+    bool removeFromRecentlyWatched(const HistoryEntry &card);
+
     // movie / episode progress of the active profile (nullptr when never played)
     const HistoryEntry *progressOf(iptv::ContentType type, const std::string &id) const;
 

@@ -137,6 +137,8 @@ namespace {
 
         bool animating() const override { return true; }
 
+        bool ticksUnderModal() const override { return true; }   // under the choice picker: playback goes on
+
         void onEnter() override {
             startItem(index, resumeOnStart);
         }
@@ -1540,6 +1542,9 @@ namespace {
                 case PadButton::Left:
                 case PadButton::Right:
                 case PadButton::Cross:
+                    if (e.button == PadButton::Cross && !e.repeat && openPicker(panelItems[(size_t) panelList->selected()].row)) {
+                        return;   // every value of the row in the shared choice picker (Left / Right still step)
+                    }
                     if (!e.repeat || e.button != PadButton::Cross) {
                         activate(panelItems[(size_t) panelList->selected()], e.button == PadButton::Left ? -1 : 1,
                                  e.button == PadButton::Cross);
@@ -1548,6 +1553,108 @@ namespace {
                 default:
                     return;
             }
+        }
+
+        // rows with 3+ values open the shared choice picker over the darkened, still playing video; false: not one
+        bool openPicker(Row row) {
+            std::vector<std::string> names;
+            int current = 0;
+            std::string title;
+            switch (row) {
+                case Row::Aspect:
+                    title = tr("geometry.aspect");
+                    for (int i = 0; i < display::ASPECT_COUNT; i++) {
+                        names.push_back(screens::aspectName((display::Aspect) i));
+                    }
+                    current = (int) geometry.aspect;
+                    break;
+                case Row::Crop:
+                    title = tr("geometry.crop");
+                    for (int i = 0; i < display::CROP_COUNT; i++) {
+                        names.push_back(screens::cropName((display::Crop) i));
+                    }
+                    current = (int) geometry.crop;
+                    break;
+                case Row::Zoom: {
+                    title = tr("geometry.zoom");
+                    const auto &steps = display::zoomSteps();
+                    current = -1;
+                    for (size_t i = 0; i < steps.size(); i++) {
+                        names.push_back(screens::zoomName(steps[i]));
+                        if (steps[i] == geometry.zoom) {
+                            current = (int) i;
+                        }
+                    }
+                    break;
+                }
+                case Row::PositionX:
+                case Row::PositionY: {
+                    const bool horizontal = row == Row::PositionX;
+                    title = tr(horizontal ? "geometry.pos_x" : "geometry.pos_y");
+                    for (int p = -display::POSITION_STEPS; p <= display::POSITION_STEPS; p++) {
+                        names.push_back(screens::positionName(p, horizontal));
+                    }
+                    current = (horizontal ? geometry.posX : geometry.posY) + display::POSITION_STEPS;
+                    break;
+                }
+                case Row::SubtitleSize:
+                    title = tr("subtitle.size");
+                    for (const char *k: SIZE_KEYS) {
+                        names.push_back(tr(k));
+                    }
+                    current = app.settings().get().subtitleSize;
+                    break;
+                default:
+                    return false;
+            }
+            app.push(screens::makeChoicePicker(app, title, names, current, whileAlive([this, row](int c) {
+                if (c >= 0 && panelOpen) {
+                    applyPicked(row, c);
+                }
+            })));
+            return true;
+        }
+
+        // a value chosen in the picker: applied at once like a Left / Right step (no reload)
+        void applyPicked(Row row, int c) {
+            Settings &s = app.settings().get();
+            switch (row) {
+                case Row::Aspect:
+                    geometry.aspect = (display::Aspect) std::min(std::max(c, 0), display::ASPECT_COUNT - 1);
+                    applyGeometry();
+                    break;
+                case Row::Crop:
+                    geometry.crop = (display::Crop) std::min(std::max(c, 0), display::CROP_COUNT - 1);
+                    applyGeometry();
+                    break;
+                case Row::Zoom: {
+                    const auto &steps = display::zoomSteps();
+                    geometry.zoom = steps[(size_t) std::min(std::max(c, 0), (int) steps.size() - 1)];
+                    applyGeometry();
+                    break;
+                }
+                case Row::PositionX:
+                case Row::PositionY: {
+                    int p = std::min(std::max(c - display::POSITION_STEPS, -display::POSITION_STEPS), display::POSITION_STEPS);
+                    (row == Row::PositionX ? geometry.posX : geometry.posY) = p;
+                    applyGeometry();
+                    break;
+                }
+                case Row::SubtitleSize: {
+                    s.subtitleSize = std::min(2, std::max(0, c));
+                    app.playback().applyOptions(tracks::appearanceOptions(s.subtitleSize, s.subtitlePosition,
+                                                                          s.subtitleShadow));
+                    std::string err;
+                    if (!app.settings().save(&err)) {
+                        LOG_E("settings", "save failed: %s", err.c_str());
+                    }
+                    break;
+                }
+                default:
+                    return;
+            }
+            panelList->reload();
+            refresh(app.now());
         }
 
         // delta: -1 Left, 1 Right / Cross. cross: Cross cycles (wraps) where Left / Right stop at the ends
