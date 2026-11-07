@@ -16,12 +16,20 @@ for a in "$@"; do
 done
 summary="$OUT/summary.txt"
 : > "$summary"
+# every suite runs under a time limit (SUITE_TIMEOUT seconds, default 1800; fuzzing gets its fuzz time on top), so
+# a hung suite is reported as TIMEOUT instead of blocking the whole run
+SUITE_TIMEOUT="${SUITE_TIMEOUT:-1800}"
 run() {
     local name="$1"; shift
     local log="$OUT/$name.log"
-    if "$@" > "$log" 2>&1; then r=PASS; else r=FAIL; fi
+    local limit="$SUITE_TIMEOUT"
+    [[ "$name" == fuzzing ]] && limit=$((SUITE_TIMEOUT + 10 * FUZZ))
+    timeout --kill-after=30 "$limit" "$@" > "$log" 2>&1
+    local rc=$?
+    if (( rc == 0 )); then r=PASS; elif (( rc == 124 || rc == 137 )); then r=FAIL; echo "TIMEOUT after ${limit}s" >> "$log"; else r=FAIL; fi
     local detail
     detail="$(grep -E "checks, [0-9]+ failures|local case|failure\(s\)|^ok +fuzz|replayed|input\(s\)|passed, " "$log" | tr '\n' ' ' | cut -c1-300)"
+    grep -q "^TIMEOUT after" "$log" && detail="TIMEOUT after ${limit}s $detail"
     printf '%s  %-26s %s\n' "$r" "$name" "$detail" | tee -a "$summary"
 }
 run host-unit "$REPO/scripts/test-host.sh"
