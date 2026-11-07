@@ -5,12 +5,14 @@
 //      >= 1.3:1, at least 640 x 300 - a portrait poster or a thumbnail sent as backdrop_path is not): full-bleed,
 //      1280 x 720, drawn brighter than before (layout::home::HERO_BACKDROP_TINT / _SHADE, ~42 %) with the strong
 //      left fade that keeps the text readable
-//   2. otherwise the SHOWCASE: a dark ambient field in the poster's own colour (ambient()) and the portrait poster as
+//   2. otherwise the SHOWCASE: a subtle tint of the poster's own colour around it (ambient()) and the portrait poster as
 //      a sharp, framed object on the right (showcase(): <= SHOWCASE_H tall, never enlarged, rounded corners, nearly
 //      full brightness). The best provider image is used: the detail cover (movies: get_vod_info cover_big /
 //      movie_image; series: get_series_info cover) when it differs from the list's image, else the list image
 //      (stream_icon / cover). The list image is shown while the detail cover loads, and stays when it fails.
-//   3. a poster under SHOWCASE_MIN_H texels, or no artwork: the clean dark hero (the ambient colour alone when known)
+//   3. a poster under SHOWCASE_MIN_H texels, or no artwork: the clean dark hero
+//   The showcase's tint (ambient / ambientArea, v7-ux-7) is subtle and lies around the poster only: a dark shade of
+//   its colour behind it, eased out to the left (never into the text column) and above / below.
 
 #ifndef PS4IPTV_IMAGES_HERO_ART_H
 #define PS4IPTV_IMAGES_HERO_ART_H
@@ -46,12 +48,32 @@ namespace images {
             float r = 0, g = 0, b = 0;
         };
 
-        // the ambient field behind the showcase: the poster's average colour, 40 % desaturated, scaled to 32 % and kept
-        // dark (no channel above AMBIENT_MAX), never darker than the page
-        constexpr float AMBIENT_DESATURATE = 0.4f;
-        constexpr float AMBIENT_LEVEL = 0.32f;
-        constexpr float AMBIENT_MAX = 56;
+        // the ambient tint behind the showcase (v7-ux-7: subtler, around the poster only - the v7-ux-6 field across the
+        // right half read as grey fog on the TV): the poster's average colour, only 20 % desaturated (its hue stays,
+        // no grey), scaled to 20 % and kept dark (no channel above AMBIENT_MAX), never darker than the page
+        constexpr float AMBIENT_DESATURATE = 0.2f;
+        constexpr float AMBIENT_LEVEL = 0.20f;
+        constexpr float AMBIENT_MAX = 36;
         Rgb ambient(const Rgb &average, const Rgb &page);
+
+        // where the tint lies (screen coordinates): a solid core exactly behind the poster that eases out to nothing
+        // AMBIENT_SPREAD_Y above / below it, AMBIENT_SPREAD_RIGHT to its right and up to AMBIENT_SPREAD_X to its left -
+        // never into the text column (x >= TEXT_RIGHT). Nothing without a shown poster.
+        constexpr float AMBIENT_SPREAD_X = 220;
+        constexpr float AMBIENT_SPREAD_RIGHT = 160;
+        constexpr float AMBIENT_SPREAD_Y = 80;
+        constexpr float TEXT_RIGHT = 1096;       // layout::home::HERO_TEXT_RIGHT
+        constexpr float SCREEN_RIGHT = 1920;
+
+        struct AmbientArea {
+            bool shown = false;
+            float coreX = 0, coreY = 0, coreW = 0, coreH = 0;   // solid tint: exactly behind the poster
+            float fadeLeft = 0;                                 // eased to nothing over this width left of the core
+            float fadeRight = 0;                                // ... this width right of it
+            float fadeY = 0;                                    // ... and this height above / below it
+        };
+
+        AmbientArea ambientArea(const Showcase &poster);
 
         struct Inputs {
             bool backdropKnown = false;     // the provider's details name a backdrop_path

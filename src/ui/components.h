@@ -272,9 +272,11 @@ namespace ui {
         // brighter (layout::home::HERO_BACKDROP_TINT / _SHADE); its left fade keeps the text readable.
         void setLevel(uint8_t tint, uint8_t shadeAlpha);
 
-        // no artwork, a colour field instead: `color` fills the box under its fades (left / bottom / top) - the Home
-        // hero's ambient field behind the showcase poster (images/hero_art.h). set() / set(nullptr) end it.
-        void setAmbient(const c2d::Color &color);
+        // no artwork, a soft tint instead (the Home hero behind its showcase poster, images/hero_art.h ambientArea):
+        // `core` (box coordinates) is solid `color`; it eases to nothing over `fadeLeft` / `fadeRight` to its sides and
+        // `fadeY` above / below it (smoothstep fades, no band, no rectangle edge). set() / set(nullptr) end it.
+        void setAmbient(const c2d::Color &color, const c2d::FloatRect &core, float fadeLeft, float fadeRight,
+                        float fadeY);
 
         // the area the artwork covers (box coordinates; empty without artwork): for tests and layout checks
         c2d::FloatRect artRect() const;
@@ -288,6 +290,9 @@ namespace ui {
         c2d::RectangleShape *posterBottom; // dissolves a short poster's bottom edge (PosterStyle::bottomFade)
         c2d::RectangleShape *washField;    // the colour field behind / right of the poster
         c2d::RectangleShape *washFade;     // ... fading out to its left
+        c2d::RectangleShape *ambientRight; // setAmbient: the tint eases out to the right, ...
+        c2d::RectangleShape *ambientTop;   // ... above ...
+        c2d::RectangleShape *ambientBottom; // ... and below its core (page-coloured fades over it)
         PosterStyle style;
         Shown info;
         float anchor = 0.3f;

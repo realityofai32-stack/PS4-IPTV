@@ -1,0 +1,14 @@
+V7 IPTV - HARDWARE CHECKPOINT V7-UX-7: HOME HERO TINT AROUND THE SHOWCASE POSTER
+================================================================================
+Branch feature/v7-next-features (local only, not pushed). Version 0.3.0, title IPTV00002 (unchanged).
+Build ID and PKG SHA-256: BUILD.txt and SHA256SUMS.txt next to this file. Install OVER the existing V7 IPTV.
+Only the background behind the showcase poster changed; poster size / position / brightness / frame and real provider
+backdrops are exactly as in v7-ux-6.
+
+ 1. An item without a provider backdrop: the hero is clean dark black; the poster's colour shows only as a faint, dark
+    halo hugging the poster (solid only behind it, eased out ~80 px above / below, 160 px to the right, up to 220 px to
+    the left - never into the text area). No grey fog, no mist, no washed-out rectangle across the right half.
+ 2. Two posters with different colours (e.g. a red and a blue one): the halo's hue differs (each title stays distinct).
+ 3. A poster too small to show: the clean dark hero, no tint.
+ 4. An item with a landscape backdrop: unchanged from v7-ux-6.
+ Please send a screenshot of case 1 (ideally two titles with different colours).

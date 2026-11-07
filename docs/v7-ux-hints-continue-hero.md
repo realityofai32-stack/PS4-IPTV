@@ -211,6 +211,22 @@ Approved after the v7-ux-5 analysis (`images/hero_art`, `screens/home_screen.cpp
 Texture memory is unchanged: one `HeroPoster` texture (512 × 768 max, 1.5 MiB), or the backdrop (3.5 MiB). There is
 no generation and no per-frame work.
 
+### v7-ux-7: the tint stays around the poster
+
+On the TV, the v7-ux-6 ambient field across the whole right half read as grey fog. The poster itself is unchanged.
+The tint is now:
+
+- **Subtler colour** (`images::hero::ambient`): only 20 % desaturated, so the hue stays and doesn't turn grey. It
+  is scaled to 20 %, with no channel above 36. For example, red ≈ (31, 15, 12) and blue ≈ (14, 22, 31).
+- **Localized** (`ambientArea`, `Backdrop::setAmbient`):
+  - The solid part is exactly the poster's rectangle, hidden behind it.
+  - It eases out (smoothstep, no edge) 220 px to the left (never past the text column at x 1096), 160 px to the
+    right, and 80 px above and below. Page-coloured fades round the corners.
+  - Including those fades it covers under 55 % of the hero box; the solid part is under 25 %.
+- **No poster** (too small): no tint at all.
+
+There are no textures, no blur and no per-frame work.
+
 ## 5. Hardware diagnostics
 
 Each Home hero art change logs one line (no URL, host, credential or path):

@@ -44,6 +44,22 @@ namespace images {
             return c;
         }
 
+        AmbientArea ambientArea(const Showcase &p) {
+            AmbientArea a;
+            if (!p.shown) {
+                return a;
+            }
+            a.shown = true;
+            a.coreX = p.x;
+            a.coreY = p.y;
+            a.coreW = p.w;
+            a.coreH = p.h;
+            a.fadeLeft = std::max(0.0f, std::min(AMBIENT_SPREAD_X, p.x - TEXT_RIGHT));
+            a.fadeRight = std::max(0.0f, std::min(AMBIENT_SPREAD_RIGHT, SCREEN_RIGHT - (p.x + p.w)));
+            a.fadeY = std::min(AMBIENT_SPREAD_Y, p.y);   // never above the top of the screen
+            return a;
+        }
+
         Plan plan(const Inputs &in) {
             Plan p;
             p.backdropUsable = in.backdropKnown && !in.backdropFailed && in.backdropLoaded

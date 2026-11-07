@@ -491,6 +491,12 @@ namespace ui {
         add(washField);
         washFade = fade(this, FloatRect(0, 0, 1, rect.height), theme::background(), Edge::Right);
         washFade->setVisibility(Visibility::Hidden);
+        ambientRight = fade(this, FloatRect(0, 0, 1, 1), theme::background(), Edge::Left);
+        ambientRight->setVisibility(Visibility::Hidden);
+        ambientTop = fade(this, FloatRect(0, 0, 1, 1), theme::background(), Edge::Top);
+        ambientTop->setVisibility(Visibility::Hidden);
+        ambientBottom = fade(this, FloatRect(0, 0, 1, 1), theme::background(), Edge::Bottom);
+        ambientBottom->setVisibility(Visibility::Hidden);
         image = new RectangleShape(FloatRect(0, 0, rect.width, rect.height));
         image->setFillColor(theme::backdropTint());   // texture modulation: the artwork itself is dimmed
         image->setVisibility(Visibility::Hidden);
@@ -522,13 +528,36 @@ namespace ui {
         shade->setFillColor(theme::withAlpha(theme::backdropShade(), shadeAlpha));
     }
 
-    void Backdrop::setAmbient(const Color &color) {
+    void Backdrop::setAmbient(const Color &color, const FloatRect &core, float fadeLeft, float fadeRight, float fadeY) {
         hide();
         glow->setVisibility(Visibility::Hidden);
+        const float coreRight = std::min(getSize().x, core.left + core.width);
+        const float right = std::min(getSize().x, coreRight + fadeRight);
+        const float x0 = std::max(0.0f, core.left - fadeLeft);
+        const float y0 = core.top - fadeY;
+        const float h = core.height + 2 * fadeY;
+        // the solid tint behind the poster, over its height plus both vertical fades
         washField->setFillColor(color);
-        washField->setPosition(0, 0);
-        washField->setSize(getSize().x, getSize().y);
+        washField->setPosition(core.left, y0);
+        washField->setSize(std::max(1.0f, coreRight - core.left), h);
         washField->setVisibility(Visibility::Visible);
+        // eased out to the left and to the right (in its own colour: alpha to 0) ...
+        if (core.left - x0 >= 1) {
+            refade(washFade, FloatRect(x0, y0, core.left - x0, h), color, Edge::Right);
+            washFade->setVisibility(Visibility::Visible);
+        }
+        if (right - coreRight >= 1) {
+            refade(ambientRight, FloatRect(coreRight, y0, right - coreRight, h), color, Edge::Left);
+            ambientRight->setVisibility(Visibility::Visible);
+        }
+        // ... and above / below: the page colour eased over it, so the corners round off as well
+        if (fadeY >= 1) {
+            refade(ambientTop, FloatRect(x0, y0, right - x0, fadeY), theme::background(), Edge::Top);
+            refade(ambientBottom, FloatRect(x0, core.top + core.height, right - x0, fadeY), theme::background(),
+                   Edge::Bottom);
+            ambientTop->setVisibility(Visibility::Visible);
+            ambientBottom->setVisibility(Visibility::Visible);
+        }
         washed = false;   // the next set() lays its own field out again
     }
 
@@ -549,6 +578,9 @@ namespace ui {
         posterBottom->setVisibility(Visibility::Hidden);
         washField->setVisibility(Visibility::Hidden);
         washFade->setVisibility(Visibility::Hidden);
+        ambientRight->setVisibility(Visibility::Hidden);
+        ambientTop->setVisibility(Visibility::Hidden);
+        ambientBottom->setVisibility(Visibility::Hidden);
         glow->setVisibility(Visibility::Visible);
         info = Shown();
     }
@@ -565,6 +597,9 @@ namespace ui {
             hide();   // `shown` stays referenced by the hidden shape until something else is shown
             return;
         }
+        ambientRight->setVisibility(Visibility::Hidden);    // an ambient tint (setAmbient) ends with real artwork
+        ambientTop->setVisibility(Visibility::Hidden);
+        ambientBottom->setVisibility(Visibility::Hidden);
         const bool wantWash = art == Art::Poster && style.washLength > 0 && average != nullptr;
         if (texture == shown && art == info.art && !recrop && image->isVisible() && wantWash == washed) {
             return;

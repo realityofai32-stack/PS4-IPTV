@@ -13,7 +13,8 @@
 //   1. the provider's real landscape backdrop (get_vod_info / get_series_info backdrop_path) when it loads and is
 //      usable (landscape, >= 640 x 300): full-bleed 1280 x 720, at ~42 % brightness (HERO_BACKDROP_TINT / _SHADE),
 //      the strong fade into the page on the left keeps the text readable
-//   2. otherwise the SHOWCASE: a dark ambient field in the poster's own colour (Backdrop::setAmbient) and the
+//   2. otherwise the SHOWCASE: a subtle tint of the poster's own colour around the poster only (Backdrop::setAmbient,
+//      hero_art ambientArea: a core behind it, eased out to the left / above / below, never into the text) and the
 //      portrait poster as a sharp framed object on the right (<= 560 px tall, never enlarged, rounded corners, a soft
 //      shadow, 94 % brightness) - the detail cover (cover_big / movie_image, series cover) when the provider has a
 //      different one, else the list image; under 300 texels tall it is omitted
@@ -888,18 +889,22 @@ namespace {
                 logHeroArt(h);
                 return;
             }
-            // the showcase: the ambient field in the poster's colour, the poster as a sharp object on the right
-            const Color page = theme::background();
-            images::hero::Rgb amb = images::hero::ambient({h.art->average.r, h.art->average.g, h.art->average.b},
-                                                          {(float) page.r, (float) page.g, (float) page.b});
-            backdrop->setAmbient(Color((uint8_t) amb.r, (uint8_t) amb.g, (uint8_t) amb.b, 255));
+            // the showcase: the poster as a sharp object on the right, a subtle tint of its colour around it only
             const ImageVariant &v = h.art->at(0);
             showcaseShown = images::hero::showcase(v.size.x, v.size.y);
             if (!showcaseShown.shown) {
-                showcase->setVisibility(Visibility::Hidden);   // too small: the ambient field alone (clean dark hero)
+                backdrop->set(nullptr, Vector2i(), ui::Backdrop::Art::Landscape);   // too small: the clean dark hero
+                showcase->setVisibility(Visibility::Hidden);
                 logHeroArt(h);
                 return;
             }
+            const Color page = theme::background();
+            images::hero::Rgb amb = images::hero::ambient({h.art->average.r, h.art->average.g, h.art->average.b},
+                                                          {(float) page.r, (float) page.g, (float) page.b});
+            images::hero::AmbientArea area = images::hero::ambientArea(showcaseShown);
+            backdrop->setAmbient(Color((uint8_t) amb.r, (uint8_t) amb.g, (uint8_t) amb.b, 255),
+                                 FloatRect(area.coreX - L::BACKDROP_X, area.coreY, area.coreW, area.coreH), area.fadeLeft,
+                                 area.fadeRight, area.fadeY);
             if (showcaseTexture != v.texture) {
                 showcaseImage->setTexture(v.texture.get(), true);
                 showcaseTexture = v.texture;   // kept alive while it is shown
@@ -953,7 +958,7 @@ namespace {
             const char *which = h.plan.show == images::hero::Show::Cover ? "detail cover" : "list image";
             if (!showcaseShown.shown) {
                 LOG_I("home", "hero art: %s, provider backdrop available %s, usable %s -> showcase %s: source %dx%d, "
-                              "texture %dx%d under %.0f px - omitted, ambient field only", type, available, usable, which,
+                              "texture %dx%d under %.0f px - omitted, clean dark hero", type, available, usable, which,
                       h.art->source.x, h.art->source.y, v.size.x, v.size.y, images::hero::SHOWCASE_MIN_H);
                 return;
             }
