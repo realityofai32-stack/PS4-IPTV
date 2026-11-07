@@ -26,7 +26,7 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAMPLES = os.path.join(ROOT, 'build', 'xtream-samples', 'get_vod_streams.json')
-UA = 'PS4IPTV/0.3.0'
+UA = 'PS4IPTV/0.4.0'
 
 
 def credentials():

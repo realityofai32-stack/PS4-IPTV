@@ -13,7 +13,7 @@ body:
     attributes:
       label: V7 IPTV version
       description: You can find this in Settings > About.
-      placeholder: e.g. 0.3.0
+      placeholder: e.g. 0.4.0
     validations:
       required: true
 

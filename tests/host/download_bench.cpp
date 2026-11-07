@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string ca = fs::join(repo, "third_party/cacert/cacert.pem");
-    CurlTransport transport("PS4IPTV/0.3.0", fs::exists(ca) ? ca : "");
+    CurlTransport transport("PS4IPTV/0.4.0", fs::exists(ca) ? ca : "");
     std::printf("movie %s.%s, %.0f s per configuration, %.0f s between connections\n", id.c_str(), ext.c_str(),
                 seconds, gap);
     std::printf("%-9s %-8s %8s %8s %8s %8s %8s %9s %8s %6s %5s %5s %s\n", "rcvbuf", "curlbuf", "MB", "avg", "network",
