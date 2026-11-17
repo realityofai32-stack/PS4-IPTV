@@ -1,5 +1,7 @@
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
+#include <cstring>
 #include <map>
 
 #ifndef _WIN32
@@ -14,21 +16,260 @@ namespace localmedia {
 
     std::vector<Root> candidateRoots(const std::string &base) {
         std::vector<Root> roots;
-        roots.push_back({base + "/data/", false, 0});
-        for (int i = 0; i < 8; i++) {
-            roots.push_back({base + "/mnt/usb" + std::to_string(i) + "/", true, i + 1});
+        roots.push_back({base + "/data/", false, 0, false});
+        for (bool outside: {false, true}) {   // the app's sandbox view first, then the outside view
+            for (int i = 0; i < 8; i++) {
+                roots.push_back({base + (outside ? "/mnt/usb" : "/usb") + std::to_string(i) + "/", true, i + 1, outside});
+            }
         }
         return roots;
     }
 
-    std::vector<Root> detectRoots(const std::string &base) {
+    std::vector<Root> rootsFrom(const std::vector<Probe> &probes) {
         std::vector<Root> out;
-        for (const auto &r: candidateRoots(base)) {
-            if (available(r)) {
-                out.push_back(r);
+        for (const auto &p: probes) {
+            if (p.access == Access::Available && !p.root.usb) {
+                out.push_back(p.root);
+            }
+        }
+        // one view only: /usbN and /mnt/usbN show the same drives, so mixing them could list a drive twice (under two
+        // numbers if the views ever numbered them differently). The sandbox view wins when it holds any drive.
+        bool sandboxDrive = false;
+        for (const auto &p: probes) {
+            sandboxDrive = sandboxDrive || (p.access == Access::Available && p.root.usb && !p.root.outside);
+        }
+        for (int n = 1; n <= 8; n++) {
+            for (const auto &p: probes) {
+                if (p.access == Access::Available && p.root.usb && p.root.outside != sandboxDrive && p.root.number == n) {
+                    out.push_back(p.root);
+                    break;   // each number once
+                }
             }
         }
         return out;
+    }
+
+    std::vector<Root> detectRoots(const std::string &base) {
+        return rootsFrom(probeRoots(base));
+    }
+
+    const char *accessName(Access a) {
+        switch (a) {
+            case Access::Available:
+                return "ok";
+            case Access::Missing:
+                return "missing";
+            case Access::Empty:
+                return "empty";
+            case Access::Denied:
+                return "denied";
+            case Access::NotDirectory:
+                return "not-a-folder";
+            default:
+                return "error";
+        }
+    }
+
+    namespace {
+        Access classify(int e) {
+            if (e == ENOENT || e == ENOTDIR) {
+                return Access::Missing;
+            }
+            if (e == EACCES || e == EPERM) {
+                return Access::Denied;
+            }
+            return Access::Error;
+        }
+
+        Probe probeOne(const Root &r) {
+            Probe p;
+            p.root = r;
+            std::string dir;
+            if (!normalize(r.path, dir)) {
+                p.access = Access::Error;
+                p.error = EINVAL;
+                return p;
+            }
+#ifndef _WIN32
+            struct stat st{};
+            errno = 0;
+            if (stat(dir.c_str(), &st) != 0) {
+                p.error = errno;
+                p.access = classify(p.error);
+                return p;
+            }
+            if (!S_ISDIR(st.st_mode)) {
+                p.access = Access::NotDirectory;
+                return p;
+            }
+            errno = 0;
+            DIR *d = opendir(dir.c_str());
+            if (d == nullptr) {
+                p.error = errno;
+                p.access = classify(p.error);
+                return p;
+            }
+            // a USB mount point without a drive is an empty folder: a drive lists at least one entry
+            bool any = !r.usb;
+            while (!any) {
+                struct dirent *de = readdir(d);
+                if (de == nullptr) {
+                    break;
+                }
+                any = strcmp(de->d_name, ".") != 0 && strcmp(de->d_name, "..") != 0;
+            }
+            closedir(d);
+            p.access = any ? Access::Available : Access::Empty;
+#else
+            p.access = fs::isDir(dir) ? (!r.usb || !fs::listDir(dir).empty() ? Access::Available : Access::Empty)
+                                      : Access::Missing;
+#endif
+            return p;
+        }
+
+        // shaped like the console's own mount point names ("usb0", "app0", "system_ex", "sandbox"): nothing a person
+        // would type (upper case, spaces, punctuation) and not the sandbox's random word (mixed case)
+        bool printableName(const std::string &n) {
+            if (n.empty() || n.size() > 24) {
+                return false;
+            }
+            for (char c: n) {
+                if (!(c >= 'a' && c <= 'z') && !(c >= '0' && c <= '9') && c != '_' && c != '-' && c != '.') {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // every folder between the root and `dir` (both normalized, `dir` inside the root) is a real folder, never a
+        // symbolic link: list() never follows one, even when asked for a path through a link directly. The root
+        // itself is a fixed system path (in the sandbox it may be a link) and is not checked.
+        bool realFolders(const std::string &rootDir, const std::string &dir, int &error) {
+#ifndef _WIN32
+            size_t at = rootDir == "/" ? 0 : rootDir.size();
+            while (at < dir.size()) {
+                size_t next = dir.find('/', at + 1);
+                std::string prefix = dir.substr(0, next);
+                struct stat st{};
+                if (lstat(prefix.c_str(), &st) != 0) {
+                    error = errno;
+                    return false;
+                }
+                if (S_ISLNK(st.st_mode)) {
+                    error = ELOOP;
+                    return false;
+                }
+                if (!S_ISDIR(st.st_mode)) {
+                    error = ENOTDIR;
+                    return false;
+                }
+                if (next == std::string::npos) {
+                    break;
+                }
+                at = next;
+            }
+#else
+            (void) rootDir;
+            (void) dir;
+            (void) error;
+#endif
+            return true;
+        }
+    }
+
+    std::vector<Probe> probeRoots(const std::string &base) {
+        std::vector<Probe> out;
+        for (const auto &r: candidateRoots(base)) {
+            out.push_back(probeOne(r));
+        }
+        return out;
+    }
+
+    std::string probeSummary(const std::vector<Probe> &probes) {
+        std::string s;
+        for (const auto &p: probes) {
+            std::string name = p.root.usb ? (p.root.outside ? "mnt/usb" : "usb") + std::to_string(p.root.number - 1)
+                                          : "data";
+            s += (s.empty() ? "" : ", ") + name + " " + accessName(p.access);
+            if (p.access != Access::Available && p.access != Access::NotDirectory && p.error != 0
+                && !(p.access == Access::Missing && p.error == ENOENT)) {
+                s += " (" + std::to_string(p.error) + ")";
+            }
+        }
+        return s;
+    }
+
+    MountList mountPoints(const std::string &base, const std::string &folder) {
+        MountList m;
+        m.dir = folder;
+#ifndef _WIN32
+        std::string dir = base + (folder == "/" ? std::string("/") : folder);
+        errno = 0;
+        DIR *d = opendir(dir.c_str());
+        if (d == nullptr) {
+            m.error = errno;
+            return m;
+        }
+        int scanned = 0;
+        while (struct dirent *de = readdir(d)) {
+            if (++scanned > 256) {
+                m.hidden++;
+                break;
+            }
+            std::string n = de->d_name;
+            if (n == "." || n == "..") {
+                continue;
+            }
+            if (printableName(n) && m.names.size() < 32) {
+                m.names.push_back(n);
+            } else {
+                m.hidden++;
+            }
+        }
+        closedir(d);
+        std::sort(m.names.begin(), m.names.end());
+        m.ok = true;
+#else
+        (void) base;
+#endif
+        return m;
+    }
+
+    std::string mountSummary(const MountList &m) {
+        if (!m.ok) {
+            return m.dir + " not readable (" + std::to_string(m.error) + ")";
+        }
+        std::string s = m.dir + ": ";
+        for (size_t i = 0; i < m.names.size(); i++) {
+            s += (i ? " " : "") + m.names[i];
+        }
+        if (m.names.empty()) {
+            s += "(empty)";
+        }
+        if (m.hidden > 0) {
+            s += " +" + std::to_string(m.hidden) + " other";
+        }
+        return s;
+    }
+
+    UsbHint usbHint(const std::vector<Probe> &probes) {
+        bool denied = false;
+        bool mountPointSeen = false;
+        for (const auto &p: probes) {
+            if (!p.root.usb) {
+                continue;
+            }
+            if (p.access == Access::Available) {
+                return UsbHint::None;
+            }
+            if (p.access == Access::Empty) {
+                mountPointSeen = true;   // the app does see the USB mount points: simply no drive in them
+            }
+            if (p.access == Access::Denied || p.access == Access::Error || p.access == Access::NotDirectory) {
+                denied = true;
+            }
+        }
+        return denied && !mountPointSeen ? UsbHint::Denied : UsbHint::NoDrive;
     }
 
     bool normalize(const std::string &path, std::string &out) {
@@ -233,14 +474,21 @@ namespace localmedia {
     Listing list(const Root &root, const std::string &folder, const Formats &formats) {
         Listing out;
         std::string dir;
-        if (!normalize(folder, dir) || !within(root, dir)) {
+        std::string rootDir;
+        if (!normalize(folder, dir) || !within(root, dir) || !normalize(root.path, rootDir)) {
+            out.error = EINVAL;
             return out;   // outside the root: refused
+        }
+        if (!realFolders(rootDir, dir, out.error)) {
+            return out;   // a symbolic link (or not a folder) on the way: refused
         }
         std::vector<Entry> raw;
         int total = 0;
 #ifndef _WIN32
+        errno = 0;
         DIR *d = opendir(dir.c_str());
         if (d == nullptr) {
+            out.error = errno;
             return out;
         }
         while (struct dirent *de = readdir(d)) {
@@ -302,6 +550,7 @@ namespace localmedia {
 #else
         // host tests on Windows (the console and Linux use the branch above)
         if (!fs::isDir(dir)) {
+            out.error = ENOENT;
             return out;
         }
         for (const auto &fe: fs::listDir(dir)) {
@@ -331,19 +580,6 @@ namespace localmedia {
     }
 
     bool available(const Root &root) {
-        std::string dir;
-        if (!normalize(root.path, dir)) {
-            return false;
-        }
-#ifndef _WIN32
-        DIR *d = opendir(dir.c_str());
-        if (d == nullptr) {
-            return false;
-        }
-        closedir(d);
-        return true;
-#else
-        return fs::isDir(dir);
-#endif
+        return probeOne(root).access == Access::Available;
     }
 }

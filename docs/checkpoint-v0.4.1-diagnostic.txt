@@ -1,0 +1,47 @@
+V7 IPTV v0.4.1 DIAGNOSTIC BUILD - HARDWARE CHECKLIST
+====================================================
+
+Purpose: find where v0.4.0 crashes on 13.52 and confirm USB drives appear in Local Media. This build adds
+startup breadcrumbs, a crash guard for optional parts, and USB diagnostics. Nothing else changes.
+
+Crash guard, in short: after a crash in an optional part (keyboard library, player, subtitle font) the next starts
+skip that part, so the app opens. The skip ends when the app is closed with its own Exit (Circle on Home > Exit),
+after 5 starts, with a new version, or from Settings > Diagnostics > Startup check.
+
+Installs over v0.4.0 (same Title ID IPTV00002, APP_VER 00.41). Profiles, settings, history, downloads are kept.
+
+Write down: system software version, GoldHEN version, how GoldHEN was loaded (host / payload).
+
+A. STARTUP (the 13.52 console)
+   A1  Launch V7 IPTV.
+       - It opens: go to C.
+       - It crashes: note the error code if one is shown, then launch it ONCE more.
+   A2  Second launch:
+       - It opens now: the crash guard skipped the part that crashed. Settings > Diagnostics > Startup check
+         shows "... skipped" and the previous start "stopped while starting (<stage>)".
+         PHOTO of that page. Do not use the app's Exit before sending the files in B (Exit ends the skip; that
+         is fine, but the next start would crash once more).
+       - It crashes again: the crash is in a required part (renderer, storage...). Go to B.
+       - A system notification "V7 IPTV could not start its video output" appears: the GL start failed
+         cleanly. Go to B.
+   A3  Optional but very useful: does untouched pPlay (or another OpenOrbis homebrew) start on this console?
+
+B. FILES TO SEND (GoldHEN FTP, port 2121), after A
+   /data/PS4IPTV/logs/startup.txt     the last stage begun (no user data)
+   /data/PS4IPTV/logs/log.txt         this session
+   /data/PS4IPTV/logs/log.prev.txt    the session before (the crashed one, after a second launch)
+   The logs redact credentials and stream addresses, and never contain local file or folder names (they appear as
+   [local file] / [local folder] / [local name]); still, read them before sharing.
+
+C. USB (any console; exFAT or FAT32 stick with a video on it)
+   C1  Plug in the stick, open Local Media. Expected: "USB storage 1" (or 2...) next to Internal storage,
+       path /usb0/ (or /mnt/usb0/ on setups that see outside the sandbox).
+   C2  Open the stick, play a file.
+   C3  Unplug it, press Triangle: the USB row becomes "No USB drive found". Plug it in, Triangle: is it back?
+       If it only comes back after restarting the app, note that (it tells whether the console updates a running
+       app's view of USB drives).
+   C4  If it is NOT found: the row says "No USB drive found" or "USB drive not readable". Send log.txt; the
+       "localmedia" lines list every path checked (usb0..7, mnt/usb0..7: ok / empty / missing / denied) and the
+       names under / and /mnt.
+
+REPORT: A1/A2 results + photo, A3, the three files, C1-C4 yes/no.

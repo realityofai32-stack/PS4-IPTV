@@ -10,6 +10,8 @@
 #include "../platform/fs.h"
 #include "../platform/input_actions.h"
 #include "../platform/log.h"
+#include "../platform/startup_state.h"
+#include "../platform/system_info.h"
 #include "../player/subtitle_font.h"
 #include "../ui/text.h"
 #include "../ui/theme.h"
@@ -48,20 +50,38 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
              stalkerService(jobSystem, APP_DATA_DIR), sourceService(xtreamService, stalkerService), m3uService(jobSystem),
              vodLibrary(sourceService, APP_DATA_DIR),
              libraryStore(APP_DATA_DIR), imageLoader(jobSystem, APP_DATA_DIR "cache/images") {
+    startup::Tracker &st = startup::tracker();
     LOG_I("app", "renderer: %s", available ? "OK (SDL2 + OpenGL ES 2 / Piglet)" : "FAILED");
+    if (!available) {
+        // without a GL context every texture, shader and mpv render context would call into nothing: stop here,
+        // tell the user through the system (it needs no renderer) and leave the details in the log
+        st.stage(startup::RENDERER_FAILED);
+        failed = true;
+        running = false;
+        LOG_E("app", "the video output could not start (SDL / OpenGL ES, see the sdl lines above): %s",
+              SDL_GetError());
+        // i18n-exempt-begin: the language setting is not loaded yet; the system notification is English
+        sysinfo::notify("V7 IPTV could not start its video output. Details: /data/PS4IPTV/logs/log.txt");
+        // i18n-exempt-end
+        return;
+    }
     romfsPath = getIo()->getRomFsPath();
     setClearColor(theme::background());
     getInput()->setRepeatDelay(0);  // repeat/acceleration is handled by InputManager
 
+    st.stage(startup::FONTS);
     clockx::init();
     LOG_I("clock", "startup: %s", clockx::clockReport().c_str());
     if (!ui::loadFonts(romfsPath + "assets/fonts/")) {
         LOG_E("app", "UI fonts missing from the package");
     }
+    st.stage(startup::NETWORK);
     http::globalInit(romfsPath + "assets/cacert.pem", std::string("PS4IPTV/") + APP_VERSION);
+    st.stage(startup::JOBS);
     jobSystem.setWorkerExitHook(http::releaseThreadResources);
     jobSystem.start(4);   // API + catalog downloads + up to 2 image loads, never all blocked by one kind
 
+    st.stage(startup::STORAGE);
     std::string warning;
     std::string err;
     if (!fs::ensureDir(APP_DATA_DIR, &err)) {
@@ -80,11 +100,16 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     i18n::setLanguage(i18n::fromCode(settingsStore.get().language));
     LOG_I("app", "UI language: %s", i18n::code(i18n::language()));
     applyAccent(false);   // before any screen exists: every shape is built with the saved accent
-    // a USB / Bluetooth keyboard next to the controller (optional: without the module, controller only)
-    keyboard.init();
+    // a USB / Bluetooth keyboard next to the controller (optional: without the module, controller only). A start
+    // that crashed inside the system keyboard library skips it from then on (crash guard)
+    st.stage(startup::KEYBOARD);
+    if (!st.skipped(startup::KEYBOARD)) {
+        keyboard.init();
+    }
     applyKeyboardLayout();
     LOG_I("storage", "%d profile(s), active '%s'", (int) profileStore.profiles().size(),
           profileStore.activeId().c_str());
+    st.stage(startup::LIBRARY);
     warning.clear();
     libraryStore.load(&warning);
     if (!warning.empty()) {
@@ -94,6 +119,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     ui::setSmoothScrolling(settingsStore.get().smoothScrolling);
 
     // offline downloads: libcurl transport (like the API), files under <data>/downloads/
+    st.stage(startup::DOWNLOADS);
     downloadTransport.reset(new dl::CurlTransport(http::userAgent(), http::caBundle()));
     {
         dl::ManagerConfig dc;
@@ -133,7 +159,8 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     // <config-dir>/subfont.ttf to libass as the default font (sub/ass_mp.c), like pPlay's data dir does.
     // The subtitle font (Inter SemiBold + Arabic / Persian / Hebrew, third_party/fonts-subtitles) is copied there:
     // libass 0.14 without fontconfig cannot fall back to a second font reliably (GitHub issue #1).
-    {
+    st.stage(startup::SUBTITLE_FONT);
+    if (!st.skipped(startup::SUBTITLE_FONT)) {
         subfont::Result sf = subfont::install(romfsPath + "assets/fonts/", mpvDir, APP_VERSION);
         if (sf.installed) {
             LOG_I("app", "subtitle font installed: %s", sf.source.c_str());
@@ -141,7 +168,12 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
             LOG_W("app", "subtitle font not installed: %s", sf.error.c_str());
         }
     }
-    if (!player.init(mpvDir, http::caBundle())) {
+    // mpv + FFmpeg + the mpv OpenGL render context. A start that crashed in here skips it from then on: the app
+    // opens without playback (every player shows "Player initialization failed") instead of not opening at all
+    st.stage(startup::PLAYER);
+    if (st.skipped(startup::PLAYER)) {
+        LOG_W("app", "playback backend not started (crash guard)");
+    } else if (!player.init(mpvDir, http::caBundle())) {
         LOG_E("app", "%s", player.initError().c_str());
     }
     forceContinuousRedraw = fs::exists(std::string(APP_DATA_DIR) + "force_redraw");
@@ -149,6 +181,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
         LOG_W("app", "force_redraw present: drawing every frame");
     }
 
+    st.stage(startup::SCREENS);
     screenLayer = new RectangleShape(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H));
     screenLayer->setFillColor(theme::none());
     add(screenLayer);
@@ -183,6 +216,9 @@ Screen *App::firstScreen() {
 
 App::~App() {
     LOG_I("app", "shutting down");
+    if (failed) {
+        return;   // nothing was started (main.cpp does not delete a failed App; kept safe anyway)
+    }
     player.stop();
     player.shutdown();
     if (downloadManager) {
@@ -492,7 +528,14 @@ void App::logic() {
     }
     // the physical keyboard after the controller; both always work. A key that opens / closes a screen (typing on
     // a source field opens its keyboard) holds the keys after it until that screen is on top: they belong to it.
-    for (const auto &k: keyboard.poll(t)) {
+    if (!startup::tracker().started()) {
+        startup::tracker().stage(startup::KEYBOARD);   // the first reads of the keyboard library: still its stage
+    }
+    const std::vector<kbd::Event> &keys = keyboard.poll(t);
+    if (!startup::tracker().started()) {
+        startup::tracker().stage(startup::MAIN_LOOP);
+    }
+    for (const auto &k: keys) {
         device.keyboardInput();     // a real key: the hints follow the keyboard
         if (heldKeys.size() < 64) {   // bounded: a screen that never settles cannot make it grow
             heldKeys.push_back(k);
@@ -553,6 +596,7 @@ void App::onKey(const kbd::Event &k) {
 
 void App::run() {
     LOG_I("app", "main loop running");
+    startup::tracker().stage(startup::MAIN_LOOP);
     while (running) {
         c2d::Renderer::flip(false, true);  // input + logic only, no GPU work
         if (!running) {
@@ -576,6 +620,7 @@ void App::run() {
             C2DRenderer::flip(true, false);  // draw + swap
             inDrawPass = false;
             lastDraw = t;
+            startup::tracker().firstFrame();   // once: startup complete (the crash guard's state file says so)
         } else {
             SDL_Delay((Uint32) IDLE_SLEEP_MS);
         }

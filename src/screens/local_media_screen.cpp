@@ -4,12 +4,15 @@
 // Options panel), outside every source: nothing goes to history, Continue Watching, favorites or search.
 //
 // Cross opens a folder / plays a file, Circle goes one folder up (from the storage list: back), Triangle reads the
-// folder again (a USB drive plugged in meanwhile appears in the storage list).
+// folder again (a USB drive plugged in meanwhile appears in the storage list). When no USB drive can be opened, the
+// storage list says whether nothing is mounted or a drive is there but not readable (Cross on that row scans again);
+// every scan logs each path's access (localmedia::probeRoots).
 
 #include "common.h"
 #include "../downloads/download_model.h"
 #include "../media/local_media.h"
 #include "../platform/log.h"
+#include "../platform/system_info.h"
 
 using namespace c2d;
 
@@ -133,7 +136,8 @@ namespace {
             positions.clear();
             roots.clear();
             rows.clear();
-            roots = localmedia::detectRoots();
+            std::vector<localmedia::Probe> probes = localmedia::probeRoots();
+            roots = localmedia::rootsFrom(probes);
             for (size_t i = 0; i < roots.size(); i++) {
                 Item it;
                 it.kind = roots[i].usb ? "USB" : tr("localmedia.kind_storage");   // i18n-exempt: USB is a proper name
@@ -144,9 +148,27 @@ namespace {
                 it.root = (int) i;
                 rows.push_back(it);
             }
-            LOG_I("localmedia", "%d storage location(s) available", (int) roots.size());
+            // USB drives that cannot be opened: one row under the storage list saying why (Cross scans again). With
+            // no storage at all the empty-state panel says it instead (noStorage).
+            localmedia::UsbHint hint = localmedia::usbHint(probes);
+            if (hint != localmedia::UsbHint::None && !roots.empty()) {
+                Item it;
+                it.kind = "USB";   // i18n-exempt: proper name
+                it.name = tr(hint == localmedia::UsbHint::Denied ? "localmedia.usb_denied" : "localmedia.usb_none");
+                it.meta = tr(hint == localmedia::UsbHint::Denied ? "localmedia.usb_denied_meta"
+                                                                 : "localmedia.usb_none_meta");
+                rows.push_back(it);
+            }
+            // what the app sees: "missing" (nothing mounted there / not visible) vs "denied" (no permission)
+            LOG_I("localmedia", "%d storage location(s) available; %s", (int) roots.size(),
+                  localmedia::probeSummary(probes).c_str());
+            if (hint != localmedia::UsbHint::None) {
+                LOG_I("localmedia", "%s; %s; %s", localmedia::mountSummary(localmedia::mountPoints("", "/")).c_str(),
+                      localmedia::mountSummary(localmedia::mountPoints("", "/mnt")).c_str(),
+                      sysinfo::fileSystemView().c_str());
+            }
             context->set("", "");
-            noStorage = rows.empty();
+            noStorage = roots.empty();
             showNoStorage();
             list->setSelected(0);
             list->reload();
@@ -190,7 +212,7 @@ namespace {
             }
             context->set(rootName(*root), inside);
             if (!l.ok) {
-                LOG_W("localmedia", "folder could not be opened");
+                LOG_W("localmedia", "folder could not be opened: errno %d", l.error);
                 empty->set(tr("localmedia.unreadable"), tr("localmedia.unreadable_text"));
             } else if (rows.empty()) {
                 empty->set(tr("localmedia.empty"), tr("localmedia.empty_text"));
@@ -208,6 +230,11 @@ namespace {
             }
             const Item it = rows[(size_t) i];
             if (root == nullptr) {
+                if (it.root < 0 || it.root >= (int) roots.size()) {
+                    showRoots();   // the "no USB drive" row: look again
+                    list->setSelected(i);
+                    return;
+                }
                 rootIndex = it.root;
                 root = &roots[(size_t) rootIndex];
                 std::string start;

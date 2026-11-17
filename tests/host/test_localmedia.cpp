@@ -2,6 +2,7 @@
 // folder listing (folders first, natural order, hidden / unsupported / symbolic links left out), and local files
 // never entering the progress store.
 
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -13,6 +14,7 @@
 #include "../../src/app/vod_progress.h"
 #include "../../src/media/local_media.h"
 #include "../../src/platform/fs.h"
+#include "../../src/platform/redact.h"
 
 using localmedia::Entry;
 using localmedia::Formats;
@@ -75,10 +77,14 @@ TEST(localmedia_paths_stay_inside_their_roots) {
     CHECK(!localmedia::within(usb, "/mnt/usb1/a.mkv"));
     CHECK(localmedia::within(usb, "/mnt/usb0/Films/b.mp4"));
     std::vector<Root> roots = localmedia::candidateRoots();
-    CHECK_EQ(roots.size(), (size_t) 9);
+    CHECK_EQ(roots.size(), (size_t) 17);
     CHECK(roots[0].path == "/data/" && !roots[0].usb);
-    CHECK(roots[1].path == "/mnt/usb0/" && roots[1].usb && roots[1].number == 1);
-    CHECK(localmedia::rootOf(roots, "/mnt/usb3/x/y.mkv") == &roots[4]);
+    CHECK(roots[1].path == "/usb0/" && roots[1].usb && roots[1].number == 1);
+    CHECK(roots[9].path == "/mnt/usb0/" && roots[9].usb && roots[9].number == 1);
+    CHECK(localmedia::rootOf(roots, "/usb3/x/y.mkv") == &roots[4]);
+    CHECK(localmedia::rootOf(roots, "/mnt/usb3/x/y.mkv") == &roots[12]);
+    CHECK(localmedia::rootOf(roots, "/usb30/x.mkv") == nullptr);   // a prefix is not a parent
+    CHECK(localmedia::rootOf(roots, "/usb/x.mkv") == nullptr);
     CHECK(localmedia::rootOf(roots, "/system/common/lib") == nullptr);
     CHECK(localmedia::safeName("Movie (2020).mkv"));
     CHECK(!localmedia::safeName(".."));
@@ -235,10 +241,12 @@ TEST(localmedia_root_detection_with_mocked_storage) {
     CHECK(localmedia::detectRoots(base).empty());
     fs::ensureDir(base + "/data");
     fs::ensureDir(base + "/mnt");
-    fs::ensureDir(base + "/mnt/usb0");
-    fs::ensureDir(base + "/mnt/usb3");
-    fs::ensureDir(base + "/mnt/usb7");
-    fs::ensureDir(base + "/mnt/usb5");
+    // drives hold at least one entry; an empty folder is a mount point without a drive (v0.4.1)
+    for (const char *d: {"/mnt/usb0", "/mnt/usb3", "/mnt/usb7", "/mnt/usb5"}) {
+        fs::ensureDir(base + d);
+        touch(base + d + "/movie.mkv");
+    }
+    fs::ensureDir(base + "/mnt/usb1");        // empty mount point: no drive
     chmod((base + "/mnt/usb5").c_str(), 0);   // mounted but not accessible to the app
     touch(base + "/mnt/usb6");                // a file, not a drive
     std::vector<localmedia::Root> roots = localmedia::detectRoots(base);
@@ -259,9 +267,11 @@ TEST(localmedia_root_detection_with_mocked_storage) {
     // a drive unplugged between two looks: gone at the next detection
     CHECK(std::system(("rm -rf '" + base + "/mnt/usb3'").c_str()) == 0);
     CHECK_EQ(localmedia::detectRoots(base).size(), (size_t) 4);
-    // the console's own candidates are /data/ and /mnt/usb0..7/
+    // the console's own candidates: /data/, the sandbox's /usb0..7/, then the outside view /mnt/usb0..7/
     auto real = localmedia::candidateRoots();
-    CHECK(real[0].path == "/data/" && real[8].path == "/mnt/usb7/" && real[8].number == 8);
+    CHECK_EQ(real.size(), (size_t) 17);
+    CHECK(real[0].path == "/data/" && real[1].path == "/usb0/" && real[1].number == 1);
+    CHECK(real[8].path == "/usb7/" && real[8].number == 8 && real[16].path == "/mnt/usb7/" && real[16].number == 8);
 }
 
 TEST(localmedia_names_cases_and_folders) {
@@ -351,6 +361,183 @@ TEST(localmedia_huge_folder_scan_is_bounded) {
     CHECK(l.entries.size() <= 2);
     CHECK(ms < 2000);
     CHECK(l.skipped <= (int) localmedia::MAX_SCANNED);
+}
+
+// USB detection and diagnostics (v0.4.1). A sandboxed app sees USB drives at /usbN (/mnt/usbN is the view from
+// outside the sandbox, the only one v0.4.0 probed); a mount point without a drive is an empty folder. Every path is
+// classified, so the log tells "nothing mounted / not visible" from "mounted but not readable" (denied).
+TEST(localmedia_usb_probe_sandbox_paths_and_diagnostics) {
+    std::string base = tree("lm-probe");
+    bool root = geteuid() == 0;   // root opens a 000 directory: "denied" cannot be produced then
+    // nothing at all: every path missing, / and /mnt unreadable (absent)
+    std::vector<localmedia::Probe> p = localmedia::probeRoots(base);
+    CHECK_EQ(p.size(), (size_t) 17);
+    for (const auto &x: p) {
+        CHECK(x.access == localmedia::Access::Missing);
+    }
+    CHECK(localmedia::usbHint(p) == localmedia::UsbHint::NoDrive);
+    CHECK(!localmedia::mountPoints(base, "/mnt").ok);
+    CHECK(localmedia::mountSummary(localmedia::mountPoints(base, "/mnt")).find("/mnt not readable") == 0);
+
+    // the console's sandbox as the app sees it: /data and the /usbN mount points, all empty (no drive plugged in)
+    fs::ensureDir(base + "/data");
+    for (int i = 0; i < 8; i++) {
+        fs::ensureDir(base + "/usb" + std::to_string(i));
+    }
+    p = localmedia::probeRoots(base);
+    CHECK(p[0].access == localmedia::Access::Available && !p[0].root.usb);   // /data may be empty: still a root
+    CHECK(p[1].access == localmedia::Access::Empty && p[1].root.path == base + "/usb0/");
+    CHECK(localmedia::usbHint(p) == localmedia::UsbHint::NoDrive);
+    CHECK_EQ(localmedia::rootsFrom(p).size(), (size_t) 1);
+    CHECK_EQ(localmedia::probeSummary(p).substr(0, 37), std::string("data ok, usb0 empty, usb1 empty, usb2"));
+    CHECK(localmedia::probeSummary(p).find("mnt/usb7 missing") != std::string::npos);
+    CHECK(localmedia::probeSummary(p).find("missing (") == std::string::npos);   // ENOENT stays quiet
+
+    // a drive is plugged in: /usb1 lists entries -> "USB storage 2" at the sandbox path
+    touch(base + "/usb1/film.mkv");
+    p = localmedia::probeRoots(base);
+    std::vector<localmedia::Root> roots = localmedia::rootsFrom(p);
+    CHECK_EQ(roots.size(), (size_t) 2);
+    CHECK(roots[1].usb && roots[1].number == 2 && roots[1].path == base + "/usb1/" && !roots[1].outside);
+    CHECK(localmedia::usbHint(p) == localmedia::UsbHint::None);
+    // the same drive also visible from outside the sandbox: still one root, the sandbox path
+    fs::ensureDir(base + "/mnt/usb1");
+    touch(base + "/mnt/usb1/film.mkv");
+    roots = localmedia::detectRoots(base);
+    CHECK_EQ(roots.size(), (size_t) 2);
+    CHECK(roots[1].path == base + "/usb1/");
+    // the views are never mixed, so no drive can be listed twice - not even if the outside view numbered the same
+    // drive differently (/usb1 = /mnt/usb0 here) or showed more drives: the sandbox view holds a drive, so it alone
+    // is used
+    fs::ensureDir(base + "/mnt/usb0");
+    touch(base + "/mnt/usb0/film.mkv");
+    fs::ensureDir(base + "/mnt/usb5");
+    touch(base + "/mnt/usb5/b.mkv");
+    roots = localmedia::detectRoots(base);
+    CHECK_EQ(roots.size(), (size_t) 2);
+    CHECK(roots[1].path == base + "/usb1/" && roots[1].number == 2);
+    for (size_t i = 0; i < roots.size(); i++) {
+        for (size_t j = i + 1; j < roots.size(); j++) {
+            CHECK(roots[i].number != roots[j].number || !roots[i].usb);   // every drive number at most once
+        }
+    }
+    // only the outside view holds drives (an escaped process; the sandbox mount points are empty): that view is used,
+    // its drives listed by number
+    CHECK(std::system(("rm -f '" + base + "/usb1/film.mkv'").c_str()) == 0);
+    roots = localmedia::detectRoots(base);
+    CHECK_EQ(roots.size(), (size_t) 4);
+    CHECK(roots[1].number == 1 && roots[1].path == base + "/mnt/usb0/" && roots[1].outside);
+    CHECK(roots[2].number == 2 && roots[2].path == base + "/mnt/usb1/");
+    CHECK(roots[3].number == 6 && roots[3].path == base + "/mnt/usb5/");
+    // a drive that is unplugged: its mount point is empty again, gone at the next look
+    CHECK(std::system(("rm -rf '" + base + "/mnt/usb1' '" + base + "/mnt/usb0' '" + base + "/mnt/usb5'").c_str())
+          == 0);
+    CHECK_EQ(localmedia::detectRoots(base).size(), (size_t) 1);
+    CHECK(localmedia::usbHint(localmedia::probeRoots(base)) == localmedia::UsbHint::NoDrive);
+    // a drive whose root holds only hidden entries (".Trashes", "System Volume Information"...) is a drive: listed
+    fs::ensureDir(base + "/usb6/.Trashes");
+    roots = localmedia::detectRoots(base);
+    CHECK_EQ(roots.size(), (size_t) 2);
+    CHECK(roots[1].number == 7 && roots[1].path == base + "/usb6/");
+    CHECK(std::system(("rm -rf '" + base + "/usb6/.Trashes'").c_str()) == 0);
+    CHECK_EQ(localmedia::detectRoots(base).size(), (size_t) 1);
+
+    // no sandbox mount points, a drive the app may not read, and a file where a mount point should be
+    for (int i = 0; i < 8; i++) {
+        CHECK(std::system(("rm -rf '" + base + "/usb" + std::to_string(i) + "'").c_str()) == 0);
+    }
+    fs::ensureDir(base + "/mnt/sandbox");
+    fs::ensureDir(base + "/mnt/usb1");
+    touch(base + "/mnt/usb1/x.mkv");
+    chmod((base + "/mnt/usb1").c_str(), 0);
+    touch(base + "/mnt/usb2");
+    p = localmedia::probeRoots(base);
+    if (!root) {
+        CHECK(p[10].access == localmedia::Access::Denied && p[10].error == EACCES);
+        CHECK(localmedia::usbHint(p) == localmedia::UsbHint::Denied);
+        CHECK(localmedia::probeSummary(p).find("mnt/usb1 denied (13)") != std::string::npos);
+        CHECK(!localmedia::available(p[10].root));
+    }
+    CHECK(p[11].access == localmedia::Access::NotDirectory);
+    CHECK(localmedia::probeSummary(p).find("mnt/usb2 not-a-folder") != std::string::npos);
+    // ... but when the sandbox mount points are visible, an unreadable outside path is not "denied": no drive
+    fs::ensureDir(base + "/usb0");
+    CHECK(localmedia::usbHint(localmedia::probeRoots(base)) == localmedia::UsbHint::NoDrive);
+
+    // folder names for the log: printable mount point names only, sorted; others counted, never printed
+    touch(base + "/mnt/we ird$name");
+    touch(base + "/mnt/" + std::string(30, 'a'));
+    localmedia::MountList m = localmedia::mountPoints(base, "/mnt");
+    CHECK(m.ok);
+    CHECK((m.names == std::vector<std::string>{"sandbox", "usb1", "usb2"}));
+    CHECK_EQ(m.hidden, 2);
+    CHECK_EQ(localmedia::mountSummary(m), std::string("/mnt: sandbox usb1 usb2 +2 other"));
+    localmedia::MountList top = localmedia::mountPoints(base, "/");
+    CHECK(top.ok && localmedia::mountSummary(top) == "/: data mnt usb0");
+    chmod((base + "/mnt/usb1").c_str(), 0755);
+
+    // probing never creates anything
+    CHECK(!fs::exists(base + "/mnt/usb0") && !fs::exists(base + "/usb5"));
+    // a folder that cannot be opened reports why (the log line carries errno, never the path)
+    localmedia::Root d = {base + "/data/", false, 0};
+    localmedia::Listing gone = localmedia::list(d, base + "/data/nothing-here", sampleFormats());
+    CHECK(!gone.ok && gone.error == ENOENT);
+    CHECK(localmedia::list(d, base + "/mnt", sampleFormats()).error == EINVAL);   // outside the root: refused
+    // the sandbox root is a root like the others: browsing never leaves it
+    fs::ensureDir(base + "/usb3/Movies");
+    touch(base + "/usb3/Movies/b.mkv");
+    localmedia::Root usb = localmedia::detectRoots(base).back();
+    CHECK(usb.path == base + "/usb3/" && usb.number == 4);
+    CHECK(localmedia::list(usb, base + "/usb3/Movies", sampleFormats()).ok);
+    CHECK(!localmedia::list(usb, base + "/usb3/../data", sampleFormats()).ok);
+    CHECK(!localmedia::list(usb, base + "/usb30", sampleFormats()).ok);
+    // symbolic links on a /usbN drive: never listed, never followed - also not as a folder on the way when list() is
+    // asked for such a path directly (ELOOP), whatever the link points to (inside the drive, /data, the root)
+    fs::ensureDir(base + "/data/Private");
+    touch(base + "/data/Private/secret.mkv");
+    CHECK(symlink((base + "/data").c_str(), (base + "/usb3/ToData").c_str()) == 0);
+    CHECK(symlink((base + "/usb3/Movies").c_str(), (base + "/usb3/Inside").c_str()) == 0);
+    CHECK(symlink("/", (base + "/usb3/Root").c_str()) == 0);
+    CHECK(symlink((base + "/data/Private/secret.mkv").c_str(), (base + "/usb3/secret.mkv").c_str()) == 0);
+    localmedia::Listing driveRoot = localmedia::list(usb, base + "/usb3", sampleFormats());
+    CHECK(driveRoot.ok);
+    CHECK((names(driveRoot) == std::vector<std::string>{"Movies"}));
+    for (const char *through: {"/usb3/ToData", "/usb3/ToData/Private", "/usb3/Inside", "/usb3/Root", "/usb3/Root/etc"}) {
+        localmedia::Listing l = localmedia::list(usb, base + through, sampleFormats());
+        CHECK(!l.ok && l.entries.empty() && l.error == ELOOP);
+    }
+    // a file where a folder is expected: refused before anything is opened
+    localmedia::Listing notDir = localmedia::list(usb, base + "/usb3/Movies/b.mkv", sampleFormats());
+    CHECK(!notDir.ok && notDir.error == ENOTDIR);
+    // the root itself may be a link (a system mount point in the sandbox): it is a fixed path, so it still opens
+    CHECK(symlink((base + "/usb3").c_str(), (base + "/usb7").c_str()) == 0);
+    localmedia::Root linkedRoot = {base + "/usb7/", true, 8, false};
+    CHECK(localmedia::list(linkedRoot, base + "/usb7", sampleFormats()).ok);
+    CHECK(localmedia::list(linkedRoot, base + "/usb7/Movies", sampleFormats()).ok);
+    CHECK(!localmedia::list(linkedRoot, base + "/usb7/ToData", sampleFormats()).ok);
+}
+
+// mpv writes "Playing: <path>" and external subtitle names to its log: for a local file the path, its folder and its
+// name never reach log.txt (the diagnostics checklist asks testers to send it)
+TEST(localmedia_paths_never_reach_the_log) {
+    const std::string path = "/usb0/Family Holiday/Kids Birthday 2024.mkv";
+    CHECK_EQ(redact::maskLocalPath("Playing: " + path, path), std::string("Playing: [local file]"));
+    CHECK_EQ(redact::maskLocalPath("Opening /usb0/Family Holiday/Kids Birthday 2024.en.srt", path),
+             std::string("Opening [local folder]/[local name].en.srt"));
+    CHECK_EQ(redact::maskLocalPath("     Subs  --sid=1 'Kids Birthday 2024.en.srt' (subrip) (external)", path),
+             std::string("     Subs  --sid=1 '[local name].en.srt' (subrip) (external)"));
+    // the storage root alone is not a private name; short names are not masked everywhere
+    CHECK_EQ(redact::maskLocalPath("Opening /usb0/x.srt", "/usb0/x.mkv"), std::string("Opening /usb0/x.srt"));
+    CHECK_EQ(redact::maskLocalPath("Playing: /usb0/x.mkv", "/usb0/x.mkv"), std::string("Playing: [local file]"));
+    // names that look like the placeholders cannot corrupt them
+    CHECK_EQ(redact::maskLocalPath("Playing: /data/local/file.mkv", "/data/local/file.mkv"),
+             std::string("Playing: [local file]"));
+    CHECK_EQ(redact::maskLocalPath("x /data/local/folder.ass", "/data/local/folder.mkv"),
+             std::string("x [local folder]/[local name].ass"));
+    // streams and empty paths: unchanged (URLs have their own redaction)
+    CHECK_EQ(redact::maskLocalPath("Playing: http://example.com/a.ts", "http://example.com/a.ts"),
+             std::string("Playing: http://example.com/a.ts"));
+    CHECK_EQ(redact::maskLocalPath("Playing: /usb0/a.mkv", ""), std::string("Playing: /usb0/a.mkv"));
 }
 
 TEST(localmedia_symlinks_permissions_and_special_files) {

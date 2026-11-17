@@ -184,6 +184,9 @@ public:
 
 private:
 
+    // the local file of this session ("" for streams): its path and names are masked in mpv's log lines
+    std::string localFile;
+
     void onLog(const mpv_event_log_message *msg);
 
     void onProperty(const mpv_event_property *prop);

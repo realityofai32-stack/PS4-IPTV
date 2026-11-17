@@ -16,6 +16,8 @@
 #include "build_info.h"
 #include "../downloads/download_model.h"
 #include "../platform/log.h"
+#include "../platform/startup_state.h"
+#include "../platform/system_info.h"
 #include "../storage/catalog_cache.h"
 
 using namespace c2d;
@@ -1146,7 +1148,60 @@ namespace {
             items.push_back(layout);
         }
 
+        // "keyboard, player" in the UI language
+        static std::string startupParts(const std::set<std::string> &parts) {
+            std::string out;
+            for (const auto &p: parts) {
+                out += (out.empty() ? "" : ", ") + tr(("diagnostics.startup.part." + p).c_str());   // i18n-exempt: key prefix
+            }
+            return out;
+        }
+
         void buildDiagnostics(std::vector<SettingItem> &items) {
+            // the previous start and the crash guard (platform/startup_state.h); selecting it retries skipped parts
+            SettingItem startupCheck;
+            startupCheck.caption = tr("diagnostics.startup");
+            startupCheck.info = [] {
+                const auto &skip = startup::tracker().verdict().skip;
+                return skip.empty() ? tr("diagnostics.startup.ok")
+                                    : tr("diagnostics.startup.skipped", {startupParts(skip)});
+            };
+            startupCheck.run = [this] {
+                if (startup::tracker().verdict().skip.empty()) {
+                    return;
+                }
+                startup::tracker().clearSkips();
+                app.toast(tr("diagnostics.startup.cleared"), ToastKind::Success);
+                list->reload();
+                refreshPanel();
+            };
+            startupCheck.describe = [] {
+                const startup::Verdict &v = startup::tracker().verdict();
+                std::string prev;
+                switch (v.previous) {
+                    case startup::Previous::None:
+                        prev = tr("diagnostics.startup.prev_none");
+                        break;
+                    case startup::Previous::Exited:
+                        prev = tr("diagnostics.startup.prev_exited");
+                        break;
+                    case startup::Previous::Closed:
+                        prev = tr("diagnostics.startup.prev_closed");
+                        break;
+                    case startup::Previous::DiedStarting:
+                        prev = tr("diagnostics.startup.prev_died", {v.stage.empty() ? "?" : v.stage});
+                        break;
+                    default:
+                        prev = tr("diagnostics.startup.prev_unreadable");
+                        break;
+                }
+                return tr("diagnostics.startup.desc", {sysinfo::firmwareVersion(), prev,
+                                                       v.skip.empty() ? tr("diagnostics.startup.none")
+                                                                      : startupParts(v.skip),
+                                                       std::to_string(startup::SKIP_STARTS)});
+            };
+            items.push_back(startupCheck);
+
             SettingItem downloads;
             downloads.caption = tr("diagnostics.downloads");
             downloads.info = [] { return tr("settings.open"); };

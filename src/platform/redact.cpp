@@ -427,6 +427,30 @@ namespace redact {
         return info;
     }
 
+    std::string maskLocalPath(const std::string &text, const std::string &path) {
+        if (path.size() < 2 || path[0] != '/' || path.find("://") != std::string::npos) {
+            return text;
+        }
+        // one-byte markers first, the readable placeholders last: a placeholder can never be matched by a later name
+        std::string out = text;
+        replaceAll(out, path, "\x01");
+        size_t slash = path.rfind('/');
+        std::string folder = path.substr(0, slash);
+        if (folder.size() > 1 && folder.find('/', 1) != std::string::npos) {
+            replaceAll(out, folder, "\x02");   // "/usb0/Holiday"; the storage root alone is not a private name
+        }
+        std::string name = path.substr(slash + 1);
+        size_t dot = name.rfind('.');
+        std::string stem = dot != std::string::npos && dot > 0 ? name.substr(0, dot) : name;
+        if (stem.size() >= 4) {
+            replaceAll(out, stem, "\x03");
+        }
+        replaceAll(out, "\x01", "[local file]");
+        replaceAll(out, "\x02", "[local folder]");
+        replaceAll(out, "\x03", "[local name]");
+        return out;
+    }
+
     std::string urlsToOrigins(const std::string &text) {
         std::string out;
         out.reserve(text.size());

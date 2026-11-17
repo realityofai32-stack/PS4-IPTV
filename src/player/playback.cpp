@@ -227,6 +227,7 @@ void Playback::open(const std::string &url, const std::string &format, const Ope
     resetForOpen(format);
     chooser = options.chooseTracks;
     redact::addUrl(url);
+    localFile = url.find("://") == std::string::npos ? url : std::string();
 
     std::string why;
     if (!protocolSupported(url, &why)) {
@@ -617,8 +618,10 @@ void Playback::onLog(const mpv_event_log_message *msg) {
                         : msg->log_level == MPV_LOG_LEVEL_INFO ? diag::Level::Info : diag::Level::Verbose;
     // the log filter limits what is written (font-search and other floods), never what is parsed below
     if (logFilter.admit(text, level != diag::Level::Verbose || diag::verbose(), now)) {
-        // URLs in mpv / FFmpeg lines ("Playing: <url>", "Opening '<url>' for reading") keep only their origin
-        diag::write(level, "mpv/" + prefix, text.find("://") == std::string::npos ? text : redact::urlsToOrigins(text));
+        // URLs in mpv / FFmpeg lines ("Playing: <url>", "Opening '<url>' for reading") keep only their origin; a local
+        // file's path, folder and name never reach the log ("Playing: [local file]")
+        std::string shown = text.find("://") == std::string::npos ? text : redact::urlsToOrigins(text);
+        diag::write(level, "mpv/" + prefix, localFile.empty() ? shown : redact::maskLocalPath(shown, localFile));
     }
 
     if (contains(text, "compile_attach_shader: type:")) {

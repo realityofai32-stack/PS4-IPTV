@@ -716,7 +716,7 @@ namespace i18n {
                                                "starts again. Off: they wait, paused, until you resume them in "
                                                "Downloads. Downloads always pause while a video is playing."},
             {"settings.storage.desc", "Space used by downloads, free space, and deleting downloads and caches."},
-            {"settings.diagnostics.desc", "Text rendering test and build information."},
+            {"settings.diagnostics.desc", "Startup check, text rendering test and build information."},
             {"settings.about.desc", "Version, build and the open-source projects V7 IPTV is built on."},
             {"storage.downloaded", "Downloaded content"},
             {"storage.downloaded.desc", "{0} saved for offline playback. Select to manage them."},
@@ -775,6 +775,24 @@ namespace i18n {
             {"diagnostics.restart_lines", "Restart the live lines"},
             {"diagnostics.build", "Build"},
             {"diagnostics.build.desc", "Version {0}\nBuild {1}\n{2}\n{3}"},
+            {"diagnostics.startup", "Startup check"},
+            {"diagnostics.startup.ok", "OK"},
+            {"diagnostics.startup.skipped", "{0} skipped"},
+            {"diagnostics.startup.desc", "System software {0}\nPrevious start: {1}\nSkipped after a crash: {2}\n\n"
+                                         "A part that crashed while the app was starting (keyboard library, player, "
+                                         "subtitle font) is skipped so the app still opens: until the app is closed "
+                                         "with Exit, for {3} starts at most. Select this item to try it again at the "
+                                         "next start."},
+            {"diagnostics.startup.prev_none", "first start"},
+            {"diagnostics.startup.prev_exited", "closed normally"},
+            {"diagnostics.startup.prev_closed", "closed from the system"},
+            {"diagnostics.startup.prev_died", "stopped while starting ({0})"},
+            {"diagnostics.startup.prev_unreadable", "unknown"},
+            {"diagnostics.startup.none", "none"},
+            {"diagnostics.startup.cleared", "Every part will be tried again at the next start"},
+            {"diagnostics.startup.part.keyboard", "keyboard"},
+            {"diagnostics.startup.part.player", "player"},
+            {"diagnostics.startup.part.subtitle-font", "subtitle font"},
             {"diagnostics.downloads", "Download diagnostics"},
             {"diagnostics.downloads.desc", "Measurements of the download in progress, or of the last one: network "
                                            "and disk speed, receive callbacks, disk flushes, HTTP details. Useful "
@@ -1002,6 +1020,10 @@ namespace i18n {
             {"localmedia.refresh", "Refresh"},
             {"localmedia.rescan", "Look for storage"},
             {"localmedia.up", "Up"},
+            {"localmedia.usb_none", "No USB drive found"},
+            {"localmedia.usb_none_meta", "exFAT / FAT32"},
+            {"localmedia.usb_denied", "USB drive not readable"},
+            {"localmedia.usb_denied_meta", "No access"},
             {"player.local_file", "Local file"},
             {"info.source_local", "local file"},
     };

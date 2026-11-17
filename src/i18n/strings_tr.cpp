@@ -718,7 +718,7 @@ namespace i18n {
                                                "olarak bekler. Video oynatılırken indirmeler her zaman duraklar."},
             {"settings.storage.desc", "İndirmelerin kullandığı alan, boş alan ve indirmelerle önbelleklerin "
                                       "silinmesi."},
-            {"settings.diagnostics.desc", "Metin görüntüleme testi ve sürüm bilgisi."},
+            {"settings.diagnostics.desc", "Başlangıç denetimi, metin görüntüleme testi ve sürüm bilgisi."},
             {"settings.about.desc", "Sürüm, derleme ve V7 IPTV'nin üzerine kurulduğu açık kaynak projeler."},
             {"storage.downloaded", "İndirilen içerik"},
             {"storage.downloaded.desc", "Çevrimdışı oynatma için kaydedilen {0}. Yönetmek için seçin."},
@@ -777,6 +777,24 @@ namespace i18n {
             {"diagnostics.restart_lines", "Canlı satırları yeniden başlat"},
             {"diagnostics.build", "Derleme"},
             {"diagnostics.build.desc", "Sürüm {0}\nDerleme {1}\n{2}\n{3}"},
+            {"diagnostics.startup", "Başlangıç denetimi"},
+            {"diagnostics.startup.ok", "Sorunsuz"},
+            {"diagnostics.startup.skipped", "{0} atlandı"},
+            {"diagnostics.startup.desc", "Sistem yazılımı {0}\nÖnceki başlangıç: {1}\nÇökme sonrası atlanan: {2}\n\n"
+                                         "Uygulama başlarken çöken bir bölüm (klavye kitaplığı, oynatıcı, altyazı yazı "
+                                         "tipi), uygulama yine açılsın diye atlanır: uygulama Çıkış ile kapatılana "
+                                         "kadar, en fazla {3} başlangıç boyunca. Bir sonraki başlangıçta yeniden "
+                                         "denemek için bu öğeyi seçin."},
+            {"diagnostics.startup.prev_none", "ilk başlangıç"},
+            {"diagnostics.startup.prev_exited", "normal kapatıldı"},
+            {"diagnostics.startup.prev_closed", "sistemden kapatıldı"},
+            {"diagnostics.startup.prev_died", "başlarken durdu ({0})"},
+            {"diagnostics.startup.prev_unreadable", "bilinmiyor"},
+            {"diagnostics.startup.none", "yok"},
+            {"diagnostics.startup.cleared", "Bir sonraki başlangıçta her bölüm yeniden denenecek"},
+            {"diagnostics.startup.part.keyboard", "klavye"},
+            {"diagnostics.startup.part.player", "oynatıcı"},
+            {"diagnostics.startup.part.subtitle-font", "altyazı yazı tipi"},
             {"diagnostics.downloads", "İndirme tanılaması"},
             {"diagnostics.downloads.desc", "Süren indirmenin veya son indirmenin ölçümleri: ağ ve disk hızı, alma "
                                            "geri çağrıları, diske boşaltmalar, HTTP ayrıntıları. Hızları "
@@ -1005,6 +1023,10 @@ namespace i18n {
             {"localmedia.refresh", "Yenile"},
             {"localmedia.rescan", "Depolama ara"},
             {"localmedia.up", "Üst klasör"},
+            {"localmedia.usb_none", "USB sürücü bulunamadı"},
+            {"localmedia.usb_none_meta", "exFAT / FAT32"},
+            {"localmedia.usb_denied", "USB sürücü okunamıyor"},
+            {"localmedia.usb_denied_meta", "Erişim yok"},
             {"player.local_file", "Yerel dosya"},
             {"info.source_local", "yerel dosya"},
     };

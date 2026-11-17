@@ -2,8 +2,14 @@
 // UI). Not a file manager: read-only folder listing, media files only, inside fixed roots.
 //
 // Roots: /data/ (the app-accessible user storage, where files copied over FTP live, incl. /data/PS4IPTV/media/) and
-// USB storage at /mnt/usb0/../mnt/usb7/. A root is offered only when it can be opened right now (USB drives come
-// and go; access to /mnt/usbN depends on the console's homebrew setup).
+// USB storage. A root is offered only when it can be opened right now (USB drives come and go).
+//
+// USB paths (v0.4.1): an application runs in the console's file system sandbox, where USB drives are /usb0../usb7
+// (and /data is the console's /user/data). /mnt/usb0../mnt/usb7 is the view from outside the sandbox (FTP, a
+// process that escaped it): v0.4.0 looked only there, so a sandboxed app never found a drive. Both are probed, the
+// sandbox path first. The two views are never mixed (a drive could otherwise be listed twice, under two numbers):
+// /mnt/usbN is used only when no /usbN holds a drive. A mount point without a drive is an empty folder: a USB root is
+// offered only when its folder lists at least one entry.
 //
 // Safety: every path is normalized and must stay inside its root: ".." / "." segments, empty names, names with a
 // slash and symbolic links are never followed, so browsing cannot leave the roots (no path traversal).
@@ -25,17 +31,73 @@
 namespace localmedia {
 
     struct Root {
-        std::string path;        // "/data/", "/mnt/usb0/" (trailing slash)
+        std::string path;        // "/data/", "/usb0/", "/mnt/usb0/" (trailing slash)
         bool usb = false;
         int number = 0;          // USB: 1..8
+        bool outside = false;    // USB: /mnt/usbN, the view from outside the sandbox (else /usbN, the app's view)
     };
 
     // the roots that may exist on the console, in display order. base: a directory standing in for the file system
     // root in tests ("" on the console)
     std::vector<Root> candidateRoots(const std::string &base = "");
 
-    // the candidate roots that can be opened right now
+    // the candidate roots that can be opened right now: /data/, then one root per USB drive number
     std::vector<Root> detectRoots(const std::string &base = "");
+
+    // why a root can or cannot be opened: tells "no drive mounted there" apart from "mounted, but this app may not
+    // read it" (the console's sandbox / permissions) in the log and on screen
+    enum class Access {
+        Available,      // opened
+        Missing,        // nothing at that path (ENOENT / ENOTDIR): no drive mounted, or not visible to the app
+        Empty,          // USB: an empty folder, the mount point of a drive that is not plugged in
+        Denied,         // exists but may not be read (EACCES / EPERM)
+        NotDirectory,   // exists and is not a folder
+        Error,          // another error (errno kept)
+    };
+
+    struct Probe {
+        Root root;
+        Access access = Access::Missing;
+        int error = 0;      // errno of the failing call (0 when available)
+    };
+
+    const char *accessName(Access a);
+
+    // every candidate root with its access; nothing is created, written or followed (stat + opendir only)
+    std::vector<Probe> probeRoots(const std::string &base = "");
+
+    // the available roots of a probe, in display order: /data/, then USB 1..8. One view only, so every drive is listed
+    // once: the sandbox's /usbN drives, or (when no /usbN holds a drive) the /mnt/usbN ones.
+    std::vector<Root> rootsFrom(const std::vector<Probe> &probes);
+
+    // "data ok, usb0 missing, ..., mnt/usb1 denied (13), ..." for the log
+    std::string probeSummary(const std::vector<Probe> &probes);
+
+    // the entries of a system folder ("/" or "/mnt": mount point names such as "usb0", "data", "app0"), for the log.
+    // Only names shaped like the console's own mount points are printed (1-24 characters: lower-case letters, digits,
+    // '_', '-', '.'); anything else (upper case, spaces, the sandbox's random word...) is counted, never printed.
+    // At most 32 names.
+    struct MountList {
+        std::string dir;                  // "/", "/mnt"
+        bool ok = false;
+        int error = 0;                    // errno when the folder could not be read
+        std::vector<std::string> names;   // sorted
+        int hidden = 0;                   // names not shown (unusual characters, or past the cap)
+    };
+
+    // dir: "/" or "/mnt" (under base)
+    MountList mountPoints(const std::string &base = "", const std::string &dir = "/mnt");
+
+    std::string mountSummary(const MountList &m);
+
+    // what the storage list says about USB drives when none can be opened
+    enum class UsbHint {
+        None,       // at least one USB drive is available
+        NoDrive,    // every USB path is missing or an empty mount point
+        Denied,     // a USB path exists but cannot be read (and no USB mount point is readable)
+    };
+
+    UsbHint usbHint(const std::vector<Probe> &probes);
 
     // "/data//a/./b/" -> "/data/a/b"; false for relative paths and any ".." segment
     bool normalize(const std::string &path, std::string &out);
@@ -102,9 +164,11 @@ namespace localmedia {
         std::vector<Entry> entries;
         int skipped = 0;      // hidden, unsafe, unsupported, symbolic links, special files
         bool truncated = false;   // more than MAX_ENTRIES entries to show, or more than MAX_SCANNED entries
+        int error = 0;            // !ok: errno of the failing opendir (EINVAL: refused, outside the root)
     };
 
-    // reads one folder inside `root` (symbolic links are skipped, never followed)
+    // reads one folder inside `root`. Symbolic links are skipped, never followed: not as entries, and not as a folder
+    // on the way from the root to `folder` either (refused with ELOOP) - even when asked for such a path directly.
     Listing list(const Root &root, const std::string &folder, const Formats &formats);
 
     // the root can be opened right now

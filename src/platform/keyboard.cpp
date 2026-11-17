@@ -26,14 +26,22 @@ namespace {
     int moduleHandle(const char *name) {
         OrbisKernelModule handles[256];
         size_t count = 0;
-        if (sceKernelGetModuleList(handles, sizeof(handles) / sizeof(handles[0]), &count) != 0) {
+        const size_t capacity = sizeof(handles) / sizeof(handles[0]);
+        if (sceKernelGetModuleList(handles, capacity, &count) != 0) {
             return -1;
+        }
+        if (count > capacity) {
+            count = capacity;   // never read past the buffer, whatever count a firmware reports
         }
         for (size_t i = 0; i < count; i++) {
             OrbisKernelModuleInfo info;
             memset(&info, 0, sizeof(info));
             info.size = sizeof(info);
-            if (sceKernelGetModuleInfo(handles[i], &info) == 0 && strstr(info.name, name) != nullptr) {
+            if (sceKernelGetModuleInfo(handles[i], &info) != 0) {
+                continue;
+            }
+            info.name[sizeof(info.name) - 1] = '\0';   // a name filling the field must still end
+            if (strstr(info.name, name) != nullptr) {
                 return (int) handles[i];
             }
         }
@@ -54,6 +62,7 @@ namespace {
 
 bool PhysicalKeyboard::init() {
     // the public module id (as in the OpenOrbis keyboard sample), else the internal one
+    LOG_I("keyboard", "loading the keyboard module");
     int rc = sceSysmoduleLoadModule(ORBIS_SYSMODULE_KEYBOARD);
     if (rc != 0) {
         int internal = (int) sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_KEYBOARD);
@@ -72,6 +81,7 @@ bool PhysicalKeyboard::init() {
         || !resolve(module, "sceKeyboardClose", fnClose) || !resolve(module, "sceKeyboardReadState", fnReadState)) {
         return false;
     }
+    LOG_I("keyboard", "libSceKeyboard found, initializing");
     rc = fnInit();
     if (rc != 0) {
         LOG_W("keyboard", "sceKeyboardInit failed (0x%08x): controller input only", (unsigned) rc);

@@ -23,6 +23,7 @@
 #include "../network/jobs.h"
 #include "../platform/input.h"
 #include "../platform/keyboard.h"
+#include "../platform/startup_state.h"
 #include "../player/playback.h"
 #include "../storage/library_store.h"
 #include "../storage/profile_store.h"
@@ -81,6 +82,9 @@ public:
     void run();
 
     void quit() { running = false; }
+
+    // the renderer (SDL / OpenGL ES) could not start: the app shows nothing and exits (main.cpp)
+    bool startupFailed() const { return failed; }
 
     // navigation (changes take effect between frames)
     void push(Screen *screen);
@@ -186,7 +190,10 @@ private:
 
     void onKey(const kbd::Event &event);
 
+    // first member: constructed right after the renderer base class (SDL / GL), before every other member
+    bool membersStage = (startup::tracker().stage(startup::APP_MEMBERS), true);
     bool running = true;
+    bool failed = false;
     bool inDrawPass = false;
     bool dirty = true;
     double redrawAt = 0;

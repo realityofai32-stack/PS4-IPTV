@@ -139,7 +139,7 @@ be downloaded. The MAC address, tokens and device identifiers are never written 
 ### Local Media
 
 *Local Media* (Home navigation, the first screen and Sources) lists internal storage (`/data`) and USB drives
-(`/mnt/usb0` … `/mnt/usb7`, when your homebrew environment gives the app access). Folders come first, then the video
+formatted exFAT or FAT32 (the app sees them as `/usb0` … `/usb7`; over FTP they are `/mnt/usb0` …). Folders come first, then the video
 and audio files the player can open (MKV, MP4, TS / M2TS, AVI, MOV, WebM, MP3, FLAC…). Files play with the same audio,
 subtitle and video options as movies; they are not added to history, Continue Watching, favorites or search.
 

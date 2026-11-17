@@ -42,6 +42,12 @@ namespace redact {
     // query and fragment dropped), then apply(). For lines of third-party logs (mpv "Playing: <url>", FFmpeg
     // "Opening '<url>' for reading") whose URLs can carry provider tokens in the path that no rule recognises.
     std::string urlsToOrigins(const std::string &text);
+
+    // A local file's names in a line of a third-party log (mpv "Playing: /usb0/Holiday/Kids 2024.mkv", an external
+    // subtitle "Kids 2024.en.srt" found next to it): the full path, its folder (when below the storage root: "/usb0"
+    // itself stays) and the file name without its extension (4 characters or more) become "[local file]",
+    // "[local folder]" and "[local name]". `path`: an absolute local path; a URL or "" leaves the text unchanged.
+    std::string maskLocalPath(const std::string &text, const std::string &path);
 }
 
 #endif // PS4IPTV_PLATFORM_REDACT_H
