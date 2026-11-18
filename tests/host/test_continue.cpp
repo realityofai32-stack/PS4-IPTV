@@ -1,16 +1,18 @@
-// Series Continue Watching progression (storage/library_store.h upNext, app/auto_next.h CompletionLatch /
-// persistUpNext, app/vod_progress.h): a player is simulated frame by frame with the same calls VodPlayerScreen makes
-// (VodProgress observe / record, the 45 s latch, the up-next pointer, the 7 s card, end of file, exit).
+// Series Continue Watching progression (storage/library_store.h upNext, app/playback_progress.h - the 45 s latch and
+// the up-next pointer - over app/vod_progress.h): a player is simulated frame by frame with the same calls
+// VodPlayerScreen makes (PlaybackProgress observe / update / record, the 7 s card, end of file, exit). The exits whose
+// position the frames have not seen yet are in test_playback_progress.cpp.
 // Includes the hardware regression: a series opened from Continue Watching, watched into its last minutes, exited -
 // the series must stay in Continue Watching.
 
 #include <cmath>
+#include <memory>
 #include <vector>
 
 #include "check.h"
 #include "../../src/app/auto_next.h"
+#include "../../src/app/playback_progress.h"
 #include "../../src/app/series_plan.h"
-#include "../../src/app/vod_progress.h"
 #include "../../src/storage/library_store.h"
 
 using namespace iptv;
@@ -87,6 +89,8 @@ namespace {
         return it;
     }
 
+    int64_t fixedClock() { return 1700000000; }
+
     // VodPlayerScreen's progress / completion / card logic, frame by frame (4 frames a second of playback)
     struct Player {
         LibraryStore &lib;
@@ -97,17 +101,15 @@ namespace {
         std::vector<VodItem> queue;
         int index = 0;
         int next = -1;
-        VodProgress tracker;
-        autonext::CompletionLatch latch;
+        PlaybackProgress tracker;
         autonext::Countdown card;
-        bool upNextDone = false;
         bool finished = false;
         double t = 1000;
         double pos = 0;
         int transitions = 0;
         bool cardSeen = false;
 
-        Player(LibraryStore &l, const SeriesInfo *i) : lib(l), info(i), tracker(l) {}
+        Player(LibraryStore &l, const SeriesInfo *i) : lib(l), info(i), tracker(l, &fixedClock) {}
 
         void open(const VodItem &item, bool resume) {
             int p = 0;
@@ -118,41 +120,23 @@ namespace {
         void start(int i, bool resume) {
             index = i;
             finished = false;
-            latch.reset();
             card.reset();
-            upNextDone = false;
             cardSeen = false;
             next = autonext::nextIndex(queue, index, offline ? nullptr : info, offline);
+            const SeriesInfo *catalog = offline ? nullptr : info;   // borrowed: the test owns it
+            tracker.setContext(queue, index, next,
+                               catalog ? std::shared_ptr<const SeriesInfo>(catalog, [](const SeriesInfo *) {})
+                                       : nullptr);
             pos = tracker.begin(queue[(size_t) index], resume, t);
         }
 
-        void persist() {
-            if (upNextDone || next < 0) {
-                return;
-            }
-            upNextDone = true;
-            autonext::persistUpNext(lib, queue, index, next, offline ? nullptr : info, 1700000000);
-        }
+        bool latched() const { return tracker.latched(); }
 
         // one frame at the current position; true = the card started the next episode
         bool frame(double dt = 0.25) {
             t += dt;
             tracker.observe(pos, DUR, true, t);
-            switch (latch.update(tracker.position(), DUR, tracker.started())) {
-                case autonext::CompletionLatch::Change::Latched:
-                    tracker.setCompleted(true);
-                    tracker.record(t);
-                    persist();
-                    break;
-                case autonext::CompletionLatch::Change::Released:
-                    tracker.setCompleted(false);
-                    break;
-                default:
-                    break;
-            }
-            if (latch.latched() && !upNextDone && next >= 0) {
-                persist();
-            }
+            tracker.update(t, DUR);   // the 45 s latch: complete, the next episode with it
             if (tracker.due(t) != VodProgress::Due::None) {
                 tracker.record(t);
             }
@@ -183,7 +167,6 @@ namespace {
         bool advance() {
             finished = true;
             tracker.record(t, -1, true);
-            persist();
             transitions++;
             start(next, true);
             return true;
@@ -192,7 +175,6 @@ namespace {
         void endOfFile() {
             finished = true;
             tracker.record(t, -1, true);
-            persist();
             if (card.endOfFile(next >= 0, autoplay, t)) {
                 // the card after the end: Auto-play ON starts the next episode when its 7 s have run
                 for (int i = 0; i < 8 * 60; i++) {
@@ -278,7 +260,7 @@ TEST(continue_normal_unfinished_episode) {
     Player p(lib, &info);
     p.open(byId(info, "201"), false);   // from Series Detail
     p.playTo(DUR - 46);                 // 46 s left: not complete
-    CHECK(!p.latch.latched() && !p.cardSeen);
+    CHECK(!p.latched() && !p.cardSeen);
     p.exit();
     const HistoryEntry *cw = continueEntry(lib);
     CHECK(cw && cw->id == "201" && std::fabs(cw->position - (DUR - 46)) < 0.5);
@@ -295,10 +277,10 @@ TEST(continue_latch_at_45_seconds_persists_the_next_episode_at_once) {
     p.autoplay = false;
     p.open(byId(info, "201"), false);
     p.playTo(DUR - 45.25);
-    CHECK(!p.latch.latched());
+    CHECK(!p.latched());
     CHECK(lib.progressOf(ContentType::Series, "202") == nullptr);
     p.playTo(DUR - 45);                  // the threshold: remaining <= 45
-    CHECK(p.latch.latched());
+    CHECK(p.latched());
     // persisted when the threshold is crossed, not at the end of file
     const HistoryEntry *n = lib.progressOf(ContentType::Series, "202");
     CHECK(n && n->upNext && n->position == 0 && !n->watched && n->season == 2 && n->episode == 2);
@@ -452,7 +434,7 @@ TEST(continue_final_episode_completes_the_series) {
     p.open(byId(info, "302"), false);
     CHECK(p.next < 0);
     p.playTo(DUR - 10);
-    CHECK(p.latch.latched() && !p.cardSeen);   // no card: there is no next episode
+    CHECK(p.latched() && !p.cardSeen);   // no card: there is no next episode
     p.playTo(DUR);
     p.endOfFile();
     CHECK(continueEntry(lib) == nullptr);       // the existing completion behaviour: the series leaves the row
@@ -467,9 +449,9 @@ TEST(continue_seek_back_releases_the_latch) {
     Player p(lib, &info);
     p.open(byId(info, "201"), false);
     p.playTo(DUR - 40);
-    CHECK(p.latch.latched() && continueEntry(lib)->id == "202");
+    CHECK(p.latched() && continueEntry(lib)->id == "202");
     p.seekTo(DUR - 600);                        // ten minutes back: in progress again
-    CHECK(!p.latch.latched());
+    CHECK(!p.latched());
     p.playTo(DUR - 590);
     p.exit();
     const HistoryEntry *cw = continueEntry(lib);

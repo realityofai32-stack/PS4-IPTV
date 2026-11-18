@@ -104,6 +104,11 @@ file-layer errors show only the root of a USB drive, a disc or the playlist fold
 6. **Log privacy:** a local file's path and name could reach the log through the movie player's item id, mpv error
    details and file-layer error texts (USB folder and file names, playlist names).
 7. **Tests:** the Stalker integration test no longer compiled after the roadmap's source service changes.
+8. **Continue Watching (fixed in the current v0.5.0 package, hardware-tested):** a series episode exited near its end
+   (Circle / Stop, pause, app exit, L1 / R1, a player error) at a position in its last 45 s that the player's 0.25 s
+   position sample had not shown yet was stored as watched without its next episode, and the series left Continue
+   Watching. Every exit now records through one path (`src/app/playback_progress.h`) that moves the series on to its
+   next episode whenever a record completes an episode.
 
 ## Validation of the release
 

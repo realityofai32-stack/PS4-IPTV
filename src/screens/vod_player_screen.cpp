@@ -44,7 +44,8 @@
 #include "../platform/clock.h"
 #include "../platform/log.h"
 #include "../app/auto_next.h"
-#include "../app/vod_progress.h"
+#include "../app/playback_progress.h"
+#include "../app/series_plan.h"
 #include "../player/display.h"
 #include "../player/hud_logic.h"
 #include "../ui/option_input.h"
@@ -350,8 +351,6 @@ namespace {
             }
             finished = false;
             countdown.reset();
-            completion.reset();
-            upNextDone = false;
             showNextPanel(false);
             resolveNext();
             endPanel->setVisibility(Visibility::Hidden);
@@ -623,8 +622,9 @@ namespace {
         void reachedEnd() {
             finished = true;
             Playback &pb = app.playback();
-            tracker.record(app.now(), -1, true);   // completed: watched, leaves Continue Watching
-            persistUpNext("end of file");          // log reason i18n-exempt
+            bool before = tracker.progressionCommitted();
+            tracker.record(app.now(), -1, true);   // completed: watched; the series' next episode with it
+            logProgression("end of file", before);   // log reason i18n-exempt
             app.saveLibrary();
             LOG_I("player", "%s finished", logId(item().id).c_str());
             pb.stop();
@@ -694,48 +694,45 @@ namespace {
         }
 
         // ------------------------------------------------------------------ Continue Watching completion (45 s)
-        // every frame: the last 45 s latch the episode as complete for Continue Watching (app/auto_next.h)
+        // every frame: the last 45 s latch the episode as complete for Continue Watching (app/playback_progress.h:
+        // the record that completes an episode commits the series' progression in the same step, on every path)
         void updateCompletion(double now) {
             if (!isEpisode() || item().localMedia) {
                 return;
             }
             Playback &pb = app.playback();
             double duration = tracker.duration() > 0 ? tracker.duration() : pb.duration();
-            switch (completion.update(tracker.position(), duration, tracker.started())) {
+            PlaybackProgress::Update u = tracker.update(now, duration);
+            switch (u.change) {
                 case autonext::CompletionLatch::Change::Latched:
-                    tracker.setCompleted(true);
-                    tracker.record(now);   // watched from now on, whatever happens next
                     LOG_I("player", "episode %s complete for Continue Watching (%.1f s left)", logId(item().id).c_str(),
                           duration - tracker.position());
-                    persistUpNext("last 45 s");   // log reason i18n-exempt
                     app.saveLibraryInBackground();
                     break;
                 case autonext::CompletionLatch::Change::Released:
-                    tracker.setCompleted(false);   // seeked back: in progress again (the next record says so)
                     LOG_I("player", "episode %s in progress again (seeked back)", logId(item().id).c_str());
                     break;
                 default:
                     break;
             }
-            if (completion.latched() && !upNextDone && nextIdx >= 0) {
-                persistUpNext("next episode known");   // the catalog arrived after the latch; log reason i18n-exempt
-                app.saveLibraryInBackground();
+            if (u.committed) {
+                bool latchedNow = u.change == autonext::CompletionLatch::Change::Latched;
+                logProgression(latchedNow ? "last 45 s" : "next episode known", false);   // log reason i18n-exempt
+                if (!latchedNow) {
+                    app.saveLibraryInBackground();   // the catalog arrived after the episode was complete
+                }
             }
         }
 
-        // the episode is complete: the provider's next episode becomes the series' Continue Watching entry at 0 s
-        // (once per item). Without a valid next episode nothing is created (final episode, offline and not
-        // downloaded, unknown): the series leaves Continue Watching as before.
-        void persistUpNext(const char *why) {
-            if (upNextDone || !isEpisode() || item().localMedia || nextIdx < 0) {
+        // the log line of a progression commit made by the last record / update (`before`: committed already then):
+        // the provider's next episode is the series' Continue Watching entry at 0 s, or it stays where it is. Without
+        // a valid next episode nothing is created (final episode, offline and not downloaded, unknown).
+        void logProgression(const char *why, bool before) {
+            if (before || !tracker.progressionCommitted() || nextIdx < 0 || nextIdx >= (int) queue.size()) {
                 return;
             }
-            upNextDone = true;
             const VodItem &n = queue[(size_t) nextIdx];
-            std::shared_ptr<const SeriesInfo> info = screens::episodeCatalog(app, item());
-            autonext::UpNext r = autonext::persistUpNext(app.library(), queue, index, nextIdx, info.get(),
-                                                         clockx::unixNow());
-            if (r == autonext::UpNext::Moved) {
+            if (tracker.lastUpNext() == autonext::UpNext::Moved) {
                 LOG_I("player", "continue watching -> next episode %s (S%02dE%02d) at 0 s (%s)", logId(n.id).c_str(), n.season,
                       n.episode, why);
             } else {
@@ -754,6 +751,12 @@ namespace {
             }
             std::shared_ptr<const SeriesInfo> info = screens::episodeCatalog(app, item());
             nextIdx = autonext::nextIndex(queue, index, info.get(), app.session().offline);
+            if (info && nextIdx < 0 && !app.session().offline && catalogNext(*info) && rebuildQueue()) {
+                // the catalog came into memory after this queue was built without it (Continue Watching while the
+                // series' details were on their way): the same queue every entry point builds, now
+                nextIdx = autonext::nextIndex(queue, index, info.get(), app.session().offline);
+            }
+            tracker.setContext(queue, index, nextIdx, info);
             // no catalog in memory (e.g. Continue Watching right after start): ask once, online only; the queue is
             // completed when it arrives (completeQueue). Another profile's download keeps its own queue.
             catalogWanted = false;
@@ -779,6 +782,27 @@ namespace {
             endApproachLogged = false;
             nextShownSeconds = -1;
             layoutNextActions();   // "Watch credits" again (after the end it reads "Cancel")
+        }
+
+        // the catalog names an episode after this one (whether or not the queue has it)
+        bool catalogNext(const SeriesInfo &info) const {
+            int s = 0, e = 0, ns = 0, ne = 0;
+            return seriesplan::locate(info, item().id, s, e) && seriesplan::nextEpisode(info, s, e, ns, ne);
+        }
+
+        // the queue of the playing episode as every entry point builds it (screens::seriesEpisodeQueue); false when
+        // it would not list the playing episode or list nothing more
+        bool rebuildQueue() {
+            int position = 0;
+            std::vector<VodItem> q = screens::seriesEpisodeQueue(app, item(), position);
+            if (position < 0 || position >= (int) q.size() || q[(size_t) position].id != item().id
+                || q.size() <= queue.size()) {
+                return false;
+            }
+            queue = std::move(q);
+            index = position;   // the current item is unchanged (the tracker keeps its own copy)
+            LOG_I("player", "series details in memory: %d episodes in the queue", (int) queue.size());
+            return true;
         }
 
         // the series' catalog arrived while this episode plays: the same queue the other entry points build
@@ -904,8 +928,9 @@ namespace {
                 return;
             }
             finished = true;
-            tracker.record(app.now(), -1, true);   // completed, as at the natural end (leaves Continue Watching)
-            persistUpNext(why);
+            bool before = tracker.progressionCommitted();
+            tracker.record(app.now(), -1, true);   // completed, as at the natural end; the next episode with it
+            logProgression(why, before);
             app.saveLibrary();
             showNextPanel(false);
             startNext(why);
@@ -1032,7 +1057,10 @@ namespace {
 
         // periodic progress of the current item; toDisk: also write history.json
         void saveProgress(bool toDisk) {
-            if (tracker.record(app.now()) && toDisk) {
+            bool before = tracker.progressionCommitted();
+            bool wrote = tracker.record(app.now());
+            logProgression("periodic sample", before);   // log reason i18n-exempt
+            if (wrote && toDisk) {
                 app.saveLibraryInBackground();   // every DISK_EVERY s while playing: no fsync on the render thread
                 reportServer(mediabrowser::Report::Progress, tracker.position());
             }
@@ -1042,7 +1070,9 @@ namespace {
         // ends: the playback of this item ends (not a pause)
         void saveFinal(const char *why, bool ends = true) {
             double now = app.playback().queryPosition();
-            if (tracker.record(app.now(), now)) {
+            bool before = tracker.progressionCommitted();
+            if (tracker.record(app.now(), now)) {   // a final position in the last 45 s commits the progression too
+                logProgression(why, before);
                 app.saveLibrary();
                 LOG_I("player", "%s: progress saved at %.3fs of %.0fs", why, tracker.position(), tracker.duration());
             }
@@ -1947,7 +1977,7 @@ namespace {
         int index;
         bool resumeOnStart;
         std::function<void(const std::string &)> onExit;
-        VodProgress tracker;
+        PlaybackProgress tracker;   // every record of the item and the series' progression (app/playback_progress.h)
         StabilityPreset preset = StabilityPreset::Balanced;
         stability::Recovery recovery;
         bool pendingSeek = false;
@@ -1956,8 +1986,6 @@ namespace {
         bool finished = false;
         std::string playSessionId;   // media servers: this playback's id in the progress reports ("" = none open)
         autonext::Countdown countdown;
-        autonext::CompletionLatch completion;   // the last 45 s: complete for Continue Watching
-        bool upNextDone = false;                // the next episode was made the series' Continue Watching entry
         double nextShownAt = 0;                 // the card's slide-in start
         RectangleShape *nextActions = nullptr;
         int nextIdx = -1;                  // queue index of the next episode (-1: none / not an episode)
