@@ -70,44 +70,24 @@ See the [v0.5.0 release notes](docs/releases/v0.5.0.md) for details and the
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/livetv.jpg" alt="Live TV"></td>
-    <td width="50%"><img src="docs/screenshots/search.jpg" alt="Search"></td>
+    <td width="33%"><img src="docs/screenshots/livetv.jpg" alt="Live TV"></td>
+    <td width="33%"><img src="docs/screenshots/movies.jpg" alt="Movies"></td>
+    <td width="33%"><img src="docs/screenshots/series.jpg" alt="Series"></td>
   </tr>
   <tr>
     <td align="center"><sub>Live TV</sub></td>
-    <td align="center"><sub>Search</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/movies.jpg" alt="Movies"></td>
-    <td><img src="docs/screenshots/movies_details.jpg" alt="Movie details"></td>
-  </tr>
-  <tr>
     <td align="center"><sub>Movies</sub></td>
-    <td align="center"><sub>Movie details</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/series.jpg" alt="Series"></td>
-    <td><img src="docs/screenshots/series_details.jpg" alt="Series details"></td>
-  </tr>
-  <tr>
     <td align="center"><sub>Series</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/series_details.jpg" alt="Series details"></td>
+    <td><img src="docs/screenshots/next_episode.jpg" alt="Next Episode card"></td>
+    <td><img src="docs/screenshots/playback_options.jpg" alt="Playback options"></td>
+  </tr>
+  <tr>
     <td align="center"><sub>Series details</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/video.jpg" alt="Playback"></td>
-    <td><img src="docs/screenshots/video_settings.jpg" alt="Playback options"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Playback</sub></td>
+    <td align="center"><sub>Next Episode</sub></td>
     <td align="center"><sub>Playback options</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/settings.jpg" alt="Settings"></td>
-    <td><img src="docs/screenshots/downloads.jpg" alt="Downloads"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Settings</sub></td>
-    <td align="center"><sub>Downloads</sub></td>
   </tr>
 </table>
 
@@ -126,8 +106,22 @@ distributed with V7 Player.</sub>
 | Movies / Series | ✓ | – | ✓ (when the portal offers them) | ✓ | ✓ (direct HTTP(S) streams) |
 | Offline downloads | ✓ | – | – | – | – |
 
+<p align="center">
+  <img src="docs/screenshots/add_source.jpg" alt="Add Source: Xtream Codes, M3U / M3U8, Stalker / MAG, Jellyfin / Emby and Stremio" width="100%">
+</p>
+
 Multiple sources can be added. M3U / M3U8 entries are always treated as live channels. **Local Media** works without
 any source. *Live TV › OPTIONS › My Playlists* keeps your own playlists; they appear as groups in Live TV.
+
+### Live TV in the player
+
+While a channel plays, **←** opens the channel list of the current group, **←** again the group list, and **→** the
+programme guide. **↑ ↓** switch channels; the picture keeps playing behind the lists. Your own playlists from
+*My Playlists* appear here as groups too.
+
+<p align="center">
+  <img src="docs/screenshots/livetv_groups.jpg" alt="Group and channel lists over a playing channel" width="100%">
+</p>
 
 ### Jellyfin / Emby and Stremio
 
