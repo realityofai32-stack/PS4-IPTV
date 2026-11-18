@@ -1,0 +1,43 @@
+V7 IPTV - HARDWARE CHECKPOINT: IN-PLAYER LIVE TV NAVIGATION
+==========================================================
+
+Installs over the v0.4.1 compatibility checkpoint (same Title ID IPTV00002, APP_VER 00.41). Profiles, settings,
+history and downloads are kept. Design: docs/v7-live-navigation.md.
+
+Use a source with several categories. If you have them, also try an Xtream source whose provider has a guide, a
+Stalker / MAG portal, and an M3U playlist.
+
+A. CHANNEL LIST (play any channel from Live TV)
+   A1  Left: the channel list opens on the left, on the category you came from, with the playing channel marked
+       (accent dot) and selected. The video keeps playing on the right. PHOTO.
+   A2  Up / Down / L2 / R2 move quickly; L1 / R1 step to the previous / next group.
+   A3  Cross on another channel: it plays at once and the list closes. Up / Down now zap within that group.
+   A4  Left, Cross on the playing channel: the list just closes (no reconnect).
+   A5  Circle closes the list. Leave it alone: it closes by itself after about 12 s.
+
+B. GROUP LIST
+   B1  Left, Left: the group list opens to the left (Favorites, All channels, the categories, with counts). The
+       channel column follows the highlighted group. PHOTO.
+   B2  Cross (or Right) opens the highlighted group; Cross on a channel plays it.
+   B3  Left, Left, move to another group, Circle: back to the channels of the group you had.
+   B4  Open the player from Search: the first group is "Search results". From Favorites: Favorites.
+
+C. GUIDE
+   C1  Right: the guide opens on the right for the playing channel. PHOTO in each case:
+       - Xtream with a provider guide: "Now" with time, minutes left, a progress bar, the description, then "Next"
+         with the following programmes;
+       - a channel / source without a guide (and every M3U channel): "No program information";
+       - Stalker: the portal's guide, or "No program information".
+   C2  Check that the times match your PS4 clock / time zone and the programmes match what is on air.
+   C3  Up / Down with the guide open: it zaps, and the guide shows the new channel (its guide loads after zapping
+       stops).
+   C4  Left switches to the channel list. Circle / Right / Cross close the guide; it closes by itself after ~20 s.
+
+D. STABILITY
+   D1  Open and close the panels repeatedly while playing: no stutter, and the video never stops because of a
+       panel.
+   D2  Zap quickly with Up / Down (with and without the guide open): same behaviour as before.
+   D3  Keyboard: Left / Right arrows, Enter and Esc do the same.
+
+SEND: the photos, and /data/PS4IPTV/logs/log.txt. "get_short_epg" lines show each guide request (channel id,
+number of programmes, size); no titles, addresses or credentials are logged.

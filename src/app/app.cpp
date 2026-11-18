@@ -3,8 +3,11 @@
 #include "app.h"
 #include "build_info.h"
 #include "screens.h"
+#include "user_groups.h"
 #include "../i18n/i18n.h"
+#include "../iptv/m3u.h"
 #include "../iptv/xtream.h"
+#include "../media/user_playlists.h"
 #include "../network/http.h"
 #include "../platform/clock.h"
 #include "../platform/fs.h"
@@ -23,6 +26,8 @@ namespace {
     const double KEEPALIVE_REDRAW = 1.0;   // idle screens are redrawn at most once per second
     const double IDLE_SLEEP_MS = 8;
     const double CLOCK_CHECK_AT = 10.0;    // seconds after startup: one clock comparison in the log
+    const int SPLASH_LAYER = 100;          // the loading screen stays above the screens and the toast
+    const double SPLASH_FADE = 0.3;        // s: the loading screen's fade over the first screen
 }
 
 Session::Session() {
@@ -47,7 +52,10 @@ void Screen::redraw() {
 
 App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
              profileStore(APP_DATA_DIR), settingsStore(APP_DATA_DIR), xtreamService(jobSystem),
-             stalkerService(jobSystem, APP_DATA_DIR), sourceService(xtreamService, stalkerService), m3uService(jobSystem),
+             stalkerService(jobSystem, APP_DATA_DIR), xmltvService(jobSystem, APP_DATA_DIR),
+             mediaService(jobSystem, APP_VERSION), stremioService(jobSystem),
+             sourceService(xtreamService, stalkerService, xmltvService, mediaService, stremioService),
+             m3uService(jobSystem),
              vodLibrary(sourceService, APP_DATA_DIR),
              libraryStore(APP_DATA_DIR), imageLoader(jobSystem, APP_DATA_DIR "cache/images") {
     startup::Tracker &st = startup::tracker();
@@ -61,7 +69,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
         LOG_E("app", "the video output could not start (SDL / OpenGL ES, see the sdl lines above): %s",
               SDL_GetError());
         // i18n-exempt-begin: the language setting is not loaded yet; the system notification is English
-        sysinfo::notify("V7 IPTV could not start its video output. Details: /data/PS4IPTV/logs/log.txt");
+        sysinfo::notify("V7 Player could not start its video output. Details: /data/PS4IPTV/logs/log.txt");
         // i18n-exempt-end
         return;
     }
@@ -69,18 +77,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     setClearColor(theme::background());
     getInput()->setRepeatDelay(0);  // repeat/acceleration is handled by InputManager
 
-    st.stage(startup::FONTS);
-    clockx::init();
-    LOG_I("clock", "startup: %s", clockx::clockReport().c_str());
-    if (!ui::loadFonts(romfsPath + "assets/fonts/")) {
-        LOG_E("app", "UI fonts missing from the package");
-    }
-    st.stage(startup::NETWORK);
-    http::globalInit(romfsPath + "assets/cacert.pem", std::string("PS4IPTV/") + APP_VERSION);
-    st.stage(startup::JOBS);
-    jobSystem.setWorkerExitHook(http::releaseThreadResources);
-    jobSystem.start(4);   // API + catalog downloads + up to 2 image loads, never all blocked by one kind
-
+    // the settings first: the loading screen is drawn with the accent saved in them (V7 Blue when none is)
     st.stage(startup::STORAGE);
     std::string warning;
     std::string err;
@@ -100,15 +97,91 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     i18n::setLanguage(i18n::fromCode(settingsStore.get().language));
     LOG_I("app", "UI language: %s", i18n::code(i18n::language()));
     applyAccent(false);   // before any screen exists: every shape is built with the saved accent
+    LOG_I("storage", "%d profile(s), active '%s'", (int) profileStore.profiles().size(),
+          profileStore.activeId().c_str());
+
+    // the loading screen, until the first screen exists (ui/splash.h): above everything, no input, no text
+    splash = new ui::Splash(theme::accentPreset());
+    add(splash);
+    splash->setLayer(SPLASH_LAYER);
+    splashShownAt = now();
+    splashFrame(true);
+
+    st.stage(startup::FONTS);
+    clockx::init();
+    LOG_I("clock", "startup: %s", clockx::clockReport().c_str());
+    if (!ui::loadFonts(romfsPath + "assets/fonts/")) {
+        LOG_E("app", "UI fonts missing from the package");
+    }
+    splashFrame(false);
+    st.stage(startup::NETWORK);
+    http::globalInit(romfsPath + "assets/cacert.pem", std::string("PS4IPTV/") + APP_VERSION);
+    splashFrame(false);
+    st.stage(startup::JOBS);
+    jobSystem.setWorkerExitHook(http::releaseThreadResources);
+    jobSystem.start(4);   // API + catalog downloads + up to 2 image loads, never all blocked by one kind
+
+    // media servers: a position the server keeps (another client, an earlier session) becomes this console's Resume
+    // when the console has none of its own - a local position is never replaced
+    vodLibrary.onMovieInfo = [this](const iptv::MovieInfo &mi) {
+        const iptv::Movie *m = vodLibrary.movies().find(mi.streamId);
+        if (!currentSession.profile.isMediaServer() || mi.resumeSeconds < 30 || m == nullptr
+            || libraryStore.progressOf(iptv::ContentType::Movie, mi.streamId) != nullptr) {
+            return;
+        }
+        HistoryEntry e;
+        e.type = iptv::ContentType::Movie;
+        e.id = mi.streamId;
+        e.name = m->title;
+        e.icon = m->icon;
+        e.extension = m->extension;
+        e.position = mi.resumeSeconds;
+        e.duration = mi.durationSeconds;
+        libraryStore.updateProgress(e);
+        saveLibrary();
+        LOG_I("mediaserver", "resume position taken from the server for a movie");
+    };
+    vodLibrary.onSeriesInfo = [this](const iptv::SeriesInfo &si) {
+        if (!currentSession.profile.isMediaServer()) {
+            return;
+        }
+        int taken = 0;
+        for (const auto &season: si.seasons) {
+            for (const auto &ep: season.episodes) {
+                if (ep.resumeSeconds < 30 || libraryStore.progressOf(iptv::ContentType::Series, ep.id) != nullptr) {
+                    continue;
+                }
+                HistoryEntry e;
+                e.type = iptv::ContentType::Series;
+                e.id = ep.id;
+                e.name = ep.title;
+                e.icon = si.series.cover;
+                e.extension = ep.extension;
+                e.position = ep.resumeSeconds;
+                e.duration = ep.durationSeconds;
+                e.seriesId = si.seriesId;
+                e.seriesName = si.series.name;
+                e.season = ep.season;
+                e.episode = ep.number;
+                libraryStore.updateProgress(e);
+                taken++;
+            }
+        }
+        if (taken > 0) {
+            saveLibrary();
+            LOG_I("mediaserver", "resume positions taken from the server for %d episode(s)", taken);
+        }
+    };
+
     // a USB / Bluetooth keyboard next to the controller (optional: without the module, controller only). A start
     // that crashed inside the system keyboard library skips it from then on (crash guard)
+    splashFrame(false);
     st.stage(startup::KEYBOARD);
     if (!st.skipped(startup::KEYBOARD)) {
         keyboard.init();
     }
     applyKeyboardLayout();
-    LOG_I("storage", "%d profile(s), active '%s'", (int) profileStore.profiles().size(),
-          profileStore.activeId().c_str());
+    splashFrame(false);
     st.stage(startup::LIBRARY);
     warning.clear();
     libraryStore.load(&warning);
@@ -119,6 +192,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     ui::setSmoothScrolling(settingsStore.get().smoothScrolling);
 
     // offline downloads: libcurl transport (like the API), files under <data>/downloads/
+    splashFrame(false);
     st.stage(startup::DOWNLOADS);
     downloadTransport.reset(new dl::CurlTransport(http::userAgent(), http::caBundle()));
     {
@@ -159,6 +233,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     // <config-dir>/subfont.ttf to libass as the default font (sub/ass_mp.c), like pPlay's data dir does.
     // The subtitle font (Inter SemiBold + Arabic / Persian / Hebrew, third_party/fonts-subtitles) is copied there:
     // libass 0.14 without fontconfig cannot fall back to a second font reliably (GitHub issue #1).
+    splashFrame(false);
     st.stage(startup::SUBTITLE_FONT);
     if (!st.skipped(startup::SUBTITLE_FONT)) {
         subfont::Result sf = subfont::install(romfsPath + "assets/fonts/", mpvDir, APP_VERSION);
@@ -170,6 +245,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     }
     // mpv + FFmpeg + the mpv OpenGL render context. A start that crashed in here skips it from then on: the app
     // opens without playback (every player shows "Player initialization failed") instead of not opening at all
+    splashFrame(false);
     st.stage(startup::PLAYER);
     if (st.skipped(startup::PLAYER)) {
         LOG_W("app", "playback backend not started (crash guard)");
@@ -181,6 +257,7 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
         LOG_W("app", "force_redraw present: drawing every frame");
     }
 
+    splashFrame(false);
     st.stage(startup::SCREENS);
     screenLayer = new RectangleShape(FloatRect(0, 0, theme::SCREEN_W, theme::SCREEN_H));
     screenLayer->setFillColor(theme::none());
@@ -203,6 +280,25 @@ App::App() : C2DRenderer({theme::SCREEN_W, theme::SCREEN_H}),
     push(firstScreen());
 #endif
     applyNavigation();
+    // the first screen exists: the loading screen fades out over it (App::run), never held back for its own sake
+    splash->fadeOut(now(), SPLASH_FADE);
+    LOG_I("app", "startup took %.2f s after the settings (%s accent)", now() - splashShownAt,
+          theme::accentPreset().key);
+}
+
+void App::splashFrame(bool force) {
+    if (splash == nullptr) {
+        return;
+    }
+    double t = now();
+    if (!force && t - splashDrawnAt < 1.0 / 30) {
+        return;
+    }
+    splash->tick(t);
+    inDrawPass = true;   // no app logic inside this frame: the app is still being built
+    C2DRenderer::flip(true, false);
+    inDrawPass = false;
+    splashDrawnAt = t;
 }
 
 Screen *App::firstScreen() {
@@ -263,6 +359,7 @@ void App::saveLibraryInBackground() {
 
 void App::resetSession() {
     playlistToken.cancel();
+    xmltvService.reset();
     currentSession = Session();
 }
 
@@ -274,7 +371,13 @@ void App::setPlaylist(std::shared_ptr<iptv::LiveCatalog> catalog, const m3u::Inf
 
 void App::applyPendingPlaylist() {
     Session &s = currentSession;
-    if (!s.pendingLive || s.livePlayers > 0) {
+    if (s.livePlayers > 0) {
+        return;
+    }
+    if (!s.pendingLive) {
+        if (s.userGroupsPending) {
+            applyUserGroups();   // the playlists changed while a live player was open
+        }
         return;
     }
     s.live = std::move(*s.pendingLive);
@@ -283,6 +386,39 @@ void App::applyPendingPlaylist() {
     s.categories[0] = s.live.categories();
     s.categoriesLoaded[0] = true;
     s.liveLoaded = true;
+    s.liveGeneration++;
+    applyUserGroups();   // the new list gets the user's playlists as groups again
+    requestRedraw();
+}
+
+void App::applyUserGroups() {
+    Session &s = currentSession;
+    if (!s.liveLoaded || !s.profile.hasLive()) {
+        return;
+    }
+    if (s.livePlayers > 0) {
+        s.userGroupsPending = true;   // a live player holds indices into the list: after it closes
+        return;
+    }
+    s.userGroupsPending = false;
+    const Settings &st = settingsStore.get();
+    std::vector<userpl::Summary> disk = userpl::list(m3u::LOCAL_PLAYLIST_DIR);
+    std::vector<usergroups::Playlist> shown;
+    for (const auto &file: usergroups::shownFiles(st.playlistOrder, st.hiddenPlaylists, disk)) {
+        userpl::Playlist p;
+        std::string err;
+        if (userpl::load(fs::join(m3u::LOCAL_PLAYLIST_DIR, file), p, err)) {
+            shown.push_back({file, p.title, std::move(p.entries)});
+        }
+    }
+    bool had = s.live.categories().size() != s.live.providerCategories().size();
+    if (shown.empty() && !had) {
+        return;   // no group before, none now: the list (and every index into it) stays as it is
+    }
+    usergroups::Overlay o = usergroups::build(s.live, s.profile.id, shown);
+    LOG_I("playlists", "Live TV groups: %zu playlist(s), %d channel(s) of the source, %d added, %d skipped",
+          o.groups.size(), o.referenced, o.added, o.skipped);
+    s.live.setUserGroups(std::move(o.extra), std::move(o.groups));
     s.liveGeneration++;
     requestRedraw();
 }
@@ -603,8 +739,16 @@ void App::run() {
             break;
         }
         double t = now();
+        if (splash != nullptr) {
+            splash->tick(t);
+            if (splash->finished()) {
+                delete splash;   // leaves the renderer's children
+                splash = nullptr;
+                requestRedraw();
+            }
+        }
         bool timed = redrawAt > 0 && t >= redrawAt;
-        bool animating = ui::scrolling(t);
+        bool animating = splash != nullptr || ui::scrolling(t);
         for (int i = (int) stack.size() - 1; i >= 0 && !animating; i--) {
             animating = stack[(size_t) i]->animating();   // the top screen and those visible under modal ones
             if (!stack[(size_t) i]->isModal()) {

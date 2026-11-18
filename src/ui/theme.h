@@ -1,4 +1,4 @@
-// Visual design tokens of the V7 IPTV 1920x1080 TV layout: one neutral black theme with a user-chosen accent.
+// Visual design tokens of the V7 Player 1920x1080 TV layout: one neutral black theme with a user-chosen accent.
 //
 // Every screen colour comes from here (tests/host/test_theme.cpp rejects colour literals in screens and
 // widgets). The values live in ui/palette.h, where the host tests check text contrast on every surface for

@@ -1,4 +1,4 @@
-// The V7 IPTV colour palette: a neutral black / charcoal base (no navy cast), white and neutral-grey text, and one
+// The V7 Player colour palette: a neutral black / charcoal base (no navy cast), white and neutral-grey text, and one
 // accent the user chooses from a curated set (Settings > Appearance > Accent color). The base never changes with
 // the accent: only the accent tokens (and the barely tinted focus surfaces derived from it) do. Host-testable: tests/host/test_theme.cpp
 // checks text contrast on every surface for every accent preset.
@@ -55,21 +55,23 @@ namespace palette {
         Rgba muted;             // selected tab / chip at rest: neutral, faintly tinted
         Rgba focus;             // focused list row / cell: raised neutral, faintly tinted (the accent edge marks it)
         Rgba onAccent;          // captions on an accent fill (large semibold text only)
+        Rgba glow;              // brand artwork only (the V7 monogram's top, the loading screen's light): the
+                                // brightest tone of the accent, never used for text or controls
     };
 
     constexpr Rgba W = TEXT_STRONG;
     constexpr Rgba D = TEXT_ON_LIGHT;
 
     constexpr Accent ACCENTS[] = {
-            {"blue", "appearance.accent.blue", rgb(40, 132, 255), rgb(124, 182, 255), rgb(38, 51, 70), rgb(34, 42, 54), W},
-            {"cyan", "appearance.accent.cyan", rgb(0, 190, 228), rgb(104, 218, 242), rgb(34, 57, 67), rgb(32, 45, 53), D},
-            {"teal", "appearance.accent.teal", rgb(18, 186, 156), rgb(96, 222, 196), rgb(36, 56, 60), rgb(33, 45, 50), D},
-            {"green", "appearance.accent.green", rgb(58, 196, 108), rgb(126, 226, 156), rgb(40, 57, 55), rgb(35, 45, 48), D},
-            {"purple", "appearance.accent.purple", rgb(154, 110, 255), rgb(194, 168, 255), rgb(50, 49, 70), rgb(39, 41, 54), W},
-            {"magenta", "appearance.accent.magenta", rgb(232, 70, 166), rgb(255, 148, 208), rgb(57, 45, 61), rgb(43, 39, 50), W},
-            {"red", "appearance.accent.red", rgb(238, 74, 74), rgb(255, 140, 138), rgb(58, 45, 52), rgb(43, 40, 46), W},
-            {"orange", "appearance.accent.orange", rgb(255, 138, 36), rgb(255, 180, 108), rgb(60, 52, 48), rgb(44, 42, 45), D},
-            {"white", "appearance.accent.white", rgb(226, 231, 240), rgb(236, 240, 247), rgb(57, 61, 68), rgb(43, 47, 54), D}};
+            {"blue", "appearance.accent.blue", rgb(40, 132, 255), rgb(124, 182, 255), rgb(38, 51, 70), rgb(34, 42, 54), W, rgb(64, 222, 255)},
+            {"cyan", "appearance.accent.cyan", rgb(0, 190, 228), rgb(104, 218, 242), rgb(34, 57, 67), rgb(32, 45, 53), D, rgb(150, 246, 255)},
+            {"teal", "appearance.accent.teal", rgb(18, 186, 156), rgb(96, 222, 196), rgb(36, 56, 60), rgb(33, 45, 50), D, rgb(140, 250, 232)},
+            {"green", "appearance.accent.green", rgb(58, 196, 108), rgb(126, 226, 156), rgb(40, 57, 55), rgb(35, 45, 48), D, rgb(150, 255, 150)},
+            {"purple", "appearance.accent.purple", rgb(154, 110, 255), rgb(194, 168, 255), rgb(50, 49, 70), rgb(39, 41, 54), W, rgb(228, 170, 255)},
+            {"magenta", "appearance.accent.magenta", rgb(232, 70, 166), rgb(255, 148, 208), rgb(57, 45, 61), rgb(43, 39, 50), W, rgb(255, 158, 232)},
+            {"red", "appearance.accent.red", rgb(238, 74, 74), rgb(255, 140, 138), rgb(58, 45, 52), rgb(43, 40, 46), W, rgb(255, 140, 146)},
+            {"orange", "appearance.accent.orange", rgb(255, 138, 36), rgb(255, 180, 108), rgb(60, 52, 48), rgb(44, 42, 45), D, rgb(255, 218, 110)},
+            {"white", "appearance.accent.white", rgb(226, 231, 240), rgb(236, 240, 247), rgb(57, 61, 68), rgb(43, 47, 54), D, rgb(255, 255, 255)}};
 
     constexpr int ACCENT_COUNT = (int) (sizeof(ACCENTS) / sizeof(ACCENTS[0]));
     constexpr int DEFAULT_ACCENT = 0;   // V7 Blue

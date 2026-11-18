@@ -7,6 +7,7 @@
 #define PS4IPTV_NETWORK_HTTP_H
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -32,6 +33,17 @@ namespace http {
         // extra attempts after a quick temporary failure (http_policy.h: connection refused / reset / interrupted,
         // DNS, HTTP 502 / 503 / 504), with pauses; 0 = one attempt
         int retries = 2;
+        // streaming download (an XMLTV guide): the body of a 2xx answer goes to `sink` piece by piece instead of
+        // Response::body (maxBytes still caps it; another answer's body - an error page - is kept in Response::body,
+        // its first 64 KiB). `sink` returning false stops the transfer (Error::Stopped). Once data went to the sink
+        // the request is never retried (the data would repeat).
+        std::function<bool(const char *data, size_t size)> sink;
+        // receive speed cap in bytes per second (0 = none): a big background download leaves the stream room
+        long maxBytesPerSecond = 0;
+        // POST with this body (the Content-Type goes in `headers`); "" with post = false: GET. A POST is never
+        // redirected (Error::Redirect): the caller posts to the address a GET already resolved.
+        bool post = false;
+        std::string body;
     };
 
     enum class Error {
@@ -46,6 +58,7 @@ namespace http {
         Redirect,           // a redirect the policy refuses (another scheme, https -> http, another host)
         TooLarge,
         HttpsUnsupported,   // a scheme other than http / https (the name is historical)
+        Stopped,            // the request's sink stopped the transfer
         Other
     };
 
@@ -59,6 +72,8 @@ namespace http {
         bool redirectedToHttps = false;
         bool downgradeRefused = false;   // Error::Redirect because https would have become http
         int attempts = 0;
+        size_t streamed = 0;             // bytes handed to Request::sink
+        std::string finalUrl;            // the address answered after the redirects that were followed
 
         bool ok() const { return error == Error::None && status >= 200 && status < 300; }
     };

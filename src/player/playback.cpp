@@ -134,6 +134,11 @@ bool Playback::protocolSupported(const std::string &url, std::string *why) {
                 *why = i18n::tr("player.https_unsupported");
             }
             return false;
+        case protocols::Verdict::YouTubePage:
+            if (why) {
+                *why = i18n::tr("player.youtube_unsupported");
+            }
+            return false;
         default:
             if (why) {
                 *why = i18n::tr("player.protocol_unsupported", {protocols::shownScheme(url)});
@@ -448,6 +453,9 @@ void Playback::fail(PlaybackError e, const std::string &message, const std::stri
     err = e;
     errMsg = message;
     errDetail = redact::urlsToOrigins(detail);
+    if (!localFile.empty()) {
+        errDetail = redact::maskLocalPath(errDetail, localFile);   // a local file's folder and name stay private
+    }
     LOG_E("player", "%s (%s)", errMsg.c_str(), errDetail.c_str());
 }
 

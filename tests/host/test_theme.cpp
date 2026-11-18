@@ -1,4 +1,4 @@
-// The V7 IPTV dark theme: text contrast on every surface (WCAG 2.x ratios, TV viewing distance) for every accent
+// The V7 Player dark theme: text contrast on every surface (WCAG 2.x ratios, TV viewing distance) for every accent
 // preset, surfaces that stay dark, and no colour literals in screens / widgets / app code (everything goes
 // through ui/theme.h).
 

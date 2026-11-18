@@ -82,6 +82,8 @@ namespace actions {
                     pad(PadButton::L2, KeySpec()),                                                // TextShift: the
                                                                                                   // keyboard's own
                     text(pad(PadButton::R2, named(K::Enter))),                                    // TextDone
+                    pad(PadButton::Left, named(K::Left)),                                         // ChannelList
+                    pad(PadButton::Right, named(K::Right)),                                       // Guide
             };
             return rows;
         }
@@ -90,7 +92,7 @@ namespace actions {
                 "Confirm", "Back", "Navigate", "Change", "Tabs", "Page", "Options", "Search", "Details", "Favorite",
                 "Remove", "DeleteItem", "Edit", "Download", "PauseResume", "MoreOptions", "Refresh", "Restart", "Info",
                 "PlayPause", "Seek", "SeekMinute", "NextEpisode", "PreviousEpisode", "PlayNow", "WatchCredits", "Type",
-                "TextBackspace", "TextSpace", "TextShift", "TextDone"};
+                "TextBackspace", "TextSpace", "TextShift", "TextDone", "ChannelList", "Guide"};
 
         char lower(char c) {
             return c >= 'A' && c <= 'Z' ? (char) (c - 'A' + 'a') : c;

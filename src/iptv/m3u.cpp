@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
@@ -214,15 +215,6 @@ namespace m3u {
             return buf;
         }
 
-        // tvg-id values that identify nothing
-        bool usableTvgId(const std::string &id) {
-            if (id.empty()) {
-                return false;
-            }
-            std::string l = lower(id);
-            return l != "none" && l != "null" && l != "n/a" && l != "-" && l != "0" && l != "(no tvg-id)";
-        }
-
         // "  TRT   1 " -> "TRT 1" (white space changes do not change the identity)
         std::string collapse(const std::string &s) {
             std::string out;
@@ -239,6 +231,55 @@ namespace m3u {
                 out += c;
             }
             return out;
+        }
+
+        // #EXTM3U url-tvg="http://a/epg.xml.gz,http://b/epg.xml" x-tvg-url=... : the guide addresses, in order
+        void parseHeader(std::string_view s, std::vector<std::string> &urls) {
+            size_t i = 0;
+            size_t n = s.size();
+            while (i < n) {
+                while (i < n && isSpace(s[i])) {
+                    i++;
+                }
+                size_t keyStart = i;
+                while (i < n && s[i] != '=' && !isSpace(s[i])) {
+                    i++;
+                }
+                std::string key = lower(s.substr(keyStart, i - keyStart));
+                if (i >= n || s[i] != '=') {
+                    continue;   // a bare word
+                }
+                i++;
+                std::string_view value;
+                if (i < n && (s[i] == '"' || s[i] == '\'')) {
+                    char q = s[i++];
+                    size_t close = s.find(q, i);
+                    if (close == std::string_view::npos) {
+                        close = n;
+                    }
+                    value = s.substr(i, close - i);
+                    i = close < n ? close + 1 : n;
+                } else {
+                    size_t start = i;
+                    while (i < n && !isSpace(s[i])) {
+                        i++;
+                    }
+                    value = s.substr(start, i - start);
+                }
+                if (key != "url-tvg" && key != "x-tvg-url" && key != "tvg-url") {
+                    continue;
+                }
+                while (!value.empty()) {
+                    size_t comma = value.find(',');
+                    std::string url(trim(value.substr(0, comma)));
+                    value = comma == std::string_view::npos ? std::string_view() : value.substr(comma + 1);
+                    if (url.size() > 4096 || !isHttpUrl(url) || (int) urls.size() >= MAX_GUIDE_URLS
+                        || std::find(urls.begin(), urls.end(), url) != urls.end()) {
+                        continue;
+                    }
+                    urls.push_back(url);
+                }
+            }
         }
 
         // #EXTINF:<duration> key="value" key2=value2,<title>
@@ -321,6 +362,10 @@ namespace m3u {
                     e.number = num;
                 } else if (key == "user-agent" || key == "http-user-agent") {
                     e.userAgent = std::string(value);
+                } else if (key == "v7-source") {
+                    e.sourceRef = std::string(value);
+                } else if (key == "v7-channel") {
+                    e.channelRef = std::string(value);
                 }
             }
             if (!titled) {
@@ -377,6 +422,10 @@ namespace m3u {
             return "";
         }
         return std::string(s);
+    }
+
+    std::string logUrl(const std::string &url) {
+        return localPlaylistPath(url).empty() ? displayUrl(url) : "[local playlist]";
     }
 
     std::string displayUrl(const std::string &url) {
@@ -471,6 +520,8 @@ namespace m3u {
             if (line[0] == '#') {
                 if (startsWithNoCase(line, "#EXTM3U")) {
                     st.header = true;
+                    parseHeader(line.substr(7), r.guideUrls);
+                    st.guideUrls = (int) r.guideUrls.size();
                 } else if (startsWithNoCase(line, "#EXTINF:")) {
                     if (hasPending) {
                         st.missingUrl++;   // the previous entry never got its URL
@@ -583,6 +634,14 @@ namespace m3u {
         return r;
     }
 
+    bool usableTvgId(const std::string &id) {
+        if (id.empty()) {
+            return false;
+        }
+        std::string l = lower(id);
+        return l != "none" && l != "null" && l != "n/a" && l != "-" && l != "0" && l != "(no tvg-id)";
+    }
+
     std::string channelId(const std::string &sourceId, const Entry &e) {
         std::string base = sourceId;
         base += '\x1f';
@@ -662,6 +721,7 @@ namespace m3u {
         info.categories = (int) categories.size();
         iptv::LiveCatalog catalog;
         catalog.assign(std::move(categories), std::move(channels));
+        catalog.guideUrls = std::move(r.guideUrls);
         auto t2 = clock::now();
         info.parseMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
         info.indexMs = std::chrono::duration<double, std::milli>(t2 - t1).count();

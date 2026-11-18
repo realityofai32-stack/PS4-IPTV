@@ -99,6 +99,19 @@ namespace ui {
                 add(tri);
                 break;
             }
+            case Glyph::DPadLeft:
+            case Glyph::DPadRight: {
+                // the arrow head of one d-pad direction (filled, in the text colour)
+                const float r = s * 0.19f;
+                const float dir = glyph == Glyph::DPadLeft ? -1.0f : 1.0f;
+                auto *head = new ConvexShape(3);
+                head->setPoint(0, Vector2f(c + dir * r, c));
+                head->setPoint(1, Vector2f(c - dir * r * 0.75f, c - r));
+                head->setPoint(2, Vector2f(c - dir * r * 0.75f, c + r));
+                head->setFillColor(fg);
+                add(head);
+                break;
+            }
             default: {
                 // shoulder / options buttons: a text pill instead of a round cap
                 remove(cap);
@@ -156,6 +169,10 @@ namespace ui {
                     return Glyph::R2;
                 case PadButton::Options:
                     return Glyph::Options;
+                case PadButton::Left:
+                    return Glyph::DPadLeft;
+                case PadButton::Right:
+                    return Glyph::DPadRight;
                 default:
                     return Glyph::DPad;
             }

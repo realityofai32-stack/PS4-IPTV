@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 
 #include "settings_store.h"
@@ -132,6 +133,16 @@ std::string SettingsStore::serialize() const {
         orders.set(o.first, json::Value::makeString(o.second));
     }
     root.set("sortOrders", std::move(orders));
+    json::Value order = json::Value::makeArray();
+    for (const auto &f: settings.playlistOrder) {
+        order.push(json::Value::makeString(f));
+    }
+    root.set("playlistOrder", std::move(order));
+    json::Value hidden = json::Value::makeArray();
+    for (const auto &f: settings.hiddenPlaylists) {
+        hidden.push(json::Value::makeString(f));
+    }
+    root.set("hiddenPlaylists", std::move(hidden));
     return json::write(root);
 }
 
@@ -187,6 +198,24 @@ bool SettingsStore::deserialize(const std::string &text, std::string *error) {
             s.sortOrders[o.first] = key;
         }
     }
+    // file names only (a playlist folder entry): never a path
+    auto plainName = [](const std::string &f) {
+        return !f.empty() && f.size() <= 200 && f.find('/') == std::string::npos && f.find('\\') == std::string::npos
+               && f[0] != '.';
+    };
+    for (const auto &f: root["playlistOrder"].items()) {
+        std::string name = f.asString();
+        if (plainName(name) && s.playlistOrder.size() < 500
+            && std::find(s.playlistOrder.begin(), s.playlistOrder.end(), name) == s.playlistOrder.end()) {
+            s.playlistOrder.push_back(name);
+        }
+    }
+    for (const auto &f: root["hiddenPlaylists"].items()) {
+        std::string name = f.asString();
+        if (plainName(name) && s.hiddenPlaylists.size() < 500) {
+            s.hiddenPlaylists.insert(name);
+        }
+    }
     settings = s;
     return true;
 }
@@ -201,14 +230,21 @@ bool SettingsStore::load(std::string *warning) {
         return true;
     }
     std::string first = err;
+    // the file that could not be read is kept as it is before any save replaces it (fs::keepDamagedCopy)
+    std::string kept = fs::keepDamagedCopy(path);
+    std::string note = kept.empty() ? "" : "; kept as " + kept.substr(kept.find_last_of("/\\") + 1);
     if (fs::readFile(path + ".bak", text, 256 * 1024, &err) && deserialize(text, &err)) {
         if (warning) {
-            *warning = "settings.json unreadable (" + first + "), restored the previous copy";
+            *warning = "settings.json unreadable (" + first + "), restored the previous copy" + note;
         }
         return true;
     }
+    std::string keptBak = fs::keepDamagedCopy(path + ".bak");
+    if (!keptBak.empty()) {
+        note += "; previous copy kept as " + keptBak.substr(keptBak.find_last_of("/\\") + 1);
+    }
     if (warning) {
-        *warning = "settings reset to defaults: " + first;
+        *warning = "settings reset to defaults: " + first + note;
     }
     settings = Settings();
     return false;

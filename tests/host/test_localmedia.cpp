@@ -274,6 +274,37 @@ TEST(localmedia_root_detection_with_mocked_storage) {
     CHECK(real[8].path == "/usb7/" && real[8].number == 8 && real[16].path == "/mnt/usb7/" && real[16].number == 8);
 }
 
+// optical discs: probed apart from the USB drives (whose candidates stay as they were), an empty mount point is no
+// disc, the app's view wins, a protected Blu-ray movie is recognised before anything else is read
+TEST(localmedia_optical_disc) {
+    std::string base = tree("lm-disc");
+    CHECK_EQ(localmedia::discsFrom(localmedia::probeDiscs(base)).size(), (size_t) 0);   // no mount point at all
+    fs::ensureDir(base + "/disc");
+    fs::ensureDir(base + "/mnt/disc");
+    std::vector<localmedia::Probe> empty = localmedia::probeDiscs(base);
+    CHECK(empty.size() == 2 && empty[0].access == localmedia::Access::Empty && empty[1].access == localmedia::Access::Empty);
+    CHECK(localmedia::discsFrom(empty).empty());   // an empty folder: no disc in the drive
+    fs::ensureDir(base + "/mnt/disc/VIDEOS");
+    touch(base + "/mnt/disc/VIDEOS/holiday.mkv");
+    std::vector<localmedia::Root> outside = localmedia::discsFrom(localmedia::probeDiscs(base));
+    CHECK(outside.size() == 1 && outside[0].disc && outside[0].outside && !outside[0].usb);
+    fs::ensureDir(base + "/disc/BDMV/STREAM");
+    touch(base + "/disc/BDMV/STREAM/00000.m2ts");
+    std::vector<localmedia::Root> discs = localmedia::discsFrom(localmedia::probeDiscs(base));
+    CHECK(discs.size() == 1 && discs[0].path == base + "/disc/" && !discs[0].outside);   // the app's view first
+    CHECK(!discs.empty() && !localmedia::protectedBluray(discs[0]));   // an unprotected authored disc
+    if (!discs.empty()) {
+        localmedia::Listing l = localmedia::list(discs[0], base + "/disc/BDMV/STREAM", sampleFormats());
+        CHECK(l.ok && l.entries.size() == 1);   // its streams play like any MPEG-TS file
+        fs::ensureDir(base + "/disc/AACS");
+        CHECK(localmedia::protectedBluray(discs[0]));
+    }
+    std::string summary = localmedia::probeSummary(localmedia::probeDiscs(base));
+    CHECK(summary.find("disc ok") != std::string::npos && summary.find("mnt/disc ok") != std::string::npos);
+    // the USB candidates are untouched by the disc probe
+    CHECK_EQ(localmedia::candidateRoots().size(), (size_t) 17);
+}
+
 TEST(localmedia_names_cases_and_folders) {
     std::string base = tree("lm-names");
     Root root = {base + "/", false, 0};

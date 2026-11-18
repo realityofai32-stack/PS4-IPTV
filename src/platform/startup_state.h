@@ -32,10 +32,10 @@ namespace startup {
     constexpr const char *RENDERER = "renderer";               // libcross2d / SDL2: pads, Piglet GL ES, window, shaders
     constexpr const char *APP_MEMBERS = "app-members";         // App's members (stores, services, image loader)
     constexpr const char *RENDERER_FAILED = "renderer-failed"; // no GL context: the app exits with a notification
+    constexpr const char *STORAGE = "storage";                 // profiles, settings (then the loading screen)
     constexpr const char *FONTS = "fonts";
     constexpr const char *NETWORK = "network";                 // libcurl / mbedTLS
     constexpr const char *JOBS = "jobs";                       // worker threads
-    constexpr const char *STORAGE = "storage";                 // profiles, settings
     constexpr const char *LIBRARY = "library";                 // favorites, history, progress
     constexpr const char *DOWNLOADS = "downloads";
     constexpr const char *SCREENS = "screens";

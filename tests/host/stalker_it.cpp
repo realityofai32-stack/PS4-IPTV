@@ -66,7 +66,10 @@ namespace {
         JobSystem jobs;
         XtreamService xtream{jobs};
         StalkerService stalker{jobs, dataDir() + "/"};
-        SourceService sources{xtream, stalker};
+        XmltvService guides{jobs, dataDir() + "/"};
+        MediaBrowserService media{jobs, "0.4.1"};
+        StremioService addons{jobs};
+        SourceService sources{xtream, stalker, guides, media, addons};
 
         Env() {
             diag::init(fs::join(dataDir(), "logs"));

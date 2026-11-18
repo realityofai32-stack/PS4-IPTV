@@ -49,6 +49,11 @@ public:
     // a new sign-in: forget the previous profile's catalogs and details
     void reset();
 
+    // run on the main thread when a movie's / series' details arrived (media servers: the server's saved positions
+    // become Resume - App)
+    std::function<void(const iptv::MovieInfo &)> onMovieInfo;
+    std::function<void(const iptv::SeriesInfo &)> onSeriesInfo;
+
     // offline mode (the provider could not be reached at sign-in): only the saved lists are shown, no provider
     // request is made (refreshes and detail requests report the offline state)
     void setOffline(bool offline);

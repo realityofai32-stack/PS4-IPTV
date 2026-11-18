@@ -956,6 +956,32 @@ CancelToken StalkerService::resolveLive(const Profile &profile, const LiveChanne
     });
 }
 
+CancelToken StalkerService::loadShortEpg(const Profile &profile, const std::string &channelId,
+                                         sources::GuideCallback callback) {
+    auto out = std::make_shared<sources::GuideOutcome>();
+    std::shared_ptr<Session> s = sessionFor(profile);
+    return jobs.submit(JobPriority::High, "stalker epg", [s, out, channelId](const CancelToken &token) {
+        Call c = request(*s, "itv", "get_short_epg", "ch_id=" + url::encode(channelId) + "&size="
+                                                      + std::to_string(epg::REQUEST_LIMIT), token, 256u * 1024, 15000);
+        if (c.fail != Fail::None) {
+            out->message = describe(c);
+            LOG_W("stalker", "get_short_epg %s: %s", channelId.c_str(), out->message.c_str());
+            return;
+        }
+        std::string err;
+        if (!epg::parseStalker(c.response.body, out->programmes, err)) {
+            out->message = i18n::tr("live.program_failed");
+            LOG_W("stalker", "get_short_epg %s: %s", channelId.c_str(), err.c_str());
+            return;
+        }
+        out->ok = true;
+        LOG_I("stalker", "get_short_epg %s: %zu programme(s), %zu bytes in %.2fs", channelId.c_str(),
+              out->programmes.size(), c.response.body.size(), c.response.seconds);
+    }, [out, callback]() {
+        callback(*out);
+    });
+}
+
 CancelToken StalkerService::resolveMovie(const Profile &profile, const std::string &movieId,
                                          sources::LinkCallback callback) {
     auto out = std::make_shared<sources::LinkOutcome>();

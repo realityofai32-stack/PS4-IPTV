@@ -19,6 +19,7 @@
 #include "../downloads/curl_transport.h"
 #include "../downloads/download_manager.h"
 #include "../iptv/catalog.h"
+#include "../iptv/epg.h"
 #include "../iptv/models.h"
 #include "../network/jobs.h"
 #include "../platform/input.h"
@@ -28,6 +29,7 @@
 #include "../storage/library_store.h"
 #include "../storage/profile_store.h"
 #include "../storage/settings_store.h"
+#include "../ui/splash.h"
 
 #define APP_DATA_DIR "/data/PS4IPTV/"
 
@@ -54,10 +56,15 @@ struct Session {
     std::string learnedLiveFormat;               // Auto format: "ts"/"m3u8" that played after a fallback
     std::set<std::string> seenLanguages;         // track languages met in played files (offered in Settings)
 
-    // the channel list changed (playlist refresh): screens holding indices into `live` rebuild
+    // the channel list changed (playlist refresh, the user playlists' groups): screens holding indices into `live`
+    // rebuild
     unsigned liveGeneration = 0;
+    // the user playlists changed while a live player held indices: their groups are rebuilt once it closes
+    bool userGroupsPending = false;
     // live player screens open: they hold indices into `live`, so a refreshed playlist waits until they close
     int livePlayers = 0;
+    // programme guide answers of this sign-in (the live player's guide panel asks one channel at a time)
+    epg::Cache guide;
     // playlist sources
     m3u::Info playlist;                          // what the current list is (Playlist Info)
     bool playlistRefreshing = false;
@@ -139,6 +146,11 @@ public:
     // stores a playlist source's channel count / status after a load (Profiles shows it)
     void notePlaylistLoaded(const std::string &profileId, int channels);
 
+    // the user's playlists shown as Live TV groups (app/user_groups.h) are (re)built into the session's channel
+    // list: after it loaded and after every change of a playlist / their order / visibility. Waits while a live
+    // player holds indices into the list.
+    void applyUserGroups();
+
     LibraryStore &library() { return libraryStore; }
 
     Playback &playback() { return player; }
@@ -190,6 +202,10 @@ private:
 
     void onKey(const kbd::Event &event);
 
+    // startup: one frame of the loading screen between startup stages (at most 30 per second, none when `force` is
+    // false and the last one is recent); no app logic runs inside it
+    void splashFrame(bool force);
+
     // first member: constructed right after the renderer base class (SDL / GL), before every other member
     bool membersStage = (startup::tracker().stage(startup::APP_MEMBERS), true);
     bool running = true;
@@ -206,6 +222,9 @@ private:
     SettingsStore settingsStore;
     XtreamService xtreamService;
     StalkerService stalkerService;
+    XmltvService xmltvService;
+    MediaBrowserService mediaService;
+    StremioService stremioService;
     SourceService sourceService;
     M3uService m3uService;
     CancelToken playlistToken;
@@ -222,6 +241,10 @@ private:
     void *ownPad = nullptr;          // pad opened by us when libcross2d had none at startup
     double nextPadProbe = 0;
     bool clockChecked = false;
+
+    ui::Splash *splash = nullptr;       // the loading screen, from the settings until the first screen (ui/splash.h)
+    double splashShownAt = 0;
+    double splashDrawnAt = 0;
 
     c2d::RectangleShape *screenLayer = nullptr;
     c2d::RectangleShape *toastBox = nullptr;

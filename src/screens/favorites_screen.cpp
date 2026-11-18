@@ -329,7 +329,8 @@ namespace {
         void open() {
             if (tab == 0) {
                 if (!liveItems.empty()) {
-                    app.push(screens::makeLivePlayer(app, liveItems, channels->selected()));
+                    app.push(screens::makeLivePlayer(app, liveItems, channels->selected(), nullptr,
+                                                     livenav::Group::of(livenav::Group::Kind::Favorites)));
                 }
             } else if (!vodItems.empty()) {
                 int i = vodItems[(size_t) grid->selected()];

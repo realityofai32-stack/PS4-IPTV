@@ -26,8 +26,16 @@ namespace protocols {
     enum class Verdict {
         Ok,
         HttpsUnavailable,   // https:// with a backend that has no TLS
-        Unsupported         // rtsp://, mms://, srt://... or no scheme at all
+        Unsupported,        // rtsp://, mms://, srt://... or no scheme at all
+        YouTubePage         // a YouTube page (watch / youtu.be / live / shorts / embed): not a stream address
     };
+
+    // a YouTube page address (youtube.com, m./www./music. subdomains, youtu.be, youtube-nocookie.com). Its video is
+    // reachable only through YouTube's own undocumented player API (signatures computed by running YouTube's
+    // JavaScript, proof-of-origin tokens) - nothing an M3U player can do robustly - so it is refused with a clear
+    // message instead of failing inside FFmpeg. Direct googlevideo.com stream addresses are not pages and play as
+    // any other HTTPS stream.
+    bool youtubePage(const std::string &url);
 
     // `https` = httpsPlayable() in the app (a parameter for the tests)
     Verdict check(const std::string &url, bool https);

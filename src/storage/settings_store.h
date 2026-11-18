@@ -4,6 +4,7 @@
 #define PS4IPTV_STORAGE_SETTINGS_STORE_H
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -67,6 +68,10 @@ struct Settings {
     std::string keyboardLayout = "auto";
     // Movies / Series grid order, per profile: "<profileId>/movies" -> sort key ("az", "added_desc"...)
     std::map<std::string, std::string> sortOrders;
+    // My Playlists (media/user_playlists.h): their order (file names; the Live TV groups follow it) and the ones not
+    // shown as Live TV groups. Files not listed come after the listed ones and are shown.
+    std::vector<std::string> playlistOrder;
+    std::set<std::string> hiddenPlaylists;
 
     // the geometry every playback starts with (centred)
     display::Geometry defaultGeometry() const {

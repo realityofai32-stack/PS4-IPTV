@@ -2,7 +2,7 @@
 //
 // A playlist source is a list of Live / Playlist channels:
 //
-//   #EXTM3U [url-tvg="..."]
+//   #EXTM3U [url-tvg="..."] [x-tvg-url="..."]               (XMLTV programme guide address(es): Result::guideUrls)
 //   #EXTINF:-1 tvg-id="trt1.tr" tvg-name="TRT 1" tvg-logo="http://.../trt1.png" group-title="Turkey",TRT 1 HD
 //   #EXTGRP:Turkey                                    (category when group-title is absent)
 //   #EXTVLCOPT:http-user-agent=Mozilla/5.0 ...        (User-Agent for this entry's stream)
@@ -47,6 +47,10 @@ namespace m3u {
         std::string url;         // media URL, played as-is
         std::string userAgent;   // #EXTVLCOPT:http-user-agent= / user-agent="..." ("" = none)
         int number = 0;          // tvg-chno (0 = none)
+        // a V7 playlist entry added from a source's channel (media/user_playlists.h): v7-source="<profile id>"
+        // v7-channel="<channel id>" (other players ignore these attributes)
+        std::string sourceRef;
+        std::string channelRef;
     };
 
     // What the parser saw. Never contains URLs, names or other playlist text.
@@ -67,6 +71,7 @@ namespace m3u {
         int https = 0;                // https:// media URLs (the player has no TLS: shown, not playable)
         int otherProtocols = 0;       // rtmp://, udp://, rtsp://... (played if the player supports them)
         int duplicateIds = 0;         // identity collisions resolved with a suffix
+        int guideUrls = 0;            // usable XMLTV guide addresses in the #EXTM3U header
         // skipped entries
         int missingUrl = 0;           // #EXTINF with no media URL before the next entry / the end
         int invalidUrl = 0;           // a media line that is not scheme://host...
@@ -93,9 +98,15 @@ namespace m3u {
         size_t maxLineBytes = 16384;     // longer lines are skipped (counted as invalid)
     };
 
+    // XMLTV guide addresses kept from a playlist header (more are ignored)
+    constexpr int MAX_GUIDE_URLS = 3;
+
     struct Result {
         Error error = Error::None;
         std::vector<Entry> entries;   // playlist order
+        // http(s) XMLTV addresses of the #EXTM3U header (url-tvg / x-tvg-url / tvg-url, comma separated), in order,
+        // without duplicates, at most MAX_GUIDE_URLS. May carry credentials: never shown or logged.
+        std::vector<std::string> guideUrls;
         Stats stats;
 
         bool ok() const { return error == Error::None && !entries.empty(); }
@@ -104,6 +115,9 @@ namespace m3u {
     Result parse(std::string_view text, const Limits &limits = Limits());
 
     // ------------------------------------------------------------------ identity / catalog
+    // a tvg-id that identifies something ("", "none", "null", "N/A", "-", "0" do not)
+    bool usableTvgId(const std::string &id);
+
     // stable local channel id (see the header comment): "m" + 16 hex digits [+ "-" + 8 hex] [+ "-" + n]
     std::string channelId(const std::string &sourceId, const Entry &entry);
 
@@ -145,6 +159,10 @@ namespace m3u {
     std::string localPlaylistPath(const std::string &input);
 
     extern const char *const LOCAL_PLAYLIST_DIR;   // "/data/PS4IPTV/playlists/"
+
+    // an address as the LOG shows it: displayUrl, except a local playlist, whose file name is the user's own
+    // ("[local playlist]")
+    std::string logUrl(const std::string &url);
 
     // What the user may see of a playlist / media URL: "host[:port]/…/name.m3u" with no user info, query or
     // credential-like path segments. Local files: "playlists/<name>".

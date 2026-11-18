@@ -102,7 +102,7 @@ namespace diag {
         }
 
         // prove the file is really writable before relying on it
-        const char *probe = "# PS4 IPTV log\n";
+        const char *probe = "# V7 Player log\n";
         size_t len = strlen(probe);
         if (fwrite(probe, 1, len, g_file) != len || fflush(g_file) != 0) {
             g_status.ok = false;

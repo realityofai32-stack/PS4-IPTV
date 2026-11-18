@@ -25,6 +25,21 @@ TEST(https_accepted_only_with_tls_in_the_backend) {
     CHECK(protocols::check("https://cdn.example.com/movie.mp4", true) == Verdict::Ok);
     // a backend without TLS refuses it with its own verdict (clear message, no FFmpeg error)
     CHECK(protocols::check("https://cdn.example.com/live/stream.m3u8", false) == Verdict::HttpsUnavailable);
+    // YouTube pages are not stream addresses (no robust way to resolve them here): refused with a clear message;
+    // direct googlevideo.com streams and look-alike hosts are not pages
+    for (const char *page: {"https://www.youtube.com/watch?v=dQw4w9WgXcQ", "https://youtu.be/dQw4w9WgXcQ",
+                            "http://m.youtube.com/live/abc", "https://YouTube.com/shorts/x",
+                            "https://www.youtube-nocookie.com/embed/x", "https://music.youtube.com/watch?v=x",
+                            "https://www.youtube.com:443/@channel/live"}) {
+        CHECK(protocols::youtubePage(page));
+        CHECK(protocols::check(page, true) == Verdict::YouTubePage);
+    }
+    for (const char *stream: {"https://manifest.googlevideo.com/api/manifest/hls_variant/id/x/file/index.m3u8",
+                              "https://notyoutube.com/watch?v=x", "https://youtube.com.example.com/a.m3u8",
+                              "rtmp://youtube.com/live/x", "https://cdn.example.com/youtube.com/a.ts"}) {
+        CHECK(!protocols::youtubePage(stream));
+    }
+    CHECK(protocols::check("https://manifest.googlevideo.com/api/manifest/hls_variant/x/index.m3u8", true) == Verdict::Ok);
     // the run-time capability comes from FFmpeg's protocol list: both https and tls are needed
     protocols::setAvailable({"file", "http", "tcp"});
     CHECK(!protocols::httpsPlayable());

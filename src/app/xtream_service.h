@@ -66,6 +66,9 @@ public:
     CancelToken loadSeriesInfo(const iptv::Profile &profile, const std::string &seriesId,
                                std::function<void(InfoOutcome<iptv::SeriesInfo> &)> callback);
 
+    // get_short_epg of one stream (epg::REQUEST_LIMIT entries): only when the live player's guide panel asks
+    CancelToken loadShortEpg(const iptv::Profile &profile, const std::string &streamId, sources::GuideCallback callback);
+
 private:
 
     JobSystem &jobs;

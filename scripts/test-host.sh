@@ -57,7 +57,7 @@ build app_tests \
     "$h/test_https.cpp" "$h/test_keyboard.cpp" "$h/test_stalker.cpp" "$h/test_localmedia.cpp" \
     "$h/test_subtitles.cpp" "$h/test_http_policy.cpp" "$h/test_hints.cpp" "$h/test_continue.cpp" \
     "$h/test_hero_art.cpp" "$h/test_ux_pass.cpp" "$h/test_grid_binding.cpp" "$h/test_home_rails.cpp" \
-    "$h/test_startup.cpp" \
+    "$h/test_startup.cpp" "$h/test_epg.cpp" "$h/test_live_nav.cpp" "$h/test_xmltv.cpp" "$h/test_user_playlists.cpp" "$h/test_mediabrowser.cpp" "$h/test_stremio.cpp" "$h/test_user_groups.cpp" "$h/test_brand.cpp" "$h/test_data_recovery.cpp" "$h/test_privacy.cpp" \
     "$h/stb_impl.cpp" \
     "$s/core/utf8.cpp" "$s/core/json.cpp" "$s/core/url.cpp" "$s/iptv/xtream.cpp" "$s/iptv/catalog.cpp" \
     "$s/iptv/m3u.cpp" \
@@ -75,7 +75,8 @@ build app_tests \
     "$s/player/protocols.cpp" "$s/platform/keyboard_logic.cpp" "$s/core/hash.cpp" "$s/iptv/stalker.cpp" \
     "$s/media/local_media.cpp" "$s/player/subtitle_font.cpp" "$s/player/mpv_log_filter.cpp" "$s/network/http_policy.cpp" \
     "$s/platform/input_actions.cpp" "$s/images/hero_art.cpp" "$s/ui/choice_model.cpp" "$s/app/home_cards.cpp" \
-    "$s/platform/startup_state.cpp" "$s/platform/system_info.cpp"
+    "$s/platform/startup_state.cpp" "$s/platform/system_info.cpp" "$s/iptv/epg.cpp" "$s/app/live_nav.cpp" \
+    "$s/iptv/xmltv.cpp" "$s/media/user_playlists.cpp" "$s/iptv/mediabrowser.cpp" "$s/iptv/stremio.cpp" "$s/app/user_groups.cpp" "$s/ui/brand_art.cpp"
 
 t="$repo/tests/playback-test"
 build host_tests "$t/host-tests/host_tests.cpp" "$t/src/redact.cpp" "$t/src/stream_config.cpp"

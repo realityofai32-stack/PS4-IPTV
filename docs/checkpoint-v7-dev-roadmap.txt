@@ -1,0 +1,56 @@
+V7 IPTV - DEVELOPMENT CHECKPOINT: ROADMAP NOVEMBER 2026 (docs/v7-roadmap-2026-11.md)
+=====================================================================================
+
+Installs over the approved Live TV build (same Title ID IPTV00002, APP_VER 00.41). Profiles, settings, history and
+downloads are kept. The approved Live TV PKG stays in build/approved-v7-live-nav-hw/ if anything must be undone.
+
+0. LIVE TV NAVIGATION (approved: must still work exactly as before)
+   0.1 Left / Left / Right / Circle in the live player, a channel picked from the list, zapping with the guide open.
+
+1. M3U PROGRAMME GUIDE (XMLTV)
+   1.1 Use an M3U playlist whose first line names a guide (#EXTM3U url-tvg="..."). Playlist Info: "Program guide
+       (XMLTV): Named by the playlist".
+   1.2 Play a channel, press Right: "Loading program information..." the first time (the guide downloads once,
+       at most 1 MB/s), then Now / Next with times. PHOTO. Check times against the TV listings.
+   1.3 Zap, Right again: instant (the saved guide). Restart the app: the guide is instant again (no new download:
+       the log has no new "xmltv: ... KiB" line).
+   1.4 A channel the guide does not know: "No program information".
+   1.5 Watch the picture while the guide downloads the first time: no stutter.
+
+2. MY PLAYLISTS
+   2.1 Live TV, OPTIONS on a channel: "Add to My Playlist" -> "New playlist" -> name it. Add two more channels.
+   2.2 Profiles OPTIONS (or Live TV OPTIONS) -> My Playlists: open it, Square to pick an entry up, Up / Down, Cross.
+   2.3 OPTIONS -> Add stream address (name + http://...). Rename an entry, remove one.
+   2.4 OPTIONS -> Export to USB (USB drive plugged in): a .m3u file appears at the top of the drive.
+   2.5 Import from USB: a .m3u file at the top of the drive becomes a playlist.
+   2.6 OPTIONS -> Open as a source: Live TV lists the entries; they play with the live player.
+   2.7 Restart the app: the playlists are still there.
+
+3. PS4 SYSTEM KEYBOARD: removed after two failed hardware tests (docs/v7-roadmap-2026-11.md, section 3). Text
+   fields and Search use V7's keyboard and a USB keyboard exactly as in v0.4.1.
+
+4. JELLYFIN / EMBY
+   4.1 Add Source -> Jellyfin / Emby: server address with its port (e.g. http://192.168.1.10:8096), user, password.
+       Test: "Connected" + "Jellyfin Server 10.x" (or Emby). Wrong password: a clear message.
+   4.2 Movies / Series: the libraries are the categories; posters load; details show the overview.
+   4.3 Play a movie: it starts; seek; stop half way. On the server (web page): the movie shows the same position.
+   4.4 Something started on another client (web): the console offers Resume at that position.
+   4.5 A series: seasons and episodes; next episode works.
+
+5. STREMIO ADD-ON
+   5.1 Add Source -> Stremio: an add-on address (manifest.json) whose streams are direct http(s) links (for example a
+       self-hosted or public-domain add-on). Test: name + number of catalogs.
+   5.2 Movies / Series: the catalogs are the categories; details; play a title.
+   5.3 A title whose add-on offers only torrents: "No stream V7 can play...".
+
+6. YOUTUBE IN M3U
+   6.1 A playlist entry with https://www.youtube.com/watch?v=...: playing it says at once that YouTube pages
+       cannot be played. Other channels play as before.
+
+7. DISC
+   7.1 Insert a data disc (BD-R / DVD-R with .mkv / .mp4 files): open Local Media. Does "Disc" appear? If so, browse
+       and play a file.
+   7.2 Insert a Blu-ray movie: if "Disc" appears, opening it says it is protected (nothing is read).
+
+SEND: the photos and /data/PS4IPTV/logs/log.txt (and startup.txt). Log lines to look for: "xmltv:", "mediaserver",
+"stremio", "localmedia: ... disc ...". No address, token or password is ever written there.

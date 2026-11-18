@@ -109,8 +109,8 @@ namespace localmedia {
                 p.access = classify(p.error);
                 return p;
             }
-            // a USB mount point without a drive is an empty folder: a drive lists at least one entry
-            bool any = !r.usb;
+            // a USB / disc mount point without a drive / disc is an empty folder: a drive lists at least one entry
+            bool any = !r.usb && !r.disc;
             while (!any) {
                 struct dirent *de = readdir(d);
                 if (de == nullptr) {
@@ -121,7 +121,7 @@ namespace localmedia {
             closedir(d);
             p.access = any ? Access::Available : Access::Empty;
 #else
-            p.access = fs::isDir(dir) ? (!r.usb || !fs::listDir(dir).empty() ? Access::Available : Access::Empty)
+            p.access = fs::isDir(dir) ? ((!r.usb && !r.disc) || !fs::listDir(dir).empty() ? Access::Available : Access::Empty)
                                       : Access::Missing;
 #endif
             return p;
@@ -177,6 +177,44 @@ namespace localmedia {
         }
     }
 
+    std::vector<Root> discCandidates(const std::string &base) {
+        Root inside{base + "/disc/", false, 0, false};
+        inside.disc = true;
+        Root outsideView{base + "/mnt/disc/", false, 0, true};
+        outsideView.disc = true;
+        return {inside, outsideView};
+    }
+
+    std::vector<Probe> probeDiscs(const std::string &base) {
+        std::vector<Probe> out;
+        for (const auto &r: discCandidates(base)) {
+            out.push_back(probeOne(r));
+        }
+        return out;
+    }
+
+    std::vector<Root> discsFrom(const std::vector<Probe> &probes) {
+        for (const auto &p: probes) {
+            if (p.access == Access::Available && p.root.disc) {
+                return {p.root};   // one disc: the app's view first
+            }
+        }
+        return {};
+    }
+
+    bool protectedBluray(const Root &disc) {
+        std::string top;
+        if (!normalize(disc.path, top)) {
+            return false;
+        }
+        for (const char *name: {"AACS", "aacs"}) {
+            if (fs::isDir(top + "/" + name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     std::vector<Probe> probeRoots(const std::string &base) {
         std::vector<Probe> out;
         for (const auto &r: candidateRoots(base)) {
@@ -189,7 +227,7 @@ namespace localmedia {
         std::string s;
         for (const auto &p: probes) {
             std::string name = p.root.usb ? (p.root.outside ? "mnt/usb" : "usb") + std::to_string(p.root.number - 1)
-                                          : "data";
+                                          : p.root.disc ? (p.root.outside ? "mnt/disc" : "disc") : "data";
             s += (s.empty() ? "" : ", ") + name + " " + accessName(p.access);
             if (p.access != Access::Available && p.access != Access::NotDirectory && p.error != 0
                 && !(p.access == Access::Missing && p.error == ENOENT)) {

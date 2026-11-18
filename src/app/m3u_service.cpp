@@ -11,7 +11,7 @@ using namespace iptv;
 namespace {
     // what the log may say about a playlist location: host + file name, never credentials / tokens
     std::string where(const Profile &p) {
-        std::string shown = m3u::displayUrl(p.playlistUrl);
+        std::string shown = m3u::logUrl(p.playlistUrl);   // (log lines only)
         return shown.empty() ? "?" : shown;
     }
 }

@@ -114,6 +114,7 @@ namespace dl {
         std::vector<Item> loaded;
         std::string text;
         bool ok = false;
+        bool complete = false;   // read without skipping an entry
         for (const std::string &p: {path, path + ".bak"}) {
             if (!fs::exists(p)) {
                 continue;
@@ -124,14 +125,22 @@ namespace dl {
                     LOG_W("downloads", "%s", note.c_str());
                 }
                 ok = true;
+                complete = note.empty() && p == path;   // the older copy may miss the newest partial files
                 if (p != path) {
                     LOG_W("downloads", "downloads.json unreadable, restored the previous copy");
                 }
                 break;
             }
             LOG_E("downloads", "%s: %s", p.c_str(), err.c_str());
+            // kept as it is before the next save replaces it (fs::keepDamagedCopy)
+            std::string kept = fs::keepDamagedCopy(p);
+            if (!kept.empty()) {
+                LOG_W("downloads", "unreadable download list kept as %s", kept.c_str());
+            }
         }
-        if (!ok && fs::exists(path) && warning) {
+        // a list that exists but cannot be read: its partial files are not orphans (they belong to the lost list)
+        const bool unreadable = !ok && (fs::exists(path) || fs::exists(path + ".bak"));
+        if (unreadable && warning) {
             *warning = "the download list could not be read";
         }
 
@@ -178,8 +187,10 @@ namespace dl {
             it.attempts = 0;
             it.retryAt = 0;
         }
-        // partial files no manifest entry refers to cannot be resumed (and are never guessed from names)
-        for (const auto &e: fs::listDir(dirOf(cfg.root, "temp"))) {
+        // partial files no manifest entry refers to cannot be resumed (and are never guessed from names); none is
+        // removed when the list could not be read completely (a skipped entry may own one)
+        const bool sweep = complete || (!ok && !unreadable);   // a complete list, or no list at all
+        for (const auto &e: sweep ? fs::listDir(dirOf(cfg.root, "temp")) : std::vector<fs::Entry>()) {
             if (!e.dir && e.name.size() > 5 && e.name.compare(e.name.size() - 5, 5, ".part") == 0
                 && std::find(parts.begin(), parts.end(), e.name) == parts.end()) {
                 fs::removeFile(fs::join(dirOf(cfg.root, "temp"), e.name));

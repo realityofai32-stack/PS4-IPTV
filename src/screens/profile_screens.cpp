@@ -4,6 +4,9 @@
 #include "common.h"
 #include "../core/format.h"
 #include "../core/url.h"
+#include "../iptv/m3u.h"
+#include "../iptv/mediabrowser.h"
+#include "../iptv/stremio.h"
 #include "../iptv/stalker.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
@@ -22,7 +25,7 @@ namespace {
             auto *glow = new ui::Backdrop(FloatRect(theme::SCREEN_W / 2, 0, theme::SCREEN_W / 2, theme::SCREEN_H), 0, 0);
             add(glow);
             float cx = theme::SCREEN_W / 2;
-            // the full lockup: [V7 symbol] V7 IPTV, then the tagline
+            // the full lockup: [V7 monogram] V7 Player, then the tagline
             auto *brand = new ui::Brand(tr("app.name"), 96, theme::DISPLAY);
             brand->setPosition(std::round(cx - brand->getSize().x / 2), 210);
             add(brand);
@@ -278,6 +281,8 @@ namespace {
             acts.push_back([this] { app.push(screens::makeSourceChooser(app)); });
             names.push_back(tr("home.local_media"));
             acts.push_back([this] { app.push(screens::makeLocalMedia(app)); });
+            names.push_back(tr("playlists.title"));
+            acts.push_back([this] { app.push(screens::makeMyPlaylists(app)); });
             app.push(screens::makeMenu(app, p.name, names, -1, whileAlive([acts](int c) {
                 if (c >= 0 && c < (int) acts.size()) {
                     acts[(size_t) c]();
@@ -366,6 +371,8 @@ namespace {
             } else if (p.isStalker()) {
                 body += tr("stalker.portal_url") + "\n" + screens::hostOf(p.server) + "\n\n" + tr("stalker.mac") + "\n"
                         + stalker::maskedMac(p.mac);
+            } else if (p.isAddon()) {
+                body += tr("stremio.address") + "\n" + screens::sourceLocation(p);
             } else {
                 body += tr("profile.server") + "\n" + screens::hostOf(p.server) + "\n\n" + tr("profile.username")
                         + "\n" + p.username + "\n\n" + tr("profile.password") + "\n" + screens::mask(p.password);
@@ -393,28 +400,38 @@ namespace {
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Xtream Codes (name, server, username, password) and Stalker / MAG (name, portal address, MAC address) sources:
-    // the same form, tested with the source's own sign-in before it is saved
+    // Xtream Codes (name, server, username, password), Jellyfin / Emby servers (the same fields; the password may be
+    // empty, as such servers allow) and Stalker / MAG (name, portal address, MAC address) sources: the same form,
+    // tested with the source's own sign-in before it is saved
     class ProfileEditScreen : public Screen {
     public:
         ProfileEditScreen(App &a, const Profile &p) : Screen(a), profile(p) {
             isNew = p.id.empty();
             portal = p.isStalker();
-            fieldCount = portal ? 3 : 4;
+            media = p.isMediaServer();
+            addon = p.isAddon();
+            fieldCount = portal ? 3 : addon ? 2 : 4;
             if (!isNew) {
-                serverInput = p.server;
+                serverInput = addon ? p.playlistUrl : p.server;
             }
             macInput = p.mac;
             ui::background(this);
             screens::header(this, tr(portal ? (isNew ? "stalker.add_title" : "stalker.edit_title")
-                                            : (isNew ? "profile.add_title" : "profile.edit_title")),
-                            tr(portal ? "stalker.subtitle" : "profile.subtitle"));
+                                     : media ? (isNew ? "media.add_title" : "media.edit_title")
+                                     : addon ? (isNew ? "stremio.add_title" : "stremio.edit_title")
+                                             : (isNew ? "profile.add_title" : "profile.edit_title")),
+                            tr(portal ? "stalker.subtitle" : media ? "media.subtitle"
+                                                           : addon ? "stremio.subtitle" : "profile.subtitle"));
             static const char *const XTREAM_CAPTIONS[4] = {"profile.name", "profile.server_url", "profile.username",
                                                            "profile.password"};
+            static const char *const MEDIA_CAPTIONS[4] = {"profile.name", "media.server_url", "profile.username",
+                                                          "profile.password"};
             static const char *const PORTAL_CAPTIONS[3] = {"profile.name", "stalker.portal_url", "stalker.mac"};
+            static const char *const ADDON_CAPTIONS[2] = {"profile.name", "stremio.address"};
             // one source for the captions and their number
-            const char *const *captions = portal ? PORTAL_CAPTIONS : XTREAM_CAPTIONS;
-            fieldCount = portal ? 3 : 4;
+            const char *const *captions = portal ? PORTAL_CAPTIONS : addon ? ADDON_CAPTIONS
+                                                 : media ? MEDIA_CAPTIONS : XTREAM_CAPTIONS;
+            fieldCount = portal ? 3 : addon ? 2 : 4;
             for (int i = 0; i < fieldCount; i++) {
                 fields[i] = new screens::FieldRow(FloatRect(theme::SAFE_X, 230 + (float) i * 104, 1000, 88),
                                                   tr(captions[i]));
@@ -424,7 +441,8 @@ namespace {
             float x = theme::SAFE_X;
             for (int i = 0; i < 3; i++) {
                 float w = i == 2 ? 220.0f : 340.0f;
-                buttons[i] = new ui::Button(tr(labels[i]), FloatRect(x, portal ? 586.0f : 690.0f, w, 84), i == 1);
+                float by = 230 + (float) fieldCount * 104 + 44;   // under the last field (2: 482, 3: 586, 4: 690)
+                buttons[i] = new ui::Button(tr(labels[i]), FloatRect(x, by, w, 84), i == 1);
                 add(buttons[i]);
                 x += w + 24;
             }
@@ -508,6 +526,25 @@ namespace {
     private:
 
         void activate() {
+            if (addon) {
+                switch (focus) {
+                    case 0:
+                        edit(tr("profile.name"), profile.name, false, [this](const std::string &v) { profile.name = v; });
+                        return;
+                    case 1:
+                        edit(tr("stremio.address"), serverInput, false, [this](const std::string &v) { serverInput = v; });
+                        return;
+                    case 2:
+                        test(false);
+                        return;
+                    case 3:
+                        test(true);
+                        return;
+                    default:
+                        app.pop();
+                        return;
+                }
+            }
             if (portal) {
                 switch (focus) {
                     case 0:
@@ -535,7 +572,8 @@ namespace {
                     edit(tr("profile.name"), profile.name, false, [this](const std::string &v) { profile.name = v; });
                     break;
                 case 1:
-                    edit(tr("profile.server_url"), serverInput, false, [this](const std::string &v) { serverInput = v; });
+                    edit(tr(media ? "media.server_url" : "profile.server_url"), serverInput, false,
+                         [this](const std::string &v) { serverInput = v; });
                     break;
                 case 2:
                     edit(tr("profile.username"), profile.username, false, [this](const std::string &v) { profile.username = v; });
@@ -589,6 +627,39 @@ namespace {
                 }
                 return "";
             }
+            if (addon) {
+                std::string err;
+                std::string manifest = stremio::manifestUrl(serverInput, err);
+                if (manifest.empty()) {
+                    return err;
+                }
+                profile.type = SourceType::Stremio;
+                profile.playlistUrl = manifest;
+                serverInput = manifest;
+                if (url::trim(profile.name).empty()) {
+                    profile.name = screens::hostOf(stremio::baseOf(manifest));
+                    size_t slash = profile.name.find('/');
+                    profile.name = profile.name.substr(0, slash);   // the host only (the path may hold a configuration)
+                }
+                return "";
+            }
+            if (media) {
+                std::string err;
+                std::string base = mediabrowser::serverBase(serverInput, err);
+                if (base.empty()) {
+                    return err;
+                }
+                if (url::trim(profile.username).empty()) {
+                    return tr("profile.error.username");
+                }
+                profile.type = SourceType::Jellyfin;
+                profile.server = base;
+                profile.username = url::trim(profile.username);
+                if (url::trim(profile.name).empty()) {
+                    profile.name = screens::hostOf(base);
+                }
+                return "";   // (a password may be empty)
+            }
             url::Server s = url::normalizeServer(serverInput);
             if (!s.ok) {
                 return s.error;
@@ -632,7 +703,8 @@ namespace {
                 statusTitle->setText(tr("profile.connection"));
                 if (o.result.status == AuthStatus::Ok) {
                     tested = true;
-                    std::string body = tr("auth.ok") + "\n\n" + screens::accountSummary(o.result.account);
+                    std::string body = tr("auth.ok") + "\n\n" + (media || addon ? o.result.account.message
+                                                                                : screens::accountSummary(o.result.account));
                     if (o.httpsWarning) {
                         body += "\n\n" + tr("profile.https_warning");
                     }
@@ -643,6 +715,9 @@ namespace {
                 } else {
                     tested = false;
                     std::string body = o.message;
+                    if (media && o.result.status == AuthStatus::Network) {
+                        body += "\n\n" + tr("media.port_hint");
+                    }
                     if (o.result.status == AuthStatus::Expired && o.result.account.expiresAt > 0) {
                         body += "\n" + tr("profile.expired_on", {clockx::localDate(o.result.account.expiresAt)});
                     }
@@ -681,14 +756,19 @@ namespace {
 
         void refresh() {
             fields[0]->setValue(profile.name.empty() ? tr("profile.name_placeholder") : profile.name, profile.name.empty());
-            if (portal) {
+            if (addon) {
+                fields[1]->setValue(serverInput.empty() ? "https://addon.example.com/manifest.json"   // i18n-exempt
+                                                        : m3u::displayUrl(serverInput), serverInput.empty());
+            } else if (portal) {
                 fields[1]->setValue(serverInput.empty() ? "http://example.com:8080/c/" : serverInput, serverInput.empty());   // i18n-exempt: technical value
                 fields[2]->setValue(macInput.empty() ? "00:1A:79:00:00:00" : macInput, macInput.empty());
             } else {
-                fields[1]->setValue(serverInput.empty() ? "http://example.com:8080" : serverInput, serverInput.empty());
+                const char *example = media ? "http://192.168.1.10:8096" : "http://example.com:8080";   // i18n-exempt
+                fields[1]->setValue(serverInput.empty() ? example : serverInput, serverInput.empty());
                 fields[2]->setValue(profile.username.empty() ? tr("profile.required") : profile.username,
                                     profile.username.empty());
-                fields[3]->setValue(profile.password.empty() ? tr("profile.required") : screens::mask(profile.password),
+                fields[3]->setValue(profile.password.empty() ? tr(media ? "media.password_optional" : "profile.required")
+                                                             : screens::mask(profile.password),
                                     profile.password.empty());
             }
             for (int i = 0; i < fieldCount; i++) {
@@ -706,6 +786,8 @@ namespace {
         std::string seed;          // character typed on a physical keyboard that opened the field's editor
         bool isNew;
         bool portal = false;       // Stalker / MAG source
+        bool media = false;        // Jellyfin / Emby server
+        bool addon = false;        // Stremio add-on
         int fieldCount = 4;
         bool tested = false;
         bool testing = false;

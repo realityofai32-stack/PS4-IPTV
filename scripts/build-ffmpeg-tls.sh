@@ -7,7 +7,7 @@
 #   --enable-protocol=...,https,tls   HTTPS and the TLS layer under it (HLS segments, redirects and keys reuse them)
 #   --enable-mbedtls                  TLS backend: the Mbed TLS 2.16.6 already linked for libcurl (same library,
 #                                     same CA bundle, same platform entropy path that libcurl uses on the console)
-#   --enable-version3                 required by FFmpeg for mbedTLS (Apache-2.0); V7 IPTV is GPL-3.0-or-later
+#   --enable-version3                 required by FFmpeg for mbedTLS (Apache-2.0); V7 Player is GPL-3.0-or-later
 #
 # Every other option (codecs, demuxers, protocols, filters) is unchanged, and it is the same FFmpeg version, so the
 # prebuilt libmpv 0.34.1 links against the result without being rebuilt: its stream_lavf/demux_lavf already pass

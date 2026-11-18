@@ -1,5 +1,5 @@
-// V7 IPTV design-system components, built on libcross2d shapes and ui::Label like ui/widgets.h:
-//   BrandMark / Brand   the V7 symbol (vector, any size) and the horizontal "symbol + name" lockup
+// V7 Player design-system components, built on libcross2d shapes and ui::Label like ui/widgets.h:
+//   BrandMark / Brand   the V7 monogram (vector, any size) and the horizontal "monogram + name" lockup
 //   Chip                tabs, filters and season chips (rest / selected / focused)
 //   ProgressBar         thin rounded track + accent fill
 //   IconButton          round navigation button with a vector icon (search, favorites, downloads, settings)
@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "cross2d/c2d.h"
+#include "brand_art.h"
 #include "image_fit.h"
 #include "text.h"
 #include "theme.h"
@@ -36,23 +37,16 @@ namespace ui {
         return {x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0)};
     }
 
-    // The V7 symbol: a V whose right arm is the stem of a 7, closed by the 7's top bar. Three convex polygons on a
-    // 100 x 80 grid (see docs/v7-ui-refresh.md); `height` is the drawn height, the width is height * 1.25.
-    // Two tones of the active accent (the light arm in the accent's text tone), or fixed colours for the icon.
+    // The V7 monogram (V7 Player): the same geometry and accent gradient as the loading screen and the package icon
+    // (ui/brand_art.h), with soft edges; `height` is the drawn height, the width is height * ASPECT.
     class BrandMark : public c2d::RectangleShape {
     public:
-        static constexpr float ASPECT = 1.25f;   // width / height
+        static constexpr float ASPECT = brandart::ASPECT;   // width / height
 
         explicit BrandMark(float height);
-
-        void setColors(const c2d::Color &arm, const c2d::Color &stem);
-    private:
-        c2d::ConvexShape *left;
-        c2d::ConvexShape *right;
-        c2d::ConvexShape *bar;
     };
 
-    // [symbol] V7 IPTV: the symbol and the product name on one baseline
+    // [symbol] V7 Player: the symbol and the product name on one baseline
     class Brand : public c2d::RectangleShape {
     public:
         Brand(const std::string &name, float markHeight, unsigned textSize);

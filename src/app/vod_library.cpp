@@ -189,6 +189,9 @@ void VodLibrary::requestMovieInfo(const Profile &profile, const std::string &str
             auto info = std::make_shared<MovieInfo>(std::move(o.info));
             int64_t bytes = (int64_t) (sizeof(MovieInfo) + info->plot.size() + info->cast.size());
             movieInfos.put(streamId, info, bytes);
+            if (onMovieInfo) {
+                onMovieInfo(*info);
+            }
         } else {
             errors[key] = o.message;
         }
@@ -232,6 +235,9 @@ void VodLibrary::requestSeriesInfo(const Profile &profile, const std::string &se
                 bytes += (int64_t) (s.episodes.size() * (sizeof(Episode) + 160));
             }
             seriesInfos.put(seriesId, info, bytes);
+            if (onSeriesInfo) {
+                onSeriesInfo(*info);
+            }
         } else {
             errors[key] = o.message;
         }

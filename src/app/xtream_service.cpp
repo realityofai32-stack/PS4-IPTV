@@ -337,6 +337,37 @@ CancelToken XtreamService::loadMovieInfo(const Profile &profile, const std::stri
                                std::move(callback));
 }
 
+CancelToken XtreamService::loadShortEpg(const Profile &profile, const std::string &streamId,
+                                        sources::GuideCallback callback) {
+    auto out = std::make_shared<sources::GuideOutcome>();
+    Profile p = profile;
+    return jobs.submit(JobPriority::High, "get_short_epg", [p, streamId, out](const CancelToken &token) {
+        http::Request req;
+        req.cancel = token.shared();
+        req.maxBytes = 256u * 1024;     // a few entries: a few kilobytes
+        req.totalTimeoutMs = 15000;
+        req.url = xtream::apiUrl(p, "get_short_epg", "stream_id=" + url::encode(streamId) + "&limit="
+                                                     + std::to_string(epg::REQUEST_LIMIT));
+        http::Response r = http::get(req);
+        if (!r.ok()) {
+            out->message = http::describe(r);
+            LOG_W("xtream", "get_short_epg %s: %s (%s)", streamId.c_str(), out->message.c_str(), r.detail.c_str());
+            return;
+        }
+        std::string err;
+        if (!epg::parseXtream(r.body, out->programmes, err)) {
+            out->message = i18n::tr("live.program_failed");
+            LOG_W("xtream", "get_short_epg %s: %s", streamId.c_str(), err.c_str());
+            return;
+        }
+        out->ok = true;
+        LOG_I("xtream", "get_short_epg %s: %zu programme(s), %zu bytes in %.2fs", streamId.c_str(),
+              out->programmes.size(), r.body.size(), r.seconds);
+    }, [out, callback]() {
+        callback(*out);
+    });
+}
+
 CancelToken XtreamService::loadSeriesInfo(const Profile &profile, const std::string &seriesId,
                                           std::function<void(InfoOutcome<SeriesInfo> &)> callback) {
     auto wrapped = [seriesId, callback](InfoOutcome<SeriesInfo> &o) {

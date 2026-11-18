@@ -58,6 +58,9 @@ public:
     CancelToken resolveLive(const iptv::Profile &profile, const iptv::LiveChannel &channel,
                             sources::LinkCallback callback);
 
+    // itv get_short_epg of one channel (epg::REQUEST_LIMIT entries): only when the live player's guide panel asks
+    CancelToken loadShortEpg(const iptv::Profile &profile, const std::string &channelId, sources::GuideCallback callback);
+
     CancelToken resolveMovie(const iptv::Profile &profile, const std::string &movieId, sources::LinkCallback callback);
 
     CancelToken resolveEpisode(const iptv::Profile &profile, const std::string &cmd, int series,

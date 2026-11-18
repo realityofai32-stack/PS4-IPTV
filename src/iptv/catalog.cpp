@@ -14,6 +14,9 @@ namespace iptv {
     void LiveCatalog::assign(std::vector<Category> categories, std::vector<LiveChannel> channels) {
         cats = std::move(categories);
         list = std::move(channels);
+        provider = list.size();
+        allCats = cats;
+        userIndex.clear();
         byId.clear();
         byCategory.clear();
         std::vector<std::string> names, aliases;
@@ -28,6 +31,34 @@ namespace iptv {
         index.build(names, aliases);
     }
 
+    void LiveCatalog::setUserGroups(std::vector<LiveChannel> extra, std::vector<UserGroup> groups) {
+        for (size_t i = provider; i < list.size(); i++) {
+            auto it = byId.find(list[i].id);
+            if (it != byId.end() && it->second == (int) i) {
+                byId.erase(it);   // an extra channel of the previous user groups
+            }
+        }
+        list.resize(provider);
+        for (auto &c: extra) {
+            byId.emplace(c.id, (int) list.size());   // (a provider id is never replaced)
+            list.push_back(std::move(c));
+        }
+        allCats.clear();
+        userIndex.clear();
+        for (auto &g: groups) {
+            std::vector<int> valid;
+            for (int i: g.channels) {
+                if (i >= 0 && i < (int) list.size()) {
+                    valid.push_back(i);
+                }
+            }
+            if (userIndex.emplace(g.category.id, std::move(valid)).second) {
+                allCats.push_back(g.category);
+            }
+        }
+        allCats.insert(allCats.end(), cats.begin(), cats.end());
+    }
+
     const LiveChannel *LiveCatalog::find(const std::string &id) const {
         auto it = byId.find(id);
         return it == byId.end() ? nullptr : &list[(size_t) it->second];
@@ -37,7 +68,7 @@ namespace iptv {
         if (categoryId == UNCATEGORIZED_ID) {
             return uncategorizedName();   // localized when shown, not when the list was parsed
         }
-        for (const auto &c: cats) {
+        for (const auto &c: allCats) {
             if (c.id == categoryId) {
                 return c.name;
             }
@@ -54,6 +85,10 @@ namespace iptv {
     }
 
     const std::vector<int> &LiveCatalog::inCategory(const std::string &categoryId) const {
+        auto user = userIndex.find(categoryId);
+        if (user != userIndex.end()) {
+            return user->second;
+        }
         auto it = byCategory.find(categoryId);
         return it == byCategory.end() ? none : it->second;
     }

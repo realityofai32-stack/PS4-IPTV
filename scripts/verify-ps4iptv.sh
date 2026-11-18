@@ -95,14 +95,14 @@ allowed="$(printf '%s\n' assets/cacert.pem assets/fonts/DejaVuSans.ttf assets/fo
 unexpected="$(comm -23 <(echo "$files") <(echo "$allowed") | tr '\n' ' ')"
 missing="$(comm -13 <(echo "$files") <(echo "$allowed") | tr '\n' ' ')"
 entries="$(pkgtool pkg_listentries "$pkg" 2>&1)"
-sfo=0; grep -q PARAM_SFO <<< "$entries" && grep -q ICON0_PNG <<< "$entries" && sfo=1
+sfo=0; grep -q PARAM_SFO <<< "$entries" && grep -q ICON0_PNG <<< "$entries" && grep -q PIC1_PNG <<< "$entries" && sfo=1
 fonts=1
 for f in inter/Inter-Regular.ttf inter/Inter-SemiBold.ttf fonts-fallback/DejaVuSans.ttf fonts-fallback/DroidSansFallback.ttf \
          fonts-subtitles/V7Subtitles.ttf; do
     cmp -s "$uroot/assets/fonts/$(basename "$f")" "third_party/$f" || fonts=0
 done
 [[ -z "$unexpected" && -z "$missing" && $sfo == 1 && $fonts == 1 ]] && r=PASS || r=FAIL
-report $r '6 PKG contents allow-list' "fonts identical=$fonts sfo+icon=$sfo files=$(wc -l <<< "$files")${unexpected:+ | UNEXPECTED: $unexpected}${missing:+ | MISSING: $missing}"
+report $r '6 PKG contents allow-list' "fonts identical=$fonts sfo+icon+pic1=$sfo files=$(wc -l <<< "$files")${unexpected:+ | UNEXPECTED: $unexpected}${missing:+ | MISSING: $missing}"
 
 # 7
 scan="$("$cmake" "-DSCAN_DIR=$uroot" "-DSCAN_FILES=" "-DSECRET_SOURCES=$repo/config/test_streams.txt|$repo/config/forbidden_strings.txt" \

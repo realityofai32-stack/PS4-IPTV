@@ -40,7 +40,8 @@ namespace {
             h->setMaxWidth(1400);
             const char *xtreamSteps[] = {"connect.step_account", "connect.step_live"};
             const char *playlistSteps[] = {"connect.step_saved_playlist", "connect.step_download_playlist"};
-            const char **names = p.isPlaylist() ? playlistSteps : xtreamSteps;
+            const char *mediaSteps[] = {"connect.step_account", "connect.step_media"};
+            const char **names = p.isPlaylist() ? playlistSteps : !p.hasLive() ? mediaSteps : xtreamSteps;
             float x = (theme::SCREEN_W - 760) / 2;
             for (int i = 0; i < STEPS; i++) {
                 Step &s = steps[i];
@@ -209,9 +210,10 @@ namespace {
             app.library().setProfile(profile.id);
             app.vod().reset();   // Movies/Series of this profile load when first opened
             app.vod().setOffline(false);
-            setStep(0, State::Done, o.result.account.expiresAt > 0
-                                    ? tr("connect.active_until", {clockx::localDate(o.result.account.expiresAt)})
-                                    : tr("account.active"));
+            setStep(0, State::Done, !profile.hasLive() ? o.result.account.message
+                                    : o.result.account.expiresAt > 0
+                                      ? tr("connect.active_until", {clockx::localDate(o.result.account.expiresAt)})
+                                      : tr("account.active"));
             loadLive(false);
         }
 
@@ -235,6 +237,15 @@ namespace {
         }
 
         void loadLive(bool cacheOnly) {
+            if (!profile.hasLive()) {
+                // media servers / add-ons: no Live TV; Movies / Series load when opened (the saved copy first)
+                Session &s = app.session();
+                s.connected = !offline;
+                setStep(1, State::Done, tr(cacheOnly ? "connect.media_saved" : "connect.media_ready"));
+                LOG_I("connect", "media server ready%s", offline ? " (offline)" : "");
+                app.replaceAll(screens::makeHome(app));
+                return;
+            }
             setStep(1, State::Running, tr(cacheOnly ? "connect.loading_saved" : "connect.loading_channels"));
             token = app.sources().loadLive(profile, APP_DATA_DIR, [this](XtreamService::LiveOutcome &o) {
                 Session &s = app.session();
@@ -246,6 +257,7 @@ namespace {
                     s.live.loadedAt = o.fromCache ? o.savedAt : clockx::unixNow();
                     s.liveLoaded = true;
                     s.liveNotice = o.fromCache ? o.message : "";
+                    app.applyUserGroups();   // the user's playlists as Live TV groups
                     std::string detail = i18n::count("connect.categories", (long long) s.live.categories().size())
                                          + "  \xE2\x80\xA2  "
                                          + i18n::count("home.channels", (long long) s.live.channels().size());

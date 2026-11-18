@@ -26,10 +26,30 @@ namespace iptv {
 
     public:
 
-        // takes ownership of the lists and builds the indices (incl. the search index: 573 channels, cheap)
+        // takes ownership of the lists and builds the indices (incl. the search index: 573 channels, cheap). User
+        // groups are cleared.
         void assign(std::vector<Category> categories, std::vector<LiveChannel> channels);
 
-        const std::vector<Category> &categories() const { return cats; }
+        // A user playlist shown as a group (app/user_groups.h). Its channels are indices of the provider's channels
+        // (nothing copied) or of extra channels appended after them (entries the provider does not have).
+        struct UserGroup {
+            Category category;
+            std::vector<int> channels;
+        };
+
+        // replaces the user groups and their extra channels (the provider's channels and their indices stay)
+        void setUserGroups(std::vector<LiveChannel> extra, std::vector<UserGroup> groups);
+
+        // the user groups first (in their order), then the provider's categories
+        const std::vector<Category> &categories() const { return allCats; }
+
+        // the provider's categories only
+        const std::vector<Category> &providerCategories() const { return cats; }
+
+        // the provider's channels are channels()[0, providerCount()); the user groups' extra channels follow
+        size_t providerCount() const { return provider; }
+
+        bool isUserGroup(const std::string &categoryId) const { return userIndex.count(categoryId) > 0; }
 
         const std::vector<LiveChannel> &channels() const { return list; }
 
@@ -38,7 +58,7 @@ namespace iptv {
         // display name of a category id ("" when unknown; Uncategorized in the UI language)
         std::string categoryName(const std::string &categoryId) const;
 
-        // indices into channels() of one category, in provider order
+        // indices into channels() of one category, in provider order (a user group: in its own order)
         const std::vector<int> &inCategory(const std::string &categoryId) const;
 
         // indices of favorite channels, in favorite-set order of channels()
@@ -60,6 +80,9 @@ namespace iptv {
 
         int64_t loadedAt = 0;
         bool fromCache = false;
+        // playlist sources: the XMLTV guide addresses of the playlist header (m3u::Result::guideUrls; may carry
+        // credentials: never shown or logged)
+        std::vector<std::string> guideUrls;
 
     private:
 
@@ -69,6 +92,9 @@ namespace iptv {
         std::unordered_map<std::string, std::vector<int>> byCategory;
         search::Index index;
         std::vector<int> none;
+        size_t provider = 0;                                          // the provider's channels in `list`
+        std::vector<Category> allCats;                                // user groups + cats
+        std::unordered_map<std::string, std::vector<int>> userIndex;  // user group id -> its channels
     };
 
     inline const std::string &itemId(const Movie &m) { return m.streamId; }

@@ -70,6 +70,8 @@ namespace actions {
         TextSpace,
         TextShift,
         TextDone,
+        ChannelList,    // the live player: d-pad left opens the channel list (in it: the group list)
+        Guide,          // the live player: d-pad right opens the playing channel's guide
         Count
     };
 

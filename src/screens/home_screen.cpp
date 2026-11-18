@@ -167,8 +167,12 @@ namespace {
             topSolid->setVisibility(Visibility::Hidden);   // shown once the page has scrolled (see layoutPage)
             topFade->setVisibility(Visibility::Hidden);
 
-            std::vector<std::string> sections = {tr("nav.home"), tr("home.live_tv")};
-            navIds = {NAV_HOME, NAV_LIVE};
+            std::vector<std::string> sections = {tr("nav.home")};
+            navIds = {NAV_HOME};
+            if (s.profile.hasLive()) {
+                sections.push_back(tr("home.live_tv"));
+                navIds.push_back(NAV_LIVE);
+            }
             if (!playlist) {
                 sections.push_back(tr("home.movies"));
                 sections.push_back(tr("home.series"));
@@ -670,10 +674,14 @@ namespace {
             } else {
                 eyebrow->setText(tr("app.name"));
                 heroTitle->setText(tr("home.hero_start_title"));
-                heroSubtitle->setText(tr(playlist ? "home.hero_start_text_playlist" : "home.hero_start_text"));
+                bool media = !app.session().profile.hasLive();   // media servers / add-ons
+                heroSubtitle->setText(tr(playlist ? "home.hero_start_text_playlist"
+                                                  : media ? "home.hero_start_text_media" : "home.hero_start_text"));
                 heroMeta->setText(sectionCounts());
                 if (playlist) {
                     heroIds = {HERO_LIVE, HERO_SEARCH};
+                } else if (media) {
+                    heroIds = {HERO_MOVIES, HERO_SERIES, HERO_SEARCH};
                 } else {
                     heroIds = {HERO_LIVE, HERO_MOVIES, HERO_SERIES};
                 }
@@ -743,7 +751,7 @@ namespace {
                 }
             };
             if (s.liveLoaded) {
-                addPart(i18n::count("home.channels", (long long) s.live.channels().size()));
+                addPart(i18n::count("home.channels", (long long) s.live.providerCount()));
             }
             if (!playlist && !app.vod().movies().empty()) {
                 addPart(i18n::count("home.movie_count", (long long) app.vod().movies().size()));
@@ -1054,7 +1062,9 @@ namespace {
                                 at = (int) i;
                             }
                         }
-                        app.push(screens::makeLivePlayer(app, list.empty() ? std::vector<int>{it.index} : list, at));
+                        app.push(screens::makeLivePlayer(app, list.empty() ? std::vector<int>{it.index} : list, at, nullptr,
+                                                         list.empty() ? livenav::Group()
+                                                                      : livenav::Group::of(livenav::Group::Kind::Favorites)));
                         return;
                     }
                     case ItemKind::Movie:

@@ -39,6 +39,7 @@
 
 #include "common.h"
 #include "../core/format.h"
+#include "../iptv/mediabrowser.h"
 #include "../iptv/xtream.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
@@ -54,6 +55,11 @@ using namespace iptv;
 using screens::VodItem;
 
 namespace {
+
+    // an item id as the log shows it: a local file's id is its path ("local:/usb0/<folder>/<name>"), never logged
+    std::string logId(const std::string &id) {
+        return id.compare(0, 6, "local:") == 0 ? "[local file]" : id;   // i18n-exempt: log text
+    }
 
     const double SEEK_COMMIT_DELAY = 0.45;    // seconds after the last seek press
     const double END_MARGIN = 30;             // an end of file this close to the duration is the real end
@@ -268,7 +274,7 @@ namespace {
                     } else if (pb.state() == PlaybackState::Playing || pb.state() == PlaybackState::Paused) {
                         bool pause = pb.state() == PlaybackState::Playing;
                         if (pause) {
-                            saveFinal("pause");   // the exact paused position
+                            saveFinal("pause", false);   // the exact paused position (the playback goes on)
                         }
                         pb.setPaused(pause);
                         setOverlay(true);
@@ -330,6 +336,9 @@ namespace {
 
         // ------------------------------------------------------------------ playback
         void startItem(int i, bool resume) {
+            if (!playSessionId.empty()) {
+                reportServer(mediabrowser::Report::Stop, tracker.position());   // the item before (an automatic next)
+            }
             index = i;
             // a download of another (or a deleted) profile keeps its progress in that profile
             const std::string &owner = queue[(size_t) i].profileId;
@@ -357,7 +366,7 @@ namespace {
             // exactly the saved position (no seconds subtracted), when resuming an item in progress
             double start = tracker.begin(item(), resume && s.resumeVod, app.now());
             LOG_I("player", "%s %s (%s, %s), %s, stability %s, aspect %s, crop %s, zoom %d%%",
-                  isEpisode() ? "episode" : "movie", item().id.c_str(), item().extension.c_str(),
+                  isEpisode() ? "episode" : "movie", logId(item().id).c_str(), item().extension.c_str(),
                   item().localPath.empty() ? "stream" : "downloaded file",
                   start > 0 ? diag::format("resume at %.3fs", start).c_str() : "from the start", stabilityName(preset),
                   display::aspectKey(geometry.aspect), display::cropKey(geometry.crop), geometry.zoom);
@@ -387,6 +396,26 @@ namespace {
                 video->resetFrameStats();
                 return;
             }
+            if (it.localPath.empty() && !it.localMedia && app.session().profile.isAddon()) {
+                openAddon(start, container);
+                video->resetFrameStats();
+                return;
+            }
+            if (serverItem()) {
+                // a Jellyfin / Emby file as it is (no transcoding); the token goes in the address (registered secret)
+                std::string url = app.sources().mediaServer().streamUrl(app.session().profile, it.id);
+                pb.setUserAgent("");
+                if (url.empty()) {
+                    pb.prepare(container);
+                    pb.failBeforeOpen(tr("media.signed_out"), "media server not signed in", false);   // i18n-exempt
+                } else {
+                    playSessionId = std::to_string(clockx::unixNow()) + "-" + it.id;
+                    pb.open(url, container, openOptions(start));
+                    reportServer(mediabrowser::Report::Start, start);
+                }
+                video->resetFrameStats();
+                return;
+            }
             pb.setUserAgent("");
             // a downloaded copy / a local file plays from the disk (same backend, no provider request)
             std::string url = !it.localPath.empty() ? it.localPath
@@ -401,6 +430,29 @@ namespace {
             o.start = start;
             o.chooseTracks = [this](const std::vector<tracks::Track> &list) { return chooseTracks(list); };
             return o;
+        }
+
+        // Stremio add-on: its first stream the player can open, asked for every open (addresses can expire)
+        void openAddon(double start, const std::string &container) {
+            Playback &pb = app.playback();
+            pb.prepare(container);
+            int at = index;
+            std::string id = item().id;
+            linkToken = app.sources().addons().resolve(app.session().profile, isEpisode(), id,
+                                                       [this, at, id, start, container](const sources::LinkOutcome &r) {
+                if (index != at || item().id != id) {
+                    return;   // another item started meanwhile
+                }
+                Playback &p = app.playback();
+                if (!r.ok) {
+                    p.failBeforeOpen(r.message, "add-on stream failed", true);   // i18n-exempt: technical value
+                    refresh(app.now());
+                    return;
+                }
+                p.setUserAgent(r.userAgent);
+                p.open(r.url, container, openOptions(start));
+                refresh(app.now());
+            });
         }
 
         // Stalker: the portal creates the address (single-use play token) for every open
@@ -450,7 +502,7 @@ namespace {
                     app.vod().requestSeriesInfo(app.session().profile, it.seriesId);
                     awaitingInfoStart = start;
                     awaitingInfoGen = app.vod().generation();
-                    LOG_I("player", "episode %s: waiting for the series' episode list (play command)", it.id.c_str());
+                    LOG_I("player", "episode %s: waiting for the series' episode list (play command)", logId(it.id).c_str());
                     return;
                 }
                 pb.failBeforeOpen(tr("stalker.link.unknown"), "episode play command unknown", false);   // i18n-exempt: technical value
@@ -574,7 +626,7 @@ namespace {
             tracker.record(app.now(), -1, true);   // completed: watched, leaves Continue Watching
             persistUpNext("end of file");          // log reason i18n-exempt
             app.saveLibrary();
-            LOG_I("player", "%s finished", item().id.c_str());
+            LOG_I("player", "%s finished", logId(item().id).c_str());
             pb.stop();
             const bool wasShown = countdown.visible();
             logEndOfFile(wasShown);
@@ -653,14 +705,14 @@ namespace {
                 case autonext::CompletionLatch::Change::Latched:
                     tracker.setCompleted(true);
                     tracker.record(now);   // watched from now on, whatever happens next
-                    LOG_I("player", "episode %s complete for Continue Watching (%.1f s left)", item().id.c_str(),
+                    LOG_I("player", "episode %s complete for Continue Watching (%.1f s left)", logId(item().id).c_str(),
                           duration - tracker.position());
                     persistUpNext("last 45 s");   // log reason i18n-exempt
                     app.saveLibraryInBackground();
                     break;
                 case autonext::CompletionLatch::Change::Released:
                     tracker.setCompleted(false);   // seeked back: in progress again (the next record says so)
-                    LOG_I("player", "episode %s in progress again (seeked back)", item().id.c_str());
+                    LOG_I("player", "episode %s in progress again (seeked back)", logId(item().id).c_str());
                     break;
                 default:
                     break;
@@ -684,12 +736,12 @@ namespace {
             autonext::UpNext r = autonext::persistUpNext(app.library(), queue, index, nextIdx, info.get(),
                                                          clockx::unixNow());
             if (r == autonext::UpNext::Moved) {
-                LOG_I("player", "continue watching -> next episode %s (S%02dE%02d) at 0 s (%s)", n.id.c_str(), n.season,
+                LOG_I("player", "continue watching -> next episode %s (S%02dE%02d) at 0 s (%s)", logId(n.id).c_str(), n.season,
                       n.episode, why);
             } else {
                 const HistoryEntry *cur = app.library().seriesContinueEntry(n.seriesId);
                 LOG_I("player", "continue watching stays at %s (S%02dE%02d: later or in progress) (%s)",
-                      cur ? cur->id.c_str() : "-", cur ? cur->season : 0, cur ? cur->episode : 0, why);
+                      cur ? logId(cur->id).c_str() : "-", cur ? cur->season : 0, cur ? cur->episode : 0, why);
             }
         }
 
@@ -718,7 +770,7 @@ namespace {
             if (nextIdx >= 0) {
                 const VodItem &n = queue[(size_t) nextIdx];
                 nextText->setText(fmt::episodeCode(n.season, n.episode) + "  \xC2\xB7  " + episodeTitle(n));
-                LOG_I("player", "next episode: %s (S%02dE%02d%s, %s)", n.id.c_str(), n.season, n.episode,
+                LOG_I("player", "next episode: %s (S%02dE%02d%s, %s)", logId(n.id).c_str(), n.season, n.episode,
                       n.localPath.empty() ? "" : ", downloaded", info ? "catalog" : "queue order");
             } else {
                 LOG_I("player", "next episode: none - no Next Episode card for this episode (%s)",
@@ -771,7 +823,7 @@ namespace {
             LOG_I("player", "end approach: position %.2f of %.2f s (duration from %s), %.2f s left, state %d, recovery %s, "
                             "options panel %s, next %s, auto-play %s -> card %s", position, duration, durationSource(),
                   f.remaining, (int) app.playback().state(), statusName(recovery.status()), panelOpen ? "open" : "closed",
-                  nextIdx >= 0 ? queue[(size_t) nextIdx].id.c_str() : "none", f.autoPlay ? "on" : "off", card);
+                  nextIdx >= 0 ? logId(queue[(size_t) nextIdx].id).c_str() : "none", f.autoPlay ? "on" : "off", card);
         }
 
         // the end of file: how far from the reported duration it came, and what the card does
@@ -791,7 +843,7 @@ namespace {
             }
             LOG_I("player", "end of file at %.2f s, reported duration %.2f s (from %s, %.2f s short), next %s, auto-play "
                             "%s: card %s", position, duration, durationSource(), duration > 0 ? duration - position : -1.0,
-                  nextIdx >= 0 ? queue[(size_t) nextIdx].id.c_str() : "none", autoPlay() ? "on" : "off", card);
+                  nextIdx >= 0 ? logId(queue[(size_t) nextIdx].id).c_str() : "none", autoPlay() ? "on" : "off", card);
         }
         // i18n-exempt-end
 
@@ -865,7 +917,7 @@ namespace {
             if (target < 0 || target >= (int) queue.size()) {
                 return;
             }
-            LOG_I("player", "next episode (%s): %s -> %s", why, item().id.c_str(), queue[(size_t) target].id.c_str());
+            LOG_I("player", "next episode (%s): %s -> %s", why, logId(item().id).c_str(), logId(queue[(size_t) target].id).c_str());
             if (panelOpen) {
                 closePanel();
             }
@@ -982,15 +1034,35 @@ namespace {
         void saveProgress(bool toDisk) {
             if (tracker.record(app.now()) && toDisk) {
                 app.saveLibraryInBackground();   // every DISK_EVERY s while playing: no fsync on the render thread
+                reportServer(mediabrowser::Report::Progress, tracker.position());
             }
         }
 
-        // stop / pause / next episode / app exit: the position mpv has right now, written to disk at once
-        void saveFinal(const char *why) {
+        // stop / pause / next episode / app exit: the position mpv has right now, written to disk at once.
+        // ends: the playback of this item ends (not a pause)
+        void saveFinal(const char *why, bool ends = true) {
             double now = app.playback().queryPosition();
             if (tracker.record(app.now(), now)) {
                 app.saveLibrary();
                 LOG_I("player", "%s: progress saved at %.3fs of %.0fs", why, tracker.position(), tracker.duration());
+            }
+            reportServer(ends ? mediabrowser::Report::Stop : mediabrowser::Report::Progress, tracker.position());
+        }
+
+        // a movie / episode streamed from the signed-in Jellyfin / Emby server (not a download, not a local file)
+        bool serverItem() const {
+            return item().localPath.empty() && !item().localMedia && app.session().profile.isMediaServer();
+        }
+
+        // the server keeps the position too (other clients resume there; it marks the item played near its end)
+        void reportServer(mediabrowser::Report what, double position) {
+            if (!serverItem() || playSessionId.empty()) {
+                return;
+            }
+            bool paused = app.playback().state() == PlaybackState::Paused;
+            app.sources().mediaServer().report(app.session().profile, what, item().id, playSessionId, position, paused);
+            if (what == mediabrowser::Report::Stop) {
+                playSessionId.clear();   // one Stop per playback
             }
         }
 
@@ -1882,6 +1954,7 @@ namespace {
         double seekTarget = 0;
         double seekCommitAt = 0;
         bool finished = false;
+        std::string playSessionId;   // media servers: this playback's id in the progress reports ("" = none open)
         autonext::Countdown countdown;
         autonext::CompletionLatch completion;   // the last 45 s: complete for Continue Watching
         bool upNextDone = false;                // the next episode was made the series' Continue Watching entry

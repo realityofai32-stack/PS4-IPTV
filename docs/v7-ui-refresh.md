@@ -99,6 +99,13 @@ per screen, a fixed 6 px focus lift (existing), outline + fill focus.
 
 ## 3. Brand
 
+> **Update 2026-11-18: V7 Player.** The product name is now **V7 Player** ("Media & streaming for jailbroken PS4"):
+> `app.name`, PKG `TITLE`, onboarding, About, exit dialog, log lines, the Jellyfin / Emby client name. The kept
+> identifiers below are unchanged. The logo is the final V7 monogram (V, 7 and a curved hook on a 100 x 54 grid)
+> described once in `src/ui/brand_art.*`: `ui::BrandMark`, the loading screen (`ui::Splash`) and the package images
+> (`assets/icon0.png`, `assets/pic1.png`, rendered by `assets/make_brand.sh`) all draw it. The text below describes
+> the earlier V7 IPTV refresh.
+
 - Product-facing name **V7 IPTV**: `app.name`, exit dialog, onboarding, About, settings descriptions, PKG
   `TITLE` (param.sfo), icon0.png, startup log line.
 - Kept for compatibility: Title ID `IPTV00002`, content ID, `/data/PS4IPTV/` (profiles, settings, history,

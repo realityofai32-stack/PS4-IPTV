@@ -651,6 +651,11 @@ bool LibraryStore::load(std::string *warning) {
                 }
                 break;
             }
+            // kept as it is before any save replaces it (fs::keepDamagedCopy)
+            std::string kept = fs::keepDamagedCopy(path);
+            if (!kept.empty() && warning) {
+                *warning += path + " unreadable, kept as " + kept + ". ";
+            }
         }
         if (!loaded && fs::exists(base) && warning) {
             *warning += err + " ";

@@ -12,10 +12,21 @@
 //
 // Stalker / MAG channels: every open (first open, zap, reconnect) asks the portal for a fresh address
 // (create_link, single-use play token) and plays it with the MAG User-Agent; the portal decides the format.
+//
+// In-player navigation (app/live_nav.h decides, this screen draws; the video goes on behind every panel): Left opens
+// the channel list of the current group on the left edge, Left again the group list next to it; Right opens the
+// playing channel's guide on the right edge; Circle steps back. A channel picked in the list plays at once, without
+// leaving the player. The lists are the session's catalog indices; rows show only logos already in memory (no image
+// download competes with the stream). The guide asks the source for one channel's short guide when it is shown
+// (iptv/epg.h: never for Xtream channels without an EPG id; a playlist reads its saved XMLTV guide, downloaded once
+// when first needed - app/xmltv_service.h; answers kept in the session).
 
 #include <cmath>
 
 #include "common.h"
+#include "../app/live_nav.h"
+#include "../core/format.h"
+#include "../iptv/epg.h"
 #include "../player/display.h"
 #include "../iptv/m3u.h"
 #include "../iptv/xtream.h"
@@ -114,8 +125,10 @@ namespace {
     class LivePlayerScreen : public Screen {
     public:
         LivePlayerScreen(App &a, std::vector<int> channelList, int start,
-                         std::function<void(const std::string &)> exitCallback)
-                : Screen(a), list(std::move(channelList)), index(start), onExit(std::move(exitCallback)) {
+                         std::function<void(const std::string &)> exitCallback, livenav::Group group)
+                : Screen(a), list(std::move(channelList)), index(start), onExit(std::move(exitCallback)),
+                  nav(a.session().live, a.library().favorites(ContentType::Live), list, group, list[(size_t) start]),
+                  groupRows(this), channelRows(this) {
             setFillColor(theme::videoBackground());
             app.setPlaybackActive(true);   // downloads pause while a stream is decoded
             app.session().livePlayers++;   // a refreshed playlist waits: `list` holds indices into the catalog
@@ -147,7 +160,8 @@ namespace {
             hints->setOwner(this);   // its actions are this screen's keyboard shortcuts (also while the HUD is hidden)
             hints->setPosition(theme::SAFE_X, layout::HINTS_Y - (theme::SCREEN_H - bh));
             bottom->add(hints);
-            hints->setHints({{A::Confirm, tr("live.controls")}, {A::Tabs, tr("live.channel")},
+            hints->setHints({{A::Confirm, tr("live.controls")}, {A::ChannelList, tr("live.channels")},
+                             {A::Guide, tr("live.guide")}, {A::Tabs, tr("live.channel")},
                              {A::Favorite, tr("common.favorite")}, {A::Info, tr("player.info")},
                              {A::Back, tr("common.back")}});
 
@@ -188,7 +202,12 @@ namespace {
             infoText = ui::label(info, "", theme::LABEL, 36, 96, ui::Weight::Regular, theme::textSecondary());
             infoText->setMaxWidth(600);
             infoText->setMaxLines(15);
-            info->setVisibility(app.settings().get().showTechnicalInfo ? Visibility::Visible : Visibility::Hidden);
+            infoWanted = app.settings().get().showTechnicalInfo;
+            info->setVisibility(infoWanted ? Visibility::Visible : Visibility::Hidden);
+
+            // the in-player channel list / group list and guide (above everything else, hidden until asked for)
+            buildDrawer();
+            buildGuide();
         }
 
         ~LivePlayerScreen() override {
@@ -208,6 +227,12 @@ namespace {
         }
 
         void tick(double now) override {
+            if (nav.tick(now)) {
+                syncPanels();   // a panel left alone closed by itself
+            }
+            if (nav.panel() == livenav::Panel::Guide && (guideDirty || now - lastGuide >= 1.0)) {
+                renderGuide(now);
+            }
             Playback &pb = app.playback();
             pb.setFramesRendered(video->getFramesRendered());
             pb.setRenderTiming(video->renderTiming());  // counter is reset on every open()
@@ -237,6 +262,23 @@ namespace {
 
         void handleInput(const InputEvent &e) override {
             lastInput = app.now();
+            // the channel list / group list / guide first (app/live_nav.h); what they do not take is the player's
+            livenav::Outcome o = nav.press(e.button, e.repeat, lastInput);
+            if (o.handled) {
+                if (o.play) {
+                    LOG_I("player", "channel picked in the channel list (%d in the group)", (int) o.list.size());
+                    list = std::move(o.list);   // the group becomes the zap list
+                    pendingIndex = -1;
+                    startChannel(o.index, false);
+                }
+                if (o.changed) {
+                    syncPanels();
+                    if (nav.panel() == livenav::Panel::None) {
+                        setOverlay(true);   // back to the picture: the channel line for a moment
+                    }
+                }
+                return;
+            }
             switch (e.button) {
                 case PadButton::Circle:
                     if (e.repeat) {
@@ -280,13 +322,15 @@ namespace {
                     if (!e.repeat) {
                         bool on = app.library().toggleFavorite(ContentType::Live, channel(index).id);
                         app.saveLibrary();
+                        nav.refresh();   // the Favorites group of the channel list
                         app.toast(tr(on ? "favorites.added" : "favorites.removed"));
                         setOverlay(true);
                     }
                     return;
                 case PadButton::Triangle:
                     if (!e.repeat) {
-                        info->setVisibility(info->isVisible() ? Visibility::Hidden : Visibility::Visible);
+                        infoWanted = !infoWanted;
+                        info->setVisibility(infoWanted ? Visibility::Visible : Visibility::Hidden);
                         refresh(app.now());
                     }
                     return;
@@ -310,6 +354,7 @@ namespace {
             pendingIndex = (base + delta + n) % n;
             zapAt = app.now() + ZAP_DEBOUNCE;
             setOverlay(true);
+            guideDirty = true;   // an open guide names the channel at once (its guide is asked once the zap settles)
             refresh(app.now());
         }
 
@@ -337,6 +382,8 @@ namespace {
                   s.retryOnStall ? "on" : "off");
             open();
             setOverlay(true);
+            nav.setPlaying(list[(size_t) index]);   // the lists mark it, the guide follows it
+            guideDirty = true;
         }
 
         void open() {
@@ -450,6 +497,7 @@ namespace {
         }
 
         void setOverlay(bool show) {
+            show = show && nav.panel() == livenav::Panel::None;   // a panel open: no channel line under it
             overlayVisible = show;
             top->setVisibility(show ? Visibility::Visible : Visibility::Hidden);
             bottom->setVisibility(show ? Visibility::Visible : Visibility::Hidden);
@@ -538,6 +586,9 @@ namespace {
                 pillSpinner->tick(now);
             }
 
+            if (guideSpinner->isVisible()) {
+                guideSpinner->tick(now);
+            }
             if (info->isVisible()) {
                 std::string reason = recovery.reasonText();
                 std::vector<std::pair<const char *, std::string>> lines = {
@@ -565,9 +616,423 @@ namespace {
             }
         }
 
+        // ------------------------------------------------------------------ in-player channel list / groups
+        // rows of the group list: the name and the number of channels
+        struct GroupRows : ui::ListView::Adapter {
+            explicit GroupRows(LivePlayerScreen *s) : screen(s) {}
+
+            int count() override { return (int) screen->nav.groups().size(); }
+
+            C2DObject *createRow(float w, float h) override {
+                Row r;
+                r.bg = new ui::RowFrame(w, h, -1);
+                r.name = ui::label(r.bg, "", theme::LABEL, layout::ROW_PAD, ui::Label::centerOffset(theme::LABEL, h));
+                r.count = ui::label(r.bg, "", theme::CAPTION, 0, ui::Label::centerOffset(theme::CAPTION, h),
+                                    ui::Weight::Regular, theme::textMuted());
+                r.count->setAlign(ui::Align::Right, w - 14);
+                rows.push_back(r);
+                return r.bg;
+            }
+
+            void bindRow(C2DObject *obj, int i, bool selected, bool focused) override {
+                for (auto &r: rows) {
+                    if (r.bg != obj) {
+                        continue;
+                    }
+                    r.count->setText(std::to_string(screen->nav.count(i)));
+                    r.name->setMaxWidth(r.bg->getSize().x - layout::ROW_PAD - r.count->width() - 26);
+                    r.name->setText(screen->nav.name(i));
+                    r.name->setWeight(selected ? ui::Weight::SemiBold : ui::Weight::Regular);
+                    r.name->setColor(focused ? theme::textStrong() : selected ? theme::textPrimary()
+                                                                              : theme::textSecondary());
+                    r.count->setColor(focused ? theme::textSecondary() : theme::textMuted());
+                    r.bg->setState(focused, selected);
+                }
+            }
+
+            struct Row {
+                ui::RowFrame *bg;
+                ui::Label *name;
+                ui::Label *count;
+            };
+            LivePlayerScreen *screen;
+            std::vector<Row> rows;
+        };
+
+        // rows of the channel list: number, logo (only one already in memory: no download while streaming), name,
+        // the playing mark and the favorite star
+        struct ChannelRows : ui::ListView::Adapter {
+            explicit ChannelRows(LivePlayerScreen *s) : screen(s) {}
+
+            int count() override { return (int) screen->nav.channels().size(); }
+
+            C2DObject *createRow(float w, float h) override {
+                namespace O = layout::liveov;
+                Row r;
+                r.bg = new ui::RowFrame(w, h, O::LOGO_X);
+                r.num = ui::label(r.bg, "", theme::CAPTION, 0, ui::Label::centerOffset(theme::CAPTION, h),
+                                  ui::Weight::Regular, theme::textMuted());
+                r.num->setAlign(ui::Align::Right, O::NUM_W);
+                r.logo = new ui::LogoView(FloatRect(O::LOGO_X, (h - O::LOGO_H) / 2, O::LOGO_W, O::LOGO_H), 20, 4, 1.25f);
+                r.logo->setCornersRadius(theme::RADIUS_SMALL);
+                r.bg->add(r.logo);
+                r.name = ui::label(r.bg, "", theme::BODY, O::NAME_X, ui::Label::centerOffset(theme::BODY, h));
+                r.name->setMaxWidth(w - O::NAME_X - O::MARK_W);
+                r.mark = ui::box(r.bg, FloatRect(w - O::MARK_W + 6, (h - 12) / 2, 12, 12), theme::accent(), 6);
+                r.fav = ui::label(r.bg, "", theme::BODY, 0, ui::Label::centerOffset(theme::BODY, h),
+                                  ui::Weight::SemiBold, theme::warning());
+                r.fav->setAlign(ui::Align::Right, w - 14);
+                rows.push_back(r);
+                return r.bg;
+            }
+
+            void bindRow(C2DObject *obj, int i, bool selected, bool focused) override {
+                const LiveCatalog &live = screen->app.session().live;
+                int ci = screen->nav.channels()[(size_t) i];
+                const LiveChannel &c = live.channels()[(size_t) ci];
+                for (auto &r: rows) {
+                    if (r.bg != obj) {
+                        continue;
+                    }
+                    std::shared_ptr<ImageSet> img = screen->app.images().get(c.icon);   // memory only: no request
+                    r.logo->set(c.name, img ? img->at(0).texture : nullptr, img ? img->at(0).size : Vector2i());
+                    r.num->setText(c.num > 0 ? std::to_string(c.num) : "");
+                    r.name->setText(c.name);
+                    bool playing = ci == screen->nav.playing();
+                    r.name->setWeight(focused || playing ? ui::Weight::SemiBold : ui::Weight::Regular);
+                    r.name->setColor(focused ? theme::textStrong() : playing ? theme::accentText() : theme::textPrimary());
+                    r.num->setColor(focused ? theme::textPrimary() : theme::textMuted());
+                    r.mark->setVisibility(playing ? Visibility::Visible : Visibility::Hidden);
+                    r.fav->setText(screen->app.library().isFavorite(ContentType::Live, c.id) ? "\xE2\x98\x85" : "");
+                    r.bg->setState(focused, selected);
+                }
+            }
+
+            struct Row {
+                ui::RowFrame *bg;
+                ui::Label *num;
+                ui::LogoView *logo;
+                ui::Label *name;
+                RectangleShape *mark;
+                ui::Label *fav;
+            };
+            LivePlayerScreen *screen;
+            std::vector<Row> rows;
+        };
+
+        // the left panel: the group list (only while it is open) and the channel list
+        void buildDrawer() {
+            namespace O = layout::liveov;
+            drawer = ui::box(this, FloatRect(0, 0, O::DRAWER_W, theme::SCREEN_H), theme::panel(), 0);
+            // a soft right edge instead of a cut into the picture
+            drawerFade = ui::fade(drawer, FloatRect(O::DRAWER_W, 0, O::EDGE_W, theme::SCREEN_H), theme::panel(),
+                                  ui::Edge::Left);
+            groupsTitle = ui::label(drawer, tr("live.groups"), theme::HEADING, O::GROUPS_X, O::TITLE_Y,
+                                    ui::Weight::SemiBold);
+            groupsTitle->setMaxWidth(O::GROUPS_W);
+            groupList = new ui::ListView(FloatRect(O::GROUPS_X, O::LIST_Y, O::GROUPS_W, O::LIST_H), O::ROW_H, O::ROW_GAP,
+                                         &groupRows);
+            drawer->add(groupList);
+            channelsTitle = ui::label(drawer, "", theme::HEADING, O::CH_X, O::TITLE_Y, ui::Weight::SemiBold);
+            channelsTitle->setMaxWidth(O::CH_W);
+            channelsCount = ui::label(drawer, "", theme::LABEL, O::CH_X, O::CONTEXT_Y, ui::Weight::Regular,
+                                      theme::textMuted());
+            channelList = new ui::ListView(FloatRect(O::CH_X, O::LIST_Y, O::CH_W, O::LIST_H), O::ROW_H, O::ROW_GAP,
+                                           &channelRows);
+            drawer->add(channelList);
+            channelsEmpty = ui::label(drawer, "", theme::BODY, O::CH_X, O::LIST_Y + 40, ui::Weight::Regular,
+                                      theme::textMuted());
+            channelsEmpty->setMaxWidth(O::CH_W);
+            drawerHints = new ui::HintBar();
+            drawerHints->setOwner(this);
+            drawer->add(drawerHints);
+            drawer->setVisibility(Visibility::Hidden);
+            nav.setPageSize(channelList->pageSize());
+        }
+
+        // shows the panels as the navigation has them
+        void syncPanels() {
+            namespace O = layout::liveov;
+            livenav::Panel p = nav.panel();
+            bool lists = p == livenav::Panel::Channels || p == livenav::Panel::Groups;
+            bool groups = p == livenav::Panel::Groups;
+            if (p != livenav::Panel::None) {
+                setOverlay(false);   // the channel line would sit under the panel
+            }
+            drawer->setVisibility(lists ? Visibility::Visible : Visibility::Hidden);
+            if (lists) {
+                float w = groups ? O::DRAWER_W_WITH_GROUPS : O::DRAWER_W;
+                drawer->setSize(w, theme::SCREEN_H);
+                ui::refade(drawerFade, FloatRect(w, 0, O::EDGE_W, theme::SCREEN_H), theme::panel(), ui::Edge::Left);
+                groupsTitle->setVisibility(groups ? Visibility::Visible : Visibility::Hidden);
+                groupList->setVisibility(groups ? Visibility::Visible : Visibility::Hidden);
+                float cx = groups ? O::CH_X_WITH_GROUPS : O::CH_X;
+                channelsTitle->setPosition(cx, O::TITLE_Y);
+                channelsCount->setPosition(cx, O::CONTEXT_Y);
+                channelList->setPosition(cx, O::LIST_Y);
+                channelsEmpty->setPosition(cx, O::LIST_Y + 40);
+                groupList->setFocused(groups);
+                channelList->setFocused(!groups);
+                if (groups) {
+                    if (nav.groupSelected() != groupList->selected() && drawnGroups) {
+                        groupList->moveSelection(nav.groupSelected() - groupList->selected());
+                    } else {
+                        groupList->setSelected(nav.groupSelected());
+                    }
+                }
+                drawnGroups = groups;
+                // the same group: the selection glides; another group: the list is bound again
+                int shownGroup = nav.groupShown();
+                if (shownGroup == drawnGroup && (int) nav.channels().size() == drawnCount) {
+                    if (nav.channelSelected() != channelList->selected()) {
+                        channelList->moveSelection(nav.channelSelected() - channelList->selected());
+                    } else {
+                        channelList->reload();   // the playing mark / stars
+                    }
+                } else {
+                    channelList->reload();
+                    channelList->setSelected(nav.channelSelected());
+                }
+                drawnGroup = shownGroup;
+                drawnCount = (int) nav.channels().size();
+                channelsTitle->setText(nav.name(shownGroup));
+                channelsCount->setText(nav.channels().empty() ? "" : fmt::number((long long) nav.channels().size()));
+                channelsEmpty->setText(nav.channels().empty() ? tr("live.no_channels") : "");
+                // size first: the hint bar picks its compact layout from its width when the hints change
+                drawerHints->setPosition(O::GROUPS_X, layout::HINTS_Y);
+                drawerHints->setSize(w - O::GROUPS_X - O::PAD, layout::HINTS_H);
+                if (groups) {
+                    drawerHints->setHints({{A::Confirm, tr("common.open")}, {A::Back, tr("common.back")}});
+                } else {
+                    drawerHints->setHints({{A::Confirm, tr("live.watch")}, {A::Tabs, tr("live.group")},
+                                           {A::ChannelList, tr("live.groups")}, {A::Back, tr("common.close")}});
+                }
+            } else {
+                drawnGroup = -1;   // bound again when it opens
+                drawnGroups = false;
+            }
+            bool guideShown = p == livenav::Panel::Guide;
+            guidePanel->setVisibility(guideShown ? Visibility::Visible : Visibility::Hidden);
+            // the technical info would sit under the guide: hidden meanwhile, back after
+            info->setVisibility(infoWanted && !guideShown ? Visibility::Visible : Visibility::Hidden);
+            if (guideShown) {
+                renderGuide(app.now());
+            }
+        }
+
+        // ------------------------------------------------------------------ in-player guide
+        void buildGuide() {
+            namespace O = layout::liveov;
+            const float x = O::GUIDE_PAD;
+            const float w = O::GUIDE_TEXT_W;
+            guidePanel = ui::box(this, FloatRect(O::GUIDE_X, 0, O::GUIDE_W, theme::SCREEN_H), theme::panel(), 0);
+            ui::fade(guidePanel, FloatRect(-O::EDGE_W, 0, O::EDGE_W, theme::SCREEN_H), theme::panel(), ui::Edge::Right);
+            guideName = ui::label(guidePanel, "", theme::HEADING, x, O::TITLE_Y, ui::Weight::SemiBold);
+            guideName->setMaxWidth(w);
+            guideMeta = ui::label(guidePanel, "", theme::LABEL, x, O::CONTEXT_Y, ui::Weight::Regular,
+                                  theme::textSecondary());
+            guideMeta->setMaxWidth(w);
+            guideState = ui::label(guidePanel, "", theme::BODY, x, O::LIST_Y + 20, ui::Weight::Regular,
+                                   theme::textMuted());
+            guideState->setMaxWidth(w);
+            guideState->setMaxLines(2);
+            guideSpinner = new ui::Spinner(12);
+            guideSpinner->setPosition(x, O::LIST_Y + 34);
+            guidePanel->add(guideSpinner);
+            nowTag = ui::label(guidePanel, tr("live.now"), theme::CAPTION, x, 0, ui::Weight::SemiBold, theme::accentText());
+            nowTime = ui::label(guidePanel, "", theme::LABEL, x, 0, ui::Weight::Regular, theme::textSecondary());
+            nowTime->setMaxWidth(w);
+            nowTitle = ui::label(guidePanel, "", theme::HEADING, x, 0, ui::Weight::SemiBold);
+            nowTitle->setMaxWidth(w);
+            nowTitle->setMaxLines(2);
+            nowTrack = ui::box(guidePanel, FloatRect(x, 0, w, O::GUIDE_BAR_H), theme::progressTrack(), O::GUIDE_BAR_H / 2);
+            nowFill = ui::box(nowTrack, FloatRect(0, 0, O::GUIDE_BAR_H, O::GUIDE_BAR_H), theme::accent(),
+                              O::GUIDE_BAR_H / 2);
+            nowDesc = ui::label(guidePanel, "", theme::LABEL, x, 0, ui::Weight::Regular, theme::textSecondary());
+            nowDesc->setMaxWidth(w);
+            nowDesc->setMaxLines(7);
+            nextTag = ui::label(guidePanel, tr("live.next"), theme::CAPTION, x, 0, ui::Weight::SemiBold,
+                                theme::accentText());
+            for (auto &l: nextLines) {
+                l = ui::label(guidePanel, "", theme::BODY, x, 0, ui::Weight::Regular);
+                l->setMaxWidth(w);
+            }
+            auto *gh = new ui::HintBar();
+            gh->setOwner(this);
+            gh->setPosition(x, layout::HINTS_Y);
+            gh->setSize(w, layout::HINTS_H);
+            gh->setHints({{A::ChannelList, tr("live.channels")}, {A::Back, tr("common.close")}});
+            guidePanel->add(gh);
+            guidePanel->setVisibility(Visibility::Hidden);
+        }
+
+        // where the guide of a channel comes from (None: "no program information" without a request)
+        epg::Source guideSource(const LiveChannel &c) const {
+            return epg::sourceFor(app.session().profile.type, c, !app.session().live.guideUrls.empty());
+        }
+
+        // asks the source for the playing channel's guide when it has one and the answer it has is due
+        void requestGuide() {
+            const LiveChannel &c = channel(index);
+            epg::Source source = guideSource(c);
+            if (source == epg::Source::None) {
+                return;   // no request: the source has no guide for this channel
+            }
+            epg::Cache &cache = app.session().guide;
+            int64_t now = clockx::unixNow();
+            if (!cache.due(c.id, now)) {
+                return;
+            }
+            bool offline = app.session().offline;
+            if (offline && source != epg::Source::Xmltv) {
+                cache.failed(c.id, now);   // the provider is out of reach: not "loading" forever
+                return;
+            }
+            cache.loading(c.id, now);
+            App *a = &app;
+            unsigned serial = app.session().serial;
+            std::string id = c.id;
+            std::weak_ptr<bool> alive = guideAlive;
+            app.sources().loadGuide(app.session().profile, app.session().live, c, offline,
+                                    [a, serial, id, alive, this](sources::GuideOutcome &o) {
+                if (a->session().serial != serial) {
+                    return;   // signed in to another source meanwhile
+                }
+                int64_t t = clockx::unixNow();
+                if (o.ok) {
+                    a->session().guide.store(id, std::move(o.programmes), t);
+                } else {
+                    a->session().guide.failed(id, t);
+                }
+                if (alive.lock()) {
+                    guideDirty = true;
+                }
+            });
+        }
+
+        // the guide of the channel shown (the zap target while zapping): the programme on air with its time,
+        // progress and description, then the next ones - or one clean line when there is nothing to show
+        void renderGuide(double t) {
+            namespace O = layout::liveov;
+            guideDirty = false;
+            lastGuide = t;
+            int shownIndex = pendingIndex >= 0 ? pendingIndex : index;
+            const LiveChannel &c = channel(shownIndex);
+            guideName->setText(c.name);
+            std::string group = app.session().live.categoryName(c.categoryId);
+            guideMeta->setText(c.num > 0 ? std::to_string(c.num) + (group.empty() ? "" : "   \xC2\xB7   " + group) : group);
+            if (pendingIndex < 0) {
+                requestGuide();   // never for every channel passed while zapping
+            }
+            for (C2DObject *o: std::initializer_list<C2DObject *>{nowTag, nowTime, nowTitle, nowTrack, nowDesc, nextTag,
+                                                                  nextLines[0], nextLines[1], nextLines[2]}) {
+                o->setVisibility(Visibility::Hidden);
+            }
+            bool none = guideSource(c) == epg::Source::None;
+            const epg::Cache::Entry &e = none ? noGuide : app.session().guide.get(c.id);
+            int64_t now = clockx::unixNow();
+            std::string state;
+            bool loading = false;
+            epg::NowNext nn;
+            if (none || e.state == epg::Cache::State::Empty) {
+                state = tr("live.no_program");
+            } else if (e.state == epg::Cache::State::Failed) {
+                state = tr("live.program_failed");
+            } else if (e.state == epg::Cache::State::Missing || e.state == epg::Cache::State::Loading) {
+                state = tr("live.program_loading");
+                loading = true;
+            } else {
+                nn = epg::nowNext(e.programmes, now);
+                if (nn.now < 0 && nn.next < 0) {
+                    state = tr("live.no_program");   // everything it sent has ended
+                }
+            }
+            guideState->setText(state);
+            guideState->setPosition(loading ? O::GUIDE_PAD + 60 : O::GUIDE_PAD, O::LIST_Y + 20);
+            guideSpinner->setVisibility(loading ? Visibility::Visible : Visibility::Hidden);
+            if (!state.empty()) {
+                return;
+            }
+            // i18n-exempt-begin: times and separators
+            float y = O::LIST_Y + 20;
+            if (nn.now >= 0) {
+                const epg::Programme &p = e.programmes[(size_t) nn.now];
+                nowTag->setPosition(O::GUIDE_PAD, y);
+                y += 36;
+                nowTime->setText(clockx::localTimeOf(p.start) + " \xE2\x80\x93 " + clockx::localTimeOf(p.stop)
+                                 + "   \xC2\xB7   " + tr("live.minutes_left", {std::to_string(epg::minutesLeft(p, now))}));
+                nowTime->setPosition(O::GUIDE_PAD, y);
+                y += 40;
+                nowTitle->setText(p.title);
+                nowTitle->setPosition(O::GUIDE_PAD, y);
+                y += nowTitle->height() + 18;
+                nowTrack->setPosition(O::GUIDE_PAD, y);
+                nowFill->setSize(std::max(O::GUIDE_BAR_H, (float) (O::GUIDE_TEXT_W * epg::progress(p, now))),
+                                 O::GUIDE_BAR_H);
+                y += O::GUIDE_BAR_H + 26;
+                nowDesc->setText(p.description);
+                nowDesc->setPosition(O::GUIDE_PAD, y);
+                if (!p.description.empty()) {
+                    y += nowDesc->height() + 36;
+                }
+                for (C2DObject *o: std::initializer_list<C2DObject *>{nowTag, nowTime, nowTitle, nowTrack}) {
+                    o->setVisibility(Visibility::Visible);
+                }
+                nowDesc->setVisibility(p.description.empty() ? Visibility::Hidden : Visibility::Visible);
+            }
+            if (nn.next >= 0) {
+                nextTag->setPosition(O::GUIDE_PAD, y);
+                nextTag->setVisibility(Visibility::Visible);
+                y += 36;
+                for (int k = 0; k < 3 && nn.next + k < (int) e.programmes.size(); k++) {
+                    const epg::Programme &p = e.programmes[(size_t) (nn.next + k)];
+                    ui::Label *l = nextLines[k];
+                    l->setText(clockx::localTimeOf(p.start) + "   " + p.title);
+                    l->setColor(k == 0 ? theme::textPrimary() : theme::textSecondary());
+                    l->setPosition(O::GUIDE_PAD, y);
+                    l->setVisibility(Visibility::Visible);
+                    y += 46;
+                }
+            }
+            // i18n-exempt-end
+        }
+
         std::vector<int> list;
         int index;
         std::function<void(const std::string &)> onExit;
+        livenav::Navigator nav;   // the channel list / group list / guide (after `list`: built from it)
+        GroupRows groupRows;
+        ChannelRows channelRows;
+        RectangleShape *drawer = nullptr;
+        RectangleShape *drawerFade = nullptr;
+        ui::Label *groupsTitle = nullptr;
+        ui::ListView *groupList = nullptr;
+        ui::Label *channelsTitle = nullptr;
+        ui::Label *channelsCount = nullptr;
+        ui::ListView *channelList = nullptr;
+        ui::Label *channelsEmpty = nullptr;
+        ui::HintBar *drawerHints = nullptr;
+        int drawnGroup = -1;
+        int drawnCount = -1;
+        bool drawnGroups = false;
+        RectangleShape *guidePanel = nullptr;
+        ui::Label *guideName = nullptr;
+        ui::Label *guideMeta = nullptr;
+        ui::Label *guideState = nullptr;
+        ui::Spinner *guideSpinner = nullptr;
+        ui::Label *nowTag = nullptr;
+        ui::Label *nowTime = nullptr;
+        ui::Label *nowTitle = nullptr;
+        RectangleShape *nowTrack = nullptr;
+        RectangleShape *nowFill = nullptr;
+        ui::Label *nowDesc = nullptr;
+        ui::Label *nextTag = nullptr;
+        ui::Label *nextLines[3] = {nullptr, nullptr, nullptr};
+        epg::Cache::Entry noGuide;          // what a channel without a guide source shows
+        bool guideDirty = false;
+        double lastGuide = 0;
+        std::shared_ptr<bool> guideAlive = std::make_shared<bool>(true);   // guide answers after the screen left
+        bool infoWanted = false;
         int pendingIndex = -1;
         double zapAt = 0;
         std::string format = "ts";
@@ -615,7 +1080,7 @@ namespace {
 
 namespace screens {
     Screen *makeLivePlayer(App &app, const std::vector<int> &channels, int index,
-                           std::function<void(const std::string &)> onExit) {
-        return new LivePlayerScreen(app, channels, index, std::move(onExit));
+                           std::function<void(const std::string &)> onExit, livenav::Group group) {
+        return new LivePlayerScreen(app, channels, index, std::move(onExit), group);
     }
 }

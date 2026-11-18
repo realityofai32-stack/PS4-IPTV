@@ -9,17 +9,25 @@ out="$repo/build/host-tests-linux"
 inc="$out/curl-include"
 mkdir -p "$out" "$inc"
 ln -sfn "$repo/toolchain/pacbrew/opt/pacbrew/ps4/openorbis/usr/include/curl" "$inc/curl"
+# the guide service's gzip reader: zlib.h / zconf.h of the same sysroot, the system's libz.so.1
+zinc="$out/zlib-include"
+mkdir -p "$zinc"
+ln -sfn "$repo/toolchain/pacbrew/opt/pacbrew/ps4/openorbis/usr/include/zlib.h" "$zinc/zlib.h"
+ln -sfn "$repo/toolchain/pacbrew/opt/pacbrew/ps4/openorbis/usr/include/zconf.h" "$zinc/zconf.h"
+libz="$(ls /usr/lib/x86_64-linux-gnu/libz.so.1 /usr/lib64/libz.so.1 /usr/lib/libz.so.1 2>/dev/null | head -1 || true)"
 libcurl="$(ls /usr/lib/x86_64-linux-gnu/libcurl.so.4 /usr/lib64/libcurl.so.4 /usr/lib/libcurl.so.4 2>/dev/null | head -1 || true)"
 s="$repo/src"
 h="$repo/tests/host"
 g++ -std=c++17 -O1 -g -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers -pthread \
-    ${SANITIZE:-} -I "$s" -I "$inc" -o "$out/stalker_it" "$h/test_main.cpp" "$h/stalker_it.cpp" \
+    ${SANITIZE:-} -I "$s" -I "$inc" -I "$zinc" -o "$out/stalker_it" "$h/test_main.cpp" "$h/stalker_it.cpp" \
     "$s/app/stalker_service.cpp" "$s/app/xtream_service.cpp" "$s/app/vod_library.cpp" "$s/app/auto_next.cpp" \
-    "$s/app/series_plan.cpp" "$s/iptv/stalker.cpp" "$s/iptv/xtream.cpp" "$s/iptv/catalog.cpp" \
+    "$s/app/series_plan.cpp" "$s/app/xmltv_service.cpp" "$s/app/mediabrowser_service.cpp" "$s/app/stremio_service.cpp" \
+    "$s/iptv/xmltv.cpp" "$s/iptv/epg.cpp" "$s/iptv/m3u.cpp" "$s/iptv/mediabrowser.cpp" "$s/iptv/stremio.cpp" \
+    "$s/network/gunzip.cpp" "$s/iptv/stalker.cpp" "$s/iptv/xtream.cpp" "$s/iptv/catalog.cpp" \
     "$s/iptv/search_index.cpp" "$s/network/http.cpp" "$s/network/http_policy.cpp" "$s/network/jobs.cpp" "$s/storage/catalog_cache.cpp" \
     "$s/storage/library_store.cpp" "$s/platform/fs.cpp" "$s/platform/log.cpp" "$s/platform/redact.cpp" \
     "$s/platform/clock.cpp" "$s/player/protocols.cpp" "$s/core/json.cpp" "$s/core/utf8.cpp" "$s/core/url.cpp" \
-    "$s/core/hash.cpp" "$s/core/format.cpp" "$s/i18n/i18n.cpp" "$s/i18n/strings_en.cpp" "$s/i18n/strings_tr.cpp" "$libcurl"
+    "$s/core/hash.cpp" "$s/core/format.cpp" "$s/i18n/i18n.cpp" "$s/i18n/strings_en.cpp" "$s/i18n/strings_tr.cpp" "$libcurl" "$libz"
 ports="$out/stalker-mock.ports"
 rm -f "$ports"
 python3 -I "$repo/tests/stalker/mock_portal.py" "$ports" &

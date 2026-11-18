@@ -1,20 +1,26 @@
 // Live TV: categories | channels | the focused channel. The channel list dominates: rows are separators on the
 // background (only the focused row gets a surface), the categories stay quiet, the channel card is compact.
-// Geometry: ui/layout.h (layout::live), docs/v7-ui-v2-layouts.md. No programme guide: the provider data has none.
+// Geometry: ui/layout.h (layout::live), docs/v7-ui-v2-layouts.md. No programme guide here: the player's guide panel
+// asks the source for one channel at a time (iptv/epg.h, docs/v7-live-navigation.md).
 //
 // Lists are virtualized (ui::ListView: only the rows on screen exist and are re-bound when scrolling).
 // Channel logos come from ImageLoader: the selected channel, the visible rows and - once scrolling pauses
 // - a small window above/below are requested; rows show the initials until a logo is ready.
 //
 // Playlist (M3U) sources use the same browser: Favorites, All Channels, then the playlist's groups in playlist
-// order (Uncategorized last). Options opens Refresh Playlist / Playlist Info. A refreshed playlist replaces the
-// catalog (Session::liveGeneration): the screen rebuilds from channel / category ids, never from old indices.
+// order (Uncategorized last). A refreshed playlist replaces the catalog (Session::liveGeneration): the screen rebuilds
+// from channel / category ids, never from old indices.
+//
+// OPTIONS: Add to My Playlist (the focused channel; not for portal channels, whose addresses expire), My Playlists,
+// and for playlist sources Refresh Playlist / Playlist Info.
 
 #include <unordered_map>
 
 #include "common.h"
 #include "../ui/focus_colors.h"
 #include "../core/format.h"
+#include "../iptv/m3u.h"
+#include "../iptv/xtream.h"
 #include "../platform/clock.h"
 #include "../platform/log.h"
 
@@ -172,8 +178,8 @@ namespace {
                     }
                     return;
                 case PadButton::Options:
-                    if (!e.repeat && playlist) {
-                        playlistMenu();
+                    if (!e.repeat) {
+                        optionsMenu();
                     }
                     return;
                 case PadButton::Circle:
@@ -232,7 +238,7 @@ namespace {
                         n = (int) live.favorites(screen->app.library().favorites(ContentType::Live)).size();
                     } else if (index == ALL_ROW) {
                         name = tr("live.all_channels");
-                        n = (int) live.channels().size();
+                        n = (int) live.providerCount();   // the source's channels (not the user groups' extras)
                     } else {
                         const Category &c = live.categories()[(size_t) (index - FIRST_CATEGORY_ROW)];
                         name = live.categoryName(c.id);   // Uncategorized in the current UI language
@@ -415,16 +421,59 @@ namespace {
             notice->setColor(theme::textSecondary());
         }
 
-        void playlistMenu() {
-            app.push(screens::makeMenu(app, tr("m3u.options"), {tr("m3u.refresh"), tr("m3u.info")}, -1,
-                                       whileAlive([this](int c) {
-                                           if (c == 0) {
-                                               app.refreshPlaylist(true);
-                                               updateNotice();
-                                           } else if (c == 1) {
-                                               app.push(screens::makePlaylistInfo(app));
+        void optionsMenu() {
+            std::vector<std::string> names;
+            std::vector<std::function<void()>> acts;
+            const LiveChannel *c = focus == 1 ? selectedChannel() : nullptr;
+            if (c != nullptr && !app.session().profile.isStalker()) {
+                LiveChannel copy = *c;
+                names.push_back(tr("playlists.add_to"));
+                acts.push_back([this, copy] { addToPlaylist(copy); });
+            }
+            names.push_back(tr("playlists.title"));
+            acts.push_back([this] { app.push(screens::makeMyPlaylists(app)); });
+            if (playlist) {
+                names.push_back(tr("m3u.refresh"));
+                acts.push_back([this] {
+                    app.refreshPlaylist(true);
+                    updateNotice();
+                });
+                names.push_back(tr("m3u.info"));
+                acts.push_back([this] { app.push(screens::makePlaylistInfo(app)); });
+            }
+            app.push(screens::makeMenu(app, tr(playlist ? "m3u.options" : "live.options"), names, -1,
+                                       whileAlive([acts](int choice) {
+                                           if (choice >= 0 && choice < (int) acts.size()) {
+                                               acts[(size_t) choice]();
                                            }
                                        })));
+        }
+
+        // the channel as a playlist entry: its own address (a playlist's) or the provider's live address (Xtream)
+        void addToPlaylist(const LiveChannel &c) {
+            const Session &s = app.session();
+            userpl::Entry e;
+            e.name = c.name;
+            e.logo = c.icon;
+            bool own = !s.live.isUserGroup(c.categoryId);   // the source's channel (not a user playlist's extra)
+            e.group = c.categoryId == UNCATEGORIZED_ID || !own ? "" : s.live.categoryName(c.categoryId);
+            e.tvgId = m3u::usableTvgId(c.epgId) ? c.epgId : "";
+            if (own) {
+                // in this source's Live TV the entry is this very channel (app/user_groups.h): nothing copied
+                e.sourceId = s.profile.id;
+                e.channelId = c.id;
+            }
+            if (c.isPlaylist()) {
+                e.url = c.url;
+                e.userAgent = c.userAgent.empty() ? s.profile.userAgent : c.userAgent;
+            } else {
+                e.url = xtream::liveUrl(s.profile, c.id, s.learnedLiveFormat == "m3u8" ? "m3u8" : "ts");
+            }
+            if (!userpl::validUrl(e.url)) {
+                app.toast(tr("playlists.invalid_url"), ToastKind::Error);
+                return;
+            }
+            screens::addToMyPlaylist(app, e);
         }
 
         // the catalog was replaced (playlist refresh): every index this screen holds is stale. Rebuild from the
@@ -473,7 +522,7 @@ namespace {
                 visible = live.favorites(app.library().favorites(ContentType::Live));
                 caption = tr("live.favorites_caption");
             } else if (row == ALL_ROW) {
-                visible.resize(live.channels().size());
+                visible.resize(live.providerCount());
                 for (size_t i = 0; i < visible.size(); i++) {
                     visible[i] = (int) i;
                 }
@@ -523,9 +572,7 @@ namespace {
                 h = {{A::Confirm, tr("live.watch")}, {A::Favorite, tr("common.favorite")},
                      {A::Tabs, tr("live.category")}, {A::Search, tr("home.search")}};
             }
-            if (playlist) {
-                h.push_back({A::Options, tr("m3u.options")});
-            }
+            h.push_back({A::Options, tr(playlist ? "m3u.options" : "live.options")});
             h.push_back({A::Back, tr(focus == 0 ? "common.back" : "live.categories")});
             hints->setHints(h);
             refreshDetails();
@@ -586,11 +633,15 @@ namespace {
 
         void play(int index) {
             std::weak_ptr<bool> alive = aliveToken;
+            // the in-player channel list opens on the list shown here
+            livenav::Group group = currentCategoryRow == FAVORITES_ROW ? livenav::Group::of(livenav::Group::Kind::Favorites)
+                                   : currentCategoryRow == ALL_ROW ? livenav::Group::of(livenav::Group::Kind::All)
+                                   : livenav::Group::of(livenav::Group::Kind::Category, openCategoryId);
             app.push(screens::makeLivePlayer(app, visible, index, [this, alive](const std::string &streamId) {
                 if (alive.lock()) {
                     returnStreamId = streamId;
                 }
-            }));
+            }, group));
         }
 
         CategoriesAdapter categoriesAdapter;

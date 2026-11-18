@@ -505,7 +505,8 @@ namespace {
                         liveResults.push_back(x.index);
                     }
                 }
-                app.push(screens::makeLivePlayer(app, liveResults, position));
+                app.push(screens::makeLivePlayer(app, liveResults, position, nullptr,
+                                                 livenav::Group::of(livenav::Group::Kind::Results)));
             } else if (r.type == ContentType::Movie) {
                 app.push(screens::makeMovieDetail(app, app.vod().movies().items()[(size_t) r.index]));
             } else {
@@ -615,7 +616,7 @@ namespace {
             }
             std::string sep = "   \xC2\xB7   ";
             std::string channels = app.session().liveLoaded
-                                   ? tr("search.channels.count", {countText((int) app.session().live.channels().size())})
+                                   ? tr("search.channels.count", {countText((int) app.session().live.providerCount())})
                                    : tr("search.channels.unavailable");
             // what is searched, on the header line
             if (playlist) {

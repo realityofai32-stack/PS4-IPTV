@@ -72,6 +72,15 @@ public:
     // adds the sidecar's Stalker sources that are missing; returns how many (exposed for tests)
     int restoreFromSidecar(const std::string &text);
 
+    // Jellyfin / Emby servers and Stremio add-ons (source types added after v0.4.1): kept in their own sidecar as
+    // well, so an older build that saves profiles.json without them (it skips types it does not know) never loses
+    // them
+    std::string mediaSidecarPath() const;
+
+    std::string serializeMediaSidecar() const;
+
+    int restoreMediaServers(const std::string &text);
+
 private:
 
     void afterLoad(std::string *warning);
@@ -84,6 +93,7 @@ private:
     int nextIdHint = 1;
     int loadedVersion = 0;
     bool writtenWithMarker = false;   // the file loaded last was written by a Stalker-aware build
+    bool writtenWithMediaMarker = false;   // ... by a build that knows media servers
 
     std::string newId();
 };

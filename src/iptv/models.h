@@ -13,7 +13,9 @@ namespace iptv {
     enum class SourceType {
         Xtream,     // Xtream Codes API: Live TV, Movies, Series
         M3u,        // M3U / M3U8 channel playlist: Live TV only (no Movies / Series guessing)
-        Stalker     // Stalker / MAG middleware portal signed in with a MAC address: Live TV, Movies, Series
+        Stalker,    // Stalker / MAG middleware portal signed in with a MAC address: Live TV, Movies, Series
+        Jellyfin,   // a Jellyfin or Emby media server (the same API) signed in with a user name: Movies, Series
+        Stremio     // one Stremio add-on (its manifest address): Movies, Series
     };
 
     // "xtream" / "m3u" / "stalker" (profiles.json values)
@@ -44,8 +46,20 @@ namespace iptv {
 
         bool isStalker() const { return type == SourceType::Stalker; }
 
-        // Movies and Series sections exist (Xtream, Stalker)
+        // a Jellyfin / Emby media server (server, username, password; no Live TV)
+        bool isMediaServer() const { return type == SourceType::Jellyfin; }
+
+        // a Stremio add-on (playlistUrl: its manifest address; no Live TV)
+        bool isAddon() const { return type == SourceType::Stremio; }
+
+        // a source type v0.4.1 and older do not know (kept in a sidecar too: storage/profile_store.h)
+        bool isNewerType() const { return type == SourceType::Jellyfin || type == SourceType::Stremio; }
+
+        // Movies and Series sections exist (Xtream, Stalker, media servers)
         bool hasVod() const { return type != SourceType::M3u; }
+
+        // a Live TV section exists (not for media servers and add-ons)
+        bool hasLive() const { return type != SourceType::Jellyfin && type != SourceType::Stremio; }
 
         // offline downloads: Xtream only (a playlist has no movies; a portal's links are single-use tokens)
         bool supportsDownloads() const { return type == SourceType::Xtream; }
@@ -178,6 +192,7 @@ namespace iptv {
         float rating = 0;
         int durationSeconds = 0;
         MediaSummary media;
+        double resumeSeconds = 0;    // media servers: the server's saved position (0 = none)
     };
 
     struct Episode {
@@ -194,6 +209,7 @@ namespace iptv {
         // Stalker: the play command for create_link and its "series" parameter (episode number, 0 = none)
         std::string cmd;
         int linkSeries = 0;
+        double resumeSeconds = 0;  // media servers: the server's saved position (0 = none)
     };
 
     struct Season {

@@ -4,6 +4,13 @@
 // Roots: /data/ (the app-accessible user storage, where files copied over FTP live, incl. /data/PS4IPTV/media/) and
 // USB storage. A root is offered only when it can be opened right now (USB drives come and go).
 //
+// Optical discs (probe only, separate from the USB logic): the places a disc could appear for the app - "/disc"
+// inside the sandbox, "/mnt/disc" in the outside view - are looked at read-only (stat + opendir) like USB mount points
+// (an empty folder: no disc). A readable disc is browsed exactly like a USB drive: media files only, no symbolic
+// links, never outside it. A protected Blu-ray movie (an AACS folder at its top) is never read further: such discs
+// play only in the console's own Blu-ray player (no copy protection is ever touched). Hardware tests decide whether a
+// data disc is visible to the app at all; the startup log names what "/" holds.
+//
 // USB paths (v0.4.1): an application runs in the console's file system sandbox, where USB drives are /usb0../usb7
 // (and /data is the console's /user/data). /mnt/usb0../mnt/usb7 is the view from outside the sandbox (FTP, a
 // process that escaped it): v0.4.0 looked only there, so a sandboxed app never found a drive. Both are probed, the
@@ -34,8 +41,10 @@ namespace localmedia {
         std::string path;        // "/data/", "/usb0/", "/mnt/usb0/" (trailing slash)
         bool usb = false;
         int number = 0;          // USB: 1..8
-        bool outside = false;    // USB: /mnt/usbN, the view from outside the sandbox (else /usbN, the app's view)
+        bool outside = false;    // USB / disc: the view from outside the sandbox (/mnt/...; else the app's view)
+        bool disc = false;       // an optical disc
     };
+
 
     // the roots that may exist on the console, in display order. base: a directory standing in for the file system
     // root in tests ("" on the console)
@@ -69,6 +78,18 @@ namespace localmedia {
     // the available roots of a probe, in display order: /data/, then USB 1..8. One view only, so every drive is listed
     // once: the sandbox's /usbN drives, or (when no /usbN holds a drive) the /mnt/usbN ones.
     std::vector<Root> rootsFrom(const std::vector<Probe> &probes);
+
+    // optical discs, apart from the USB logic: "/disc/" (the app's view), then "/mnt/disc/" (outside view)
+    std::vector<Root> discCandidates(const std::string &base = "");
+
+    // the disc candidates as probed (an empty folder: no disc), for the log
+    std::vector<Probe> probeDiscs(const std::string &base = "");
+
+    // the disc that can be opened right now (none, or the first readable candidate that lists something)
+    std::vector<Root> discsFrom(const std::vector<Probe> &probes);
+
+    // a protected Blu-ray movie: an "AACS" folder at the disc's top (checked before anything else is read)
+    bool protectedBluray(const Root &disc);
 
     // "data ok, usb0 missing, ..., mnt/usb1 denied (13), ..." for the log
     std::string probeSummary(const std::vector<Probe> &probes);

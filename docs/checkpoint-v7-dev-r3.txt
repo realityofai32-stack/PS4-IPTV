@@ -1,0 +1,38 @@
+V7 IPTV - HARDWARE CHECKPOINT: ROUND 3 (PS4 system keyboard removed)
+====================================================================
+
+Installs over the previous development checkpoints (same Title ID IPTV00002, APP_VER 00.41). Profiles, settings,
+history, playlists and downloads are kept. Details: docs/v7-roadmap-2026-11.md, sections 2 and 3.
+
+The PS4 system keyboard is gone: no Settings option, no OPTIONS entry, no hint. A setting saved by the round 2 build
+is ignored. Everything else is the round 2 checkpoint unchanged.
+
+1. TEXT ENTRY (exactly as in v0.4.1)
+   1.1 A normal text field (e.g. a source's name, Add Source -> server address): V7's keyboard opens. The hint bar has
+       no "PS4 keyboard". Type a few characters; R2 or OPTIONS confirms, Circle cancels - as before.
+   1.2 A password field: V7's keyboard, as before.
+   1.3 Search: V7's keyboard as before; results follow the typing; L1 / R1 switch the filters; no "PS4 keyboard"
+       hint; OPTIONS opens nothing.
+   1.4 Settings > Language: the keyboard layout row is there, "On-screen keyboard" is not.
+   1.5 A USB keyboard types directly in a text field and in Search, as before.
+
+2. MY PLAYLISTS AS LIVE TV GROUPS (unchanged since round 2)
+   2.1 Live TV, OPTIONS on a channel: Add to My Playlist -> New playlist "Test". Add two more channels.
+   2.2 Back in Live TV, the left list: Favorites, All Channels, then "Test", then the provider's groups. Open "Test":
+       its three channels; the count matches. All Channels' count is unchanged. PHOTO.
+   2.3 Play a channel from "Test": Up / Down zap within "Test"; Left shows "Test" as the channel list, Left again
+       the group list with "Test" in it; Right shows the channel's guide as usual.
+   2.4 Live TV, OPTIONS -> My Playlists: make a second playlist; Square on it, move it above "Test", Cross. Live TV's
+       groups show the new order.
+   2.5 OPTIONS on a playlist -> Hide from Live TV: its group disappears; Show in Live TV: it comes back.
+   2.6 Add a stream address by hand (OPTIONS in a playlist -> Add stream address): it appears in that group and
+       plays. It is not in All Channels.
+   2.7 Restart the app: order, visibility and contents are kept.
+   2.8 Another source (if you have one): the playlist's channels from the first source are there as their own
+       addresses.
+
+3. PLAYLIST INFO (location only)
+   Only with an M3U / M3U8 playlist source: Live TV -> OPTIONS (menu "Playlist") -> "Playlist Info".
+
+SEND: photos and /data/PS4IPTV/logs/log.txt. Look for "playlists: Live TV groups: ..." lines. No typed text, address
+or password is ever logged.

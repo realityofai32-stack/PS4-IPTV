@@ -113,7 +113,11 @@ namespace clockx {
     }
 
     std::string localTime() {
-        std::tm tm = toTm(unixNow() + (int64_t) g_offsetMinutes * 60);
+        return localTimeOf(unixNow());
+    }
+
+    std::string localTimeOf(int64_t unixTime) {
+        std::tm tm = toTm(unixTime + (int64_t) g_offsetMinutes * 60);
         char buf[16];
         snprintf(buf, sizeof(buf), "%02d:%02d", tm.tm_hour, tm.tm_min);
         return buf;

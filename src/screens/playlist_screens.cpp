@@ -231,7 +231,7 @@ namespace {
             spinner->setVisibility(Visibility::Visible);
             setStatus("", theme::textSecondary());
             statusTitle->setText(tr("playlist.testing"));
-            LOG_I("profiles", "testing playlist %s", m3u::displayUrl(profile.playlistUrl).c_str());
+            LOG_I("profiles", "testing playlist %s", m3u::logUrl(profile.playlistUrl).c_str());
             testToken = app.m3u().load(profile, APP_DATA_DIR, M3uService::Source::Network, false,
                                        [this, thenSave](M3uService::Outcome &o) {
                 testing = false;
@@ -274,7 +274,7 @@ namespace {
             } else if (changed) {
                 CatalogCache(APP_DATA_DIR).remove(id, M3uService::CACHE_NAME);   // never show another URL's list
             }
-            LOG_I("profiles", "playlist source %s saved (%s)", id.c_str(), m3u::displayUrl(p.playlistUrl).c_str());
+            LOG_I("profiles", "playlist source %s saved (%s)", id.c_str(), m3u::logUrl(p.playlistUrl).c_str());
             app.replaceAll(screens::makeConnect(app, *app.profiles().find(id)));
         }
 
@@ -327,7 +327,7 @@ namespace {
             panel = ui::box(this, FloatRect(theme::SAFE_X, 200, theme::SCREEN_W - 2 * theme::SAFE_X, 760),
                             theme::surface(), theme::RADIUS);
             for (int i = 0; i < ROWS; i++) {
-                float y = 34 + (float) i * 50;
+                float y = 30 + (float) i * 48;
                 captions[i] = ui::label(panel, "", theme::BODY, 48, y, ui::Weight::Regular, theme::textSecondary());
                 captions[i]->setMaxWidth(760);
                 values[i] = ui::label(panel, "", theme::BODY, 0, y, ui::Weight::SemiBold);
@@ -360,7 +360,7 @@ namespace {
         }
 
     private:
-        static constexpr int ROWS = 14;
+        static constexpr int ROWS = 15;
 
         void fill() {
             const Session &s = app.session();
@@ -374,7 +374,7 @@ namespace {
             }
             std::vector<std::pair<std::string, std::string>> rows = {
                     {tr("m3u.info_source"), screens::sourceLocation(s.profile)},
-                    {tr("m3u.info_channels"), fmt::number((long long) s.live.channels().size())},
+                    {tr("m3u.info_channels"), fmt::number((long long) s.live.providerCount())},
                     {tr("m3u.info_groups"), fmt::number(st.groups)},
                     {tr("catalog.uncategorized"), fmt::number(uncategorized)},
                     {tr("m3u.info_with_logos"), fmt::number(st.withLogo)},
@@ -388,6 +388,7 @@ namespace {
                     {tr("m3u.info_https"), fmt::number(st.https)},
                     {tr("m3u.info_other"), fmt::number(st.otherProtocols)},
                     {tr("m3u.info_user_agents"), fmt::number(st.userAgents)},
+                    {tr("m3u.info_guide"), tr(s.live.guideUrls.empty() ? "m3u.info_guide_none" : "m3u.info_guide_named")},
                     {tr("m3u.info_last_refresh"), refreshed},
                     {tr("m3u.info_size"), st.bytes > 0 ? dl::formatBytes((int64_t) st.bytes) : "-"}};
             for (int i = 0; i < ROWS; i++) {
@@ -411,35 +412,40 @@ namespace {
     // Add Source: three large, self-explaining choices side by side over the dimmed screen
     class SourceChooserScreen : public Screen {
     public:
-        static constexpr int CARDS = 3;
+        static constexpr int CARDS = 5;
 
         explicit SourceChooserScreen(App &a) : Screen(a, true) {
-            const float cardW = 548;
-            const float cardH = 360;
-            const float gap = 36;
+            const float cardW = 340;
+            const float cardH = 460;
+            const float gap = 24;
+            const float pad = 32;
             const float x0 = (theme::SCREEN_W - CARDS * cardW - (CARDS - 1) * gap) / 2;
             const float y0 = 360;
             auto *title = ui::label(this, tr("source.add_title"), theme::TITLE, 0, 220, ui::Weight::SemiBold,
                                     theme::textStrong());
             title->setAlign(ui::Align::Center, theme::SCREEN_W);
-            const char *names[CARDS] = {"source.type_xtream", "source.type_m3u", "source.type_stalker"};
+            const char *names[CARDS] = {"source.type_xtream", "source.type_m3u_short", "source.type_stalker_short",
+                                        "source.type_jellyfin_short", "source.type_stremio_short"};
             const char *details[CARDS] = {"source.type_xtream_detail", "source.type_m3u_detail",
-                                          "source.type_stalker_detail"};
-            const char *provides[CARDS] = {"source.provides_xtream", "source.provides_m3u", "source.provides_stalker"};
+                                          "source.type_stalker_detail", "source.type_jellyfin_detail",
+                                          "source.type_stremio_detail"};
+            const char *provides[CARDS] = {"source.provides_xtream", "source.provides_m3u", "source.provides_stalker",
+                                           "source.provides_jellyfin", "source.provides_stremio"};
             for (int i = 0; i < CARDS; i++) {
                 Card &c = cards[i];
                 c.bg = ui::box(this, FloatRect(x0 + (float) i * (cardW + gap), y0, cardW, cardH), theme::card(),
                                theme::RADIUS_LARGE);
                 c.bg->setOutlineColor(theme::accent());
-                c.mark = ui::box(c.bg, FloatRect(48, 52, 48, 6), theme::accent(), 3);
-                c.name = ui::label(c.bg, tr(names[i]), theme::HEADING, 48, 84, ui::Weight::SemiBold);
-                c.name->setMaxWidth(cardW - 96);
-                auto *d = ui::label(c.bg, tr(details[i]), theme::BODY, 48, 150, ui::Weight::Regular, theme::textSecondary());
-                d->setMaxWidth(cardW - 96);
-                d->setMaxLines(4);
-                auto *pv = ui::label(c.bg, tr(provides[i]), theme::LABEL, 48, cardH - 72, ui::Weight::SemiBold,
+                c.mark = ui::box(c.bg, FloatRect(pad, 44, 48, 6), theme::accent(), 3);
+                c.name = ui::label(c.bg, tr(names[i]), theme::HEADING, pad, 72, ui::Weight::SemiBold);
+                c.name->setMaxWidth(cardW - 2 * pad);
+                auto *d = ui::label(c.bg, tr(details[i]), theme::BODY, pad, 140, ui::Weight::Regular, theme::textSecondary());
+                d->setMaxWidth(cardW - 2 * pad);
+                d->setMaxLines(6);
+                auto *pv = ui::label(c.bg, tr(provides[i]), theme::LABEL, pad, cardH - 100, ui::Weight::SemiBold,
                                      theme::accentText());
-                pv->setMaxWidth(cardW - 96);
+                pv->setMaxWidth(cardW - 2 * pad);
+                pv->setMaxLines(2);
             }
             screens::hintBar(this, {{A::Confirm, tr("common.select")}, {A::Back, tr("common.back")}});
             refresh();
@@ -463,7 +469,7 @@ namespace {
                     a.push(screens::makePlaylistEdit(a, p));
                 } else {
                     Profile p;
-                    p.type = SourceType::Stalker;
+                    p.type = choice == 2 ? SourceType::Stalker : choice == 3 ? SourceType::Jellyfin : SourceType::Stremio;
                     a.push(screens::makeProfileEdit(a, p));
                 }
             } else if (e.button == PadButton::Circle && !e.repeat) {

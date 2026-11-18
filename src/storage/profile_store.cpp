@@ -6,7 +6,9 @@
 namespace {
     // 1: Xtream profiles only (Checkpoints 1 - 3.1)
     // 2: "sourceType" per profile ("xtream" / "m3u") + playlist fields; version 1 files load as Xtream.
-    //    Additive: "stalker" sources (server + mac), which older builds skip.
+    //    Additive: "stalker" sources (server + mac), which older builds skip; "jellyfin" sources (Jellyfin / Emby
+    //    servers: server + username + password) and "stremio" sources (an add-on's manifest address in
+    //    playlistUrl), which v0.4.1 and older skip (kept in a sidecar too).
     const int FORMAT_VERSION = 2;
     const size_t MAX_FILE_BYTES = 1024 * 1024;
 
@@ -19,6 +21,20 @@ namespace {
         if (!p.mac.empty()) {
             redact::addMac(p.mac);           // every spelling a portal or a log line could carry
         }
+        if (p.isAddon()) {
+            // a configured add-on keeps its configuration (sometimes an API key) in its address path
+            std::string u = p.playlistUrl;
+            size_t start = u.find("://");
+            start = start == std::string::npos ? 0 : u.find('/', start + 3);
+            while (start != std::string::npos && start < u.size()) {
+                size_t end = u.find('/', start + 1);
+                std::string segment = u.substr(start + 1, end == std::string::npos ? std::string::npos : end - start - 1);
+                if (segment.size() >= 12 && segment != "manifest.json") {
+                    redact::addSecret(segment);
+                }
+                start = end;
+            }
+        }
     }
 
     bool complete(const iptv::Profile &p) {
@@ -26,6 +42,10 @@ namespace {
             case iptv::SourceType::Xtream:
                 return !p.server.empty();
             case iptv::SourceType::M3u:
+                return !p.playlistUrl.empty();
+            case iptv::SourceType::Jellyfin:
+                return !p.server.empty() && !p.username.empty();
+            case iptv::SourceType::Stremio:
                 return !p.playlistUrl.empty();
             default:
                 return !p.server.empty() && !p.mac.empty();
@@ -40,7 +60,7 @@ namespace {
         o.set("id", json::Value::makeString(p.id));
         o.set("sourceType", json::Value::makeString(iptv::sourceTypeKey(p.type)));
         o.set("name", json::Value::makeString(p.name));
-        if (p.type == iptv::SourceType::Xtream) {
+        if (p.type == iptv::SourceType::Xtream || p.type == iptv::SourceType::Jellyfin) {
             o.set("server", json::Value::makeString(p.server));
             o.set("username", json::Value::makeString(p.username));
             o.set("password", json::Value::makeString(p.password));
@@ -82,6 +102,22 @@ namespace {
 
     // written by builds that know Stalker sources; an older build saving profiles.json drops it (see sidecarPath)
     const char *const MARKER = "stalkerSidecar";
+    // the same for media servers (mediaSidecarPath)
+    const char *const MEDIA_MARKER = "mediaServerSidecar";
+
+    // a sidecar: the profiles of one kind, in the profiles.json entry format
+    std::string sidecarOf(const std::vector<iptv::Profile> &items, bool (iptv::Profile::*kind)() const) {
+        json::Value root = json::Value::makeObject();
+        root.set("version", json::Value::makeInt(1));
+        json::Value list = json::Value::makeArray();
+        for (const auto &p: items) {
+            if ((p.*kind)()) {
+                list.push(entryJson(p));
+            }
+        }
+        root.set("profiles", std::move(list));
+        return json::write(root);
+    }
 }
 
 ProfileStore::ProfileStore(std::string dataDir) : dir(std::move(dataDir)) {}
@@ -100,7 +136,34 @@ std::string ProfileStore::serialize() const {
     }
     root.set("profiles", std::move(list));
     root.set(MARKER, json::Value::makeInt(1));
+    root.set(MEDIA_MARKER, json::Value::makeInt(1));
     return json::write(root);
+}
+
+std::string ProfileStore::mediaSidecarPath() const {
+    return fs::join(dir, "profiles.mediaservers.json");
+}
+
+std::string ProfileStore::serializeMediaSidecar() const {
+    return sidecarOf(items, &iptv::Profile::isNewerType);
+}
+
+int ProfileStore::restoreMediaServers(const std::string &text) {
+    json::Value root;
+    if (!json::parse(text, root) || !root.isObject() || root["version"].asInt(0) != 1) {
+        return 0;
+    }
+    int restored = 0;
+    for (const auto &o: root["profiles"].items()) {
+        iptv::Profile p;
+        if (!entryFrom(o, 2, p) || !p.isNewerType() || find(p.id) != nullptr) {
+            continue;   // (an id taken meanwhile: the older build cannot have reused it - it keeps ids it knows)
+        }
+        registerSecrets(p);
+        items.push_back(std::move(p));
+        restored++;
+    }
+    return restored;
 }
 
 std::string ProfileStore::sidecarPath() const {
@@ -173,6 +236,7 @@ bool ProfileStore::deserialize(const std::string &text, std::string *error) {
     items = std::move(loaded);
     loadedVersion = (int) version;
     writtenWithMarker = root.has(MARKER);
+    writtenWithMediaMarker = root.has(MEDIA_MARKER);
     activeProfileId = root["activeProfileId"].asString();
     if (find(activeProfileId) == nullptr) {
         activeProfileId = items.empty() ? "" : items.front().id;
@@ -194,18 +258,43 @@ bool ProfileStore::load(std::string *warning) {
         return true;
     }
     std::string first = err;
+    // the file that could not be read is kept as it is before any save replaces it (fs::keepDamagedCopy)
+    std::string kept = fs::keepDamagedCopy(path());
+    std::string note = kept.empty() ? "" : "; kept as " + kept.substr(kept.find_last_of("/\\") + 1);
     if (fs::readFile(path() + ".bak", text, MAX_FILE_BYTES, &err) && deserialize(text, &err)) {
         if (warning) {
-            *warning = "profiles.json unreadable (" + first + "), restored the previous copy";
+            *warning = "profiles.json unreadable (" + first + "), restored the previous copy" + note;
         }
         afterLoad(warning);
         return true;
     }
-    if (warning) {
-        *warning = "profiles could not be loaded: " + first;
+    std::string keptBak = fs::keepDamagedCopy(path() + ".bak");
+    if (!keptBak.empty()) {
+        note += "; previous copy kept as " + keptBak.substr(keptBak.find_last_of("/\\") + 1);
     }
     items.clear();
-    activeProfileId.clear();
+    activeProfileId.clear();   // nothing is signed in by itself: the Profiles screen opens
+    // the sources this build also keeps beside profiles.json come back from those files (Stalker portals, media
+    // servers, add-ons); a side file that cannot be read either is kept as it is
+    writtenWithMarker = false;
+    writtenWithMediaMarker = false;
+    int restored = 0;
+    std::string side;
+    for (int k = 0; k < 2; k++) {
+        const std::string sp = k == 0 ? sidecarPath() : mediaSidecarPath();
+        if (!fs::exists(sp)) {
+            continue;
+        }
+        int n = fs::readFile(sp, side, MAX_FILE_BYTES) ? (k == 0 ? restoreFromSidecar(side) : restoreMediaServers(side)) : 0;
+        if (n == 0) {
+            fs::keepDamagedCopy(sp);
+        }
+        restored += n;
+    }
+    if (warning) {
+        *warning = "profiles could not be loaded: " + first + note
+                   + (restored > 0 ? "; " + std::to_string(restored) + " source(s) restored from the side files" : "");
+    }
     return false;
 }
 
@@ -225,13 +314,22 @@ void ProfileStore::afterLoad(std::string *warning) {
     // profiles.json last written by an older build (no marker): it dropped the Stalker sources it could not read;
     // the sidecar written by this build still has them
     std::string side;
-    if (writtenWithMarker || !fs::exists(sidecarPath()) || !fs::readFile(sidecarPath(), side, MAX_FILE_BYTES)) {
-        return;
+    if (!writtenWithMarker && fs::exists(sidecarPath()) && fs::readFile(sidecarPath(), side, MAX_FILE_BYTES)) {
+        int restored = restoreFromSidecar(side);
+        if (restored > 0 && warning) {
+            *warning += std::string(warning->empty() ? "" : "; ") + std::to_string(restored)
+                        + " Stalker source(s) restored (an older version saved the source list without them)";
+        }
     }
-    int restored = restoreFromSidecar(side);
-    if (restored > 0 && warning) {
-        *warning += std::string(warning->empty() ? "" : "; ") + std::to_string(restored)
-                    + " Stalker source(s) restored (an older version saved the source list without them)";
+    // the same for Jellyfin / Emby servers, which v0.4.1 and older skip
+    std::string media;
+    if (!writtenWithMediaMarker && fs::exists(mediaSidecarPath())
+        && fs::readFile(mediaSidecarPath(), media, MAX_FILE_BYTES)) {
+        int restored = restoreMediaServers(media);
+        if (restored > 0 && warning) {
+            *warning += std::string(warning->empty() ? "" : "; ") + std::to_string(restored)
+                        + " media server(s) restored (an older version saved the source list without them)";
+        }
     }
 }
 
@@ -241,8 +339,17 @@ bool ProfileStore::save(std::string *error) {
     }
     // the sidecar first: profiles.json then names it (marker), so a crash in between never loses a source
     bool anyStalker = false;
+    bool anyMedia = false;
     for (const auto &p: items) {
         anyStalker |= p.isStalker();
+        anyMedia |= p.isNewerType();
+    }
+    if (anyMedia) {
+        if (!fs::writeFileAtomic(mediaSidecarPath(), serializeMediaSidecar(), error)) {
+            return false;
+        }
+    } else if (fs::exists(mediaSidecarPath())) {
+        fs::removeFile(mediaSidecarPath());
     }
     if (anyStalker) {
         if (!fs::writeFileAtomic(sidecarPath(), serializeSidecar(), error)) {

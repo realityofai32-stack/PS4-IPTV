@@ -19,7 +19,8 @@ namespace fs {
     namespace {
         std::string errnoText(const char *op, const std::string &path) {
             int e = errno;
-            return std::string(op) + "(" + path + ") failed: errno " + std::to_string(e) + " (" + strerror(e) + ")";
+            return std::string(op) + "(" + shownPath(path) + ") failed: errno " + std::to_string(e) + " (" + strerror(e)
+                   + ")";
         }
 
         int makeDir(const std::string &path) {
@@ -48,6 +49,37 @@ namespace fs {
             return rename(from.c_str(), to.c_str()) == 0;
 #endif
         }
+    }
+
+    std::string shownPath(const std::string &path) {
+        auto rootOf = [&path](const std::string &prefix, bool digit) -> size_t {
+            if (path.compare(0, prefix.size(), prefix) != 0) {
+                return std::string::npos;
+            }
+            size_t end = prefix.size();
+            if (digit) {
+                if (end >= path.size() || path[end] < '0' || path[end] > '9') {
+                    return std::string::npos;
+                }
+                end++;
+            }
+            return end == path.size() || path[end] == '/' ? end : std::string::npos;
+        };
+        size_t root = std::string::npos;
+        for (const auto &r: {std::make_pair("/usb", true), std::make_pair("/mnt/usb", true), std::make_pair("/disc", false),
+                             std::make_pair("/mnt/disc", false)}) {
+            if ((root = rootOf(r.first, r.second)) != std::string::npos) {
+                break;
+            }
+        }
+        if (root == std::string::npos) {
+            size_t pl = path.find("/playlists/");
+            if (pl == std::string::npos) {
+                return path;
+            }
+            root = pl + 10;   // ".../playlists"
+        }
+        return root + 1 >= path.size() ? path : path.substr(0, root) + "/[...]";
     }
 
     std::string join(const std::string &dir, const std::string &name) {
@@ -107,6 +139,13 @@ namespace fs {
 
     bool readFile(const std::string &path, std::string &out, size_t maxBytes, std::string *error) {
         out.clear();
+        if (isDir(path)) {
+            // fopen() opens a directory on some systems and fread() then fails differently on each: decided here
+            if (error) {
+                *error = path + " is a directory";
+            }
+            return false;
+        }
         FILE *f = fopen(path.c_str(), "rb");
         if (f == nullptr) {
             if (error) {
@@ -136,6 +175,12 @@ namespace fs {
     }
 
     bool writeFileAtomic(const std::string &path, const std::string &data, std::string *error) {
+        if (isDir(path)) {
+            if (error) {
+                *error = path + " is a directory";
+            }
+            return false;
+        }
         std::string tmp = path + ".tmp";
         FILE *f = fopen(tmp.c_str(), "wb");
         if (f == nullptr) {
@@ -155,7 +200,7 @@ namespace fs {
             remove(tmp.c_str());
             return false;
         }
-        if (exists(path)) {
+        if (exists(path) && !isDir(path + ".bak")) {
             std::string bak = path + ".bak";
             if (!replaceFile(path, bak)) {
                 // not fatal: the final rename still replaces the file atomically on POSIX
@@ -172,6 +217,12 @@ namespace fs {
     }
 
     bool writeFileReplace(const std::string &path, const std::string &data, std::string *error) {
+        if (isDir(path)) {
+            if (error) {
+                *error = path + " is a directory";
+            }
+            return false;
+        }
         std::string tmp = path + ".tmp";
         FILE *f = fopen(tmp.c_str(), "wb");
         if (f == nullptr) {
@@ -196,6 +247,82 @@ namespace fs {
 
     bool removeFile(const std::string &path) {
         return remove(path.c_str()) == 0;
+    }
+
+    namespace {
+        // byte-for-byte equality of two files, streamed (no size limit, no large allocation)
+        bool sameContent(const std::string &a, const std::string &b) {
+            if (fileSize(a) != fileSize(b)) {
+                return false;
+            }
+            FILE *fa = fopen(a.c_str(), "rb");
+            FILE *fb = fopen(b.c_str(), "rb");
+            bool same = fa != nullptr && fb != nullptr;
+            char ba[16 * 1024], bb[16 * 1024];
+            while (same) {
+                size_t na = fread(ba, 1, sizeof(ba), fa);
+                size_t nb = fread(bb, 1, sizeof(bb), fb);
+                if (na != nb || memcmp(ba, bb, na) != 0) {
+                    same = false;
+                } else if (na == 0) {
+                    break;
+                }
+            }
+            if (fa) {
+                fclose(fa);
+            }
+            if (fb) {
+                fclose(fb);
+            }
+            return same;
+        }
+
+        bool copyFile(const std::string &from, const std::string &to) {
+            FILE *in = fopen(from.c_str(), "rb");
+            if (in == nullptr) {
+                return false;
+            }
+            std::string tmp = to + ".tmp";
+            FILE *out = fopen(tmp.c_str(), "wb");
+            if (out == nullptr) {
+                fclose(in);
+                return false;
+            }
+            char buf[64 * 1024];
+            size_t n;
+            bool ok = true;
+            while (ok && (n = fread(buf, 1, sizeof(buf), in)) > 0) {
+                ok = fwrite(buf, 1, n, out) == n;
+            }
+            ok = ok && !ferror(in) && flushToDisk(out);
+            fclose(in);
+            if (fclose(out) != 0) {
+                ok = false;
+            }
+            if (!ok || !replaceFile(tmp, to)) {
+                remove(tmp.c_str());
+                return false;
+            }
+            return true;
+        }
+    }
+
+    std::string keepDamagedCopy(const std::string &path) {
+        if (!exists(path) || isDir(path) || fileSize(path) <= 0) {
+            return "";   // nothing there, or nothing in it to keep
+        }
+        const std::string names[3] = {path + ".damaged", path + ".damaged-2", path + ".damaged-3"};
+        for (const std::string &name: names) {
+            if (exists(name) && sameContent(path, name)) {
+                return name;   // this very content is already kept
+            }
+        }
+        for (const std::string &name: names) {
+            if (!exists(name)) {
+                return copyFile(path, name) ? name : "";
+            }
+        }
+        return "";   // three different damaged versions are kept already: the oldest stay
     }
 
     std::vector<Entry> listDir(const std::string &path) {

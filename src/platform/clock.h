@@ -23,6 +23,8 @@ namespace clockx {
 
     std::string localTime();         // "21:45"
 
+    std::string localTimeOf(int64_t unixTime);   // "21:45" of that moment, in the console's time zone
+
     std::string localDate(int64_t unixTime);   // "21 Sep 2027"
 
     // minutes east of UTC currently applied

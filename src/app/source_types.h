@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "../iptv/catalog.h"
+#include "../iptv/epg.h"
 #include "../iptv/models.h"
 
 namespace sources {
@@ -74,6 +75,15 @@ namespace sources {
     };
 
     using LinkCallback = std::function<void(const LinkOutcome &)>;
+
+    // one channel's short programme guide (the live player's guide panel); ok with no programmes: the provider has
+    // no program information for the channel
+    struct GuideOutcome {
+        bool ok = false;
+        std::vector<epg::Programme> programmes;
+        std::string message;       // user-facing error
+    };
+    using GuideCallback = std::function<void(GuideOutcome &)>;
 }
 
 #endif // PS4IPTV_APP_SOURCE_TYPES_H

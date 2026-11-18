@@ -4,6 +4,7 @@
 #include "components.h"
 #include "focus_colors.h"
 #include "icon_shapes.h"
+#include "splash.h"
 
 using namespace c2d;
 
@@ -11,38 +12,18 @@ namespace ui {
 
     namespace {
         const float PI = 3.14159265f;
-
-        ConvexShape *polygon(C2DObject *parent, std::initializer_list<Vector2f> points) {
-            auto *p = new ConvexShape(points.size());
-            size_t i = 0;
-            for (const Vector2f &v: points) {
-                p->setPoint(i++, v);
-            }
-            parent->add(p);
-            return p;
-        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    // V7 symbol on a 100 x 80 grid (x right, y down):
-    //   left arm   (0,0) (22,0) (58,80) (36,80)       the V's left stroke
-    //   right arm  (36,80) (58,80) (100,0) (78,0)     the V's right stroke = the 7's stem
-    //   bar        (46,0) (100,0) (91.5,16) (46,16)   the 7's top bar (its end follows the stem's slope)
 
     BrandMark::BrandMark(float h) : RectangleShape(FloatRect(0, 0, std::round(h * ASPECT), h)) {
         setFillColor(theme::none());
-        const float u = h / 80.0f;
-        auto p = [u](float x, float y) { return Vector2f(x * u, y * u); };
-        left = polygon(this, {p(0, 0), p(22, 0), p(58, 80), p(36, 80)});
-        right = polygon(this, {p(36, 80), p(58, 80), p(100, 0), p(78, 0)});
-        bar = polygon(this, {p(46, 0), p(100, 0), p(91.5f, 16), p(46, 16)});
-        setColors(theme::accentText(), theme::accent());
-    }
-
-    void BrandMark::setColors(const Color &arm, const Color &stem) {
-        left->setFillColor(arm);
-        right->setFillColor(stem);
-        bar->setFillColor(stem);
+        auto *shape = new MeshShape();
+        brandart::Mesh mesh;
+        // soft edges a little under a pixel wide: crisp at header size, no stair-steps on the slanted strokes
+        brandart::addMonogram(mesh, 0, 0, h, brandart::colorsOf(theme::accentPreset()), 0.9f);
+        shape->set(mesh);
+        add(shape);
     }
 
     Brand::Brand(const std::string &name, float markHeight, unsigned textSize)

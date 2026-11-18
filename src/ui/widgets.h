@@ -45,7 +45,9 @@ namespace ui {
         L2,
         R2,
         Options,
-        DPad
+        DPad,
+        DPadLeft,     // one direction of the d-pad: a round cap with an arrow head
+        DPadRight
     };
 
     // a DualShock button symbol (vector shapes; the UI font has no PlayStation glyphs)

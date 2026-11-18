@@ -43,7 +43,41 @@ namespace protocols {
         return g_https;
     }
 
+    bool youtubePage(const std::string &url) {
+        std::string s = scheme(url);
+        if (s != "http" && s != "https") {
+            return false;
+        }
+        size_t start = url.find("://") + 3;
+        size_t end = url.find_first_of("/?#", start);
+        std::string host = url.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        size_t at = host.rfind('@');
+        if (at != std::string::npos) {
+            host = host.substr(at + 1);
+        }
+        size_t colon = host.find(':');
+        if (colon != std::string::npos) {
+            host = host.substr(0, colon);
+        }
+        for (char &c: host) {
+            if (c >= 'A' && c <= 'Z') {
+                c = (char) (c - 'A' + 'a');
+            }
+        }
+        for (const char *sub: {"www.", "m.", "music."}) {
+            size_t n = std::char_traits<char>::length(sub);
+            if (host.compare(0, n, sub) == 0) {
+                host = host.substr(n);
+                break;
+            }
+        }
+        return host == "youtube.com" || host == "youtu.be" || host == "youtube-nocookie.com";
+    }
+
     Verdict check(const std::string &url, bool https) {
+        if (youtubePage(url)) {
+            return Verdict::YouTubePage;
+        }
         std::string s = scheme(url);
         if (s == "https") {
             return https ? Verdict::Ok : Verdict::HttpsUnavailable;

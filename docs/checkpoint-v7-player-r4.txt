@@ -1,0 +1,34 @@
+V7 PLAYER - HARDWARE CHECKPOINT: ROUND 4 (rebrand, package images, loading screen, stability pass)
+=======================================================================================================
+
+Installs over the previous checkpoints and over v0.4.0 (same Title ID IPTV00002, APP_VER 00.41). Profiles, settings,
+history, playlists and downloads are kept. Details: docs/v7-player-brand.md, docs/v7-player-compatibility.md.
+Only what cannot be checked without the console is listed here.
+
+1. HOME SCREEN
+   1.1 After installing: the tile shows the new V7 icon (dark, V7 Blue monogram) and the title "V7 Player". PHOTO.
+       (If the old icon stays, restart the console once: the system may cache icons.)
+
+2. START
+   2.1 Launch: the system shows the start image (V7 monogram, blue light, five dots), then the app's own loading
+       screen in the same place, then the first screen fades in. Note roughly how long the loading screen stays and
+       whether anything jumps or flickers between the system image and the app. VIDEO if possible.
+   2.2 Settings > Appearance: choose Green. Close the app with its own Exit. Launch again: the system image is still
+       blue, the app's loading screen is green from its first frame. PHOTO. Choose your usual accent again.
+   2.3 Headers, Home's navigation and the first-run screen (if you have no source) show the new monogram; nothing
+       overlaps in Home's top bar. PHOTO of Home.
+   2.4 Settings > About: "About V7 Player".
+
+3. QUICK REGRESSION (nothing here was changed on purpose)
+   3.1 Live TV: Left -> channels, Left -> groups, Right -> guide; zap while the player stays open.
+   3.2 A playlist group in Live TV; Search with the V7 keyboard; a USB keyboard types.
+   3.3 Local Media: a file from USB plays; a movie with Arabic subtitles shows them.
+
+4. ONLY IF AVAILABLE (never tested on a console yet)
+   4.1 A Jellyfin / Emby server: sign in, a movie plays, resume position.
+   4.2 A Stremio add-on with direct http(s) links: a title plays; a torrent-only title says it cannot be played.
+   4.3 An M3U playlist with url-tvg: the guide panel shows programmes.
+
+SEND: photos / video and /data/PS4IPTV/logs/log.txt, log.prev.txt and startup.txt. Look for "startup took ... s after
+the settings". A file named *.damaged next to a data file means the app found it unreadable and kept it untouched:
+please send it too. No address, token, password or local file name is written to the log.

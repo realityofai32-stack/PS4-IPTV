@@ -7,7 +7,9 @@
 #include <string>
 #include <vector>
 
+#include "live_nav.h"
 #include "../iptv/models.h"
+#include "../media/user_playlists.h"
 
 class App;
 
@@ -40,10 +42,12 @@ namespace screens {
     // Live TV browser; startOnFavorites opens the Favorites category
     Screen *makeLive(App &app, bool startOnFavorites = false);
 
-    // full-screen live playback; channels = indices into the live catalog used for zapping.
+    // full-screen live playback; channels = indices into the live catalog used for zapping, group = what that list
+    // is (the in-player channel list opens on it; Auto: one channel -> its category, a longer list -> Results).
     // onExit(streamId) runs when the user leaves, with the channel that was playing last (focus restore).
     Screen *makeLivePlayer(App &app, const std::vector<int> &channels, int index,
-                           std::function<void(const std::string &)> onExit = nullptr);
+                           std::function<void(const std::string &)> onExit = nullptr,
+                           livenav::Group group = livenav::Group());
 
     // ------------------------------------------------------------------ Movies / Series
     // One playable movie or episode (everything the player and the progress store need)
@@ -88,6 +92,13 @@ namespace screens {
 
     // Local Media: folders and media files on the console's storage (/data, USB), played in the movie player
     Screen *makeLocalMedia(App &app);
+
+    // My Playlists: the user's own M3U playlists (media/user_playlists.h): create, rename, delete, edit entries,
+    // reorder, import / export over USB, open as a playlist source
+    Screen *makeMyPlaylists(App &app);
+
+    // adds one entry (a channel / an address) to a playlist the user picks, or to a new one; toasts the outcome
+    void addToMyPlaylist(App &app, const userpl::Entry &entry);
 
     // favorites of all types (Live channels, Movies, Series)
     Screen *makeFavorites(App &app);

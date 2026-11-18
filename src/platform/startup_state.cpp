@@ -138,7 +138,7 @@ namespace startup {
     }
 
     std::string serialize(const State &s) {
-        return "# V7 IPTV startup state (no user data): the last startup stage begun\n"
+        return "# V7 Player startup state (no user data): the last startup stage begun\n"
                "build=" + cleanBuild(s.build) + "\n"
                "phase=" + (validPhase(s.phase) ? s.phase : std::string("starting")) + "\n"
                "stage=" + cleanName(s.stage) + "\n"

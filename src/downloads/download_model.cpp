@@ -212,6 +212,20 @@ namespace dl {
             }
             return false;
         }
+        // not a download list this build can trust: an empty list read from it would make every partial file look
+        // like an orphan (DownloadManager::load)
+        if (!root["items"].isArray()) {
+            if (error) {
+                *error = "downloads.json has no item list";
+            }
+            return false;
+        }
+        if (root["version"].asInt(MANIFEST_VERSION) > MANIFEST_VERSION) {
+            if (error) {
+                *error = "downloads.json was written by a newer version (" + std::to_string(root["version"].asInt(0)) + ")";
+            }
+            return false;
+        }
         int skipped = 0;
         std::vector<std::string> names;
         for (const json::Value &o: root["items"].items()) {

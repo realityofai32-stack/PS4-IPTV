@@ -31,6 +31,12 @@ build fuzz_parsers "$S/iptv/m3u.cpp" "$S/iptv/xtream.cpp" "$S/core/json.cpp" "$S
     "$S/core/hash.cpp" "$S/i18n/i18n.cpp" "$S/i18n/strings_en.cpp" "$S/i18n/strings_tr.cpp" "$S/platform/log.cpp" \
     "$S/platform/redact.cpp" "$S/platform/fs.cpp" "$S/platform/clock.cpp" "$S/network/http_policy.cpp" \
     "$S/player/mpv_log_filter.cpp" "$S/iptv/catalog.cpp" "$S/iptv/search_index.cpp"
+build fuzz_media "$S/iptv/xmltv.cpp" "$S/iptv/epg.cpp" "$S/iptv/stalker.cpp" "$S/iptv/mediabrowser.cpp" "$S/iptv/stremio.cpp" "$S/media/user_playlists.cpp" \
+    "$S/platform/startup_state.cpp" "$S/storage/settings_store.cpp" "$S/storage/profile_store.cpp" \
+    "$S/downloads/download_model.cpp" "$S/iptv/m3u.cpp" "$S/iptv/xtream.cpp" "$S/iptv/catalog.cpp" "$S/iptv/search_index.cpp" \
+    "$S/core/json.cpp" "$S/core/utf8.cpp" "$S/core/url.cpp" "$S/core/hash.cpp" "$S/i18n/i18n.cpp" "$S/i18n/strings_en.cpp" \
+    "$S/i18n/strings_tr.cpp" "$S/platform/log.cpp" "$S/platform/redact.cpp" "$S/platform/fs.cpp" "$S/platform/clock.cpp" \
+    "$S/player/display.cpp" "$S/player/protocols.cpp"
 # seeds: the protocol's own shapes
 seeds="$OUT/seeds-stalker"
 mkdir -p "$seeds"
@@ -59,8 +65,23 @@ printf '%s' '[{"stream_id":1,"name":"A","stream_icon":"file:///x","category_id":
 printf '%s' '{"info":{"name":"S","cover":"c","backdrop_path":["b"]},"episodes":{"1":[{"id":"9","episode_num":1,"title":"E","container_extension":"mkv","info":{"duration_secs":3600}}]}}' > "$seedsx/series"
 printf '%s' 'Glyph 0x627 not found, selecting one more font for (sans-serif, 400, 0)' > "$seedsx/glyph"
 printf '%s' 'fontselect: Using default font: (Arial, 400, 0) -> /x/subfont.ttf, 0, (none)' > "$seedsx/fontselect"
+seedsm="$OUT/seeds-media"; mkdir -p "$seedsm"
+printf '%s' '<?xml version="1.0" encoding="UTF-8"?><tv><channel id="a.tr"><display-name lang="tr">A</display-name></channel><programme start="20251117200000 +0300" stop="20251117210000 +0300" channel="a.tr"><title lang="tr">Haber &amp; Spor</title><desc><![CDATA[x]]></desc></programme></tv>' > "$seedsm/xmltv"
+printf '%s' '{"Items":[{"Name":"M","Id":"m1","Type":"Movie","ProductionYear":2001,"RunTimeTicks":72000000000,"ImageTags":{"Primary":"t"},"UserData":{"PlaybackPositionTicks":10}}],"TotalRecordCount":1,"StartIndex":0}' > "$seedsm/jellyfin"
+printf '%s' '{"id":"org.example","version":"1.0.0","name":"A","resources":["catalog",{"name":"stream","types":["movie"]}],"types":["movie"],"catalogs":[{"type":"movie","id":"top","extra":[{"name":"skip"}]}]}' > "$seedsm/manifest"
+printf '%s' '{"streams":[{"infoHash":"0123456789abcdef0123456789abcdef01234567"},{"ytId":"x"},{"url":"https://cdn.example.com/a.mp4","behaviorHints":{"proxyHeaders":{"request":{"User-Agent":"A"}}}}]}' > "$seedsm/streams"
+printf '%s' '#EXTM3U
+#EXTINF:-1 tvg-id="a" v7-source="p1" v7-channel="101",A
+http://s.example.com/a.ts' > "$seedsm/playlist"
+printf '%s' '{"version":2,"accentColor":"green","language":"tr","playlistOrder":["a.m3u"],"hiddenPlaylists":["b.m3u"]}' > "$seedsm/settings"
+printf '%s' 'build=0.4.1-abc
+phase=starting
+stage=player
+skip=keyboard
+skip-starts=3
+failed=1' > "$seedsm/startup"
 rc=0
-for t in fuzz_stalker:seeds-stalker fuzz_redact:seeds-redact fuzz_keyboard: fuzz_paths:seeds-paths fuzz_parsers:seeds-parsers; do
+for t in fuzz_stalker:seeds-stalker fuzz_redact:seeds-redact fuzz_keyboard: fuzz_paths:seeds-paths fuzz_parsers:seeds-parsers fuzz_media:seeds-media; do
     name="${t%%:*}"; seed="${t#*:}"
     corpus="$OUT/corpus-$name"; mkdir -p "$corpus"
     args=("$corpus")

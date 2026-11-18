@@ -384,22 +384,25 @@ TEST(i18n_screens_do_not_hardcode_text) {
     CHECK_EQ(hits, 0);
 }
 
-// V7 IPTV branding: the product name everywhere the user reads it; the technical identifiers that keep upgrades
+// V7 Player branding: the product name everywhere the user reads it; the technical identifiers that keep upgrades
 // and saved data working (title ID, /data/PS4IPTV/, the HTTP User-Agent token) are not product text
-TEST(i18n_branding_is_v7_iptv) {
+TEST(i18n_branding_is_v7_player) {
+    CHECK_EQ(i18n::lookup(Language::English, "app.tagline"), std::string("Media & streaming for jailbroken PS4"));
     for (Language l: {Language::English, Language::Turkish}) {
-        CHECK_EQ(i18n::lookup(l, "app.name"), std::string("V7 IPTV"));
+        CHECK_EQ(i18n::lookup(l, "app.name"), std::string("V7 Player"));
         int old = 0;
         for (const auto &e: i18n::table(l)) {
             std::string text = e.text;
-            if (text.find("PS4 IPTV") != std::string::npos) {
+            // the earlier product names (PS4 IPTV, then V7 IPTV); "/data/PS4IPTV/" is a path, not a name
+            if (text.find("PS4 IPTV") != std::string::npos || text.find("V7 IPTV") != std::string::npos) {
                 std::printf("  %s: old product name in %s\n", i18n::code(l), e.key);
                 old++;
             }
         }
         CHECK_EQ(old, 0);
-        for (const char *key: {"app.exit_title", "onboarding.welcome", "about.title", "about.license", "about.no_content"}) {
-            CHECK(i18n::lookup(l, key).find("V7 IPTV") != std::string::npos);
+        for (const char *key: {"app.exit_title", "onboarding.welcome", "about.title", "about.license", "about.no_content",
+                               "settings.about.desc"}) {
+            CHECK(i18n::lookup(l, key).find("V7 Player") != std::string::npos);
         }
     }
     // every accent preset has a name in both languages

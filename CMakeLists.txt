@@ -1,4 +1,4 @@
-# V7 IPTV (formerly PS4 IPTV) - production application (title IPTV00002).
+# V7 Player (formerly V7 IPTV, PS4 IPTV) - production application (title IPTV00002).
 #
 # Playback foundation (Milestone B+): the pPlay stack proven on hardware in Phase 2 - libmpv 0.34.1,
 # FFmpeg 5.0, SDL2 2.0.18 PS4 port, libcross2d - found and linked exactly like upstream pPlay.
@@ -16,13 +16,14 @@ endif ()
 # Settings, Diagnostics, log), the User-Agent, and the PS4 APP_VER / VERSION of param.sfo ("XX.YY": MAJOR as two
 # digits, then MINOR and PATCH as one digit each: 0.3.0 -> 00.30, 0.4.0 -> 00.40, 1.2.3 -> 01.23). APP_VER must
 # grow with every release (the console refuses to install an older APP_VER over a newer one).
-set(APP_VERSION "0.4.1")
+set(APP_VERSION "0.5.0")
 include(cmake/app_version.cmake)
-app_pkg_version("${APP_VERSION}" APP_PKG_VERSION)   # 0.4.1 -> 00.41 (v0.4.0 was published with 00.40)
+app_pkg_version("${APP_VERSION}" APP_PKG_VERSION)   # 0.5.0 -> 00.50 (v0.4.0 was published with 00.40)
 set(APP_TITLE_ID "IPTV00002")      # unique: not PPLA00001 (pPlay), IPTV00001 (old experiment), IPTT00001 (test)
-# shown on the PS4 home screen. Only the display name changed with the V7 IPTV brand: the Title ID, content ID and
-# /data/PS4IPTV/ stay, so the PKG installs over earlier versions and keeps profiles, settings, history and downloads.
-set(APP_PKG_TITLE "V7 IPTV")
+# shown on the PS4 home screen. Only the display name changed with the V7 IPTV and V7 Player brands: the Title ID,
+# content ID and /data/PS4IPTV/ stay, so the PKG installs over earlier versions and keeps profiles, settings, history
+# and downloads.
+set(APP_PKG_TITLE "V7 Player")
 # The content ID's last part stays the one v0.2.0 was published with (IV0001-IPTV00002_00-IPTV000020002000): the
 # release PKG keeps its name and installs over v0.2.0 as an update (same content ID, higher APP_VER). add_pkg would
 # otherwise derive it from APP_PKG_VERSION.
@@ -116,7 +117,10 @@ add_custom_target(${PROJECT_NAME}_data
         COMMAND ${CMAKE_COMMAND} -E make_directory "${PKG_ROMFS}/sce_sys" "${PKG_ROMFS}/assets/fonts"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${PPLAY_DIR}/data/ps4/romfs/sce_module" "${PKG_ROMFS}/sce_module"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${PPLAY_DIR}/data/ps4/romfs/sce_sys/about" "${PKG_ROMFS}/sce_sys/about"
+        # the home-screen icon and the system's start image (assets/make_brand.sh renders both from the app's own
+        # brand geometry; pic1 is the loading screen's first frame in V7 Blue)
         COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon0.png" "${PKG_ROMFS}/sce_sys/icon0.png"
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/assets/pic1.png" "${PKG_ROMFS}/sce_sys/pic1.png"
         COMMAND ${CMAKE_COMMAND} -E copy
                 "${CMAKE_CURRENT_SOURCE_DIR}/third_party/inter/Inter-Regular.ttf"
                 "${CMAKE_CURRENT_SOURCE_DIR}/third_party/inter/Inter-SemiBold.ttf"

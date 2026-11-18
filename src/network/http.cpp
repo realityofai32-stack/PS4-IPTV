@@ -1,5 +1,6 @@
 #include <curl/curl.h>
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -16,19 +17,47 @@ namespace http {
         std::string g_caBundle;
         std::string g_userAgent = "PS4IPTV";
 
+        const size_t ERROR_BODY_BYTES = 64 * 1024;   // kept of a non-2xx answer to a streaming request
+
         struct Transfer {
             std::string *body;
             size_t maxBytes;
             bool tooLarge = false;
             CancelFlag cancel;
+            CURL *handle = nullptr;
+            const std::function<bool(const char *, size_t)> *sink = nullptr;
+            int route = 0;           // streaming request: 0 not decided yet, 1 the sink (2xx), 2 the body
+            size_t received = 0;
+            size_t streamed = 0;
+            bool stopped = false;
         };
 
         size_t onWrite(char *data, size_t size, size_t count, void *user) {
             auto *t = (Transfer *) user;
             size_t n = size * count;
-            if (t->body->size() + n > t->maxBytes) {
+            if (t->received + n > t->maxBytes) {
                 t->tooLarge = true;
                 return 0;  // aborts the transfer (CURLE_WRITE_ERROR)
+            }
+            t->received += n;
+            if (t->sink != nullptr) {
+                if (t->route == 0) {
+                    long status = 0;
+                    curl_easy_getinfo(t->handle, CURLINFO_RESPONSE_CODE, &status);
+                    t->route = status >= 200 && status < 300 ? 1 : 2;
+                }
+                if (t->route == 1) {
+                    t->streamed += n;
+                    if (!(*t->sink)(data, n)) {
+                        t->stopped = true;
+                        return 0;
+                    }
+                    return n;
+                }
+                if (t->body->size() < ERROR_BODY_BYTES) {
+                    t->body->append(data, std::min(n, ERROR_BODY_BYTES - t->body->size()));
+                }
+                return n;   // an error page: its beginning is enough
             }
             t->body->append(data, n);
             return n;
@@ -164,6 +193,8 @@ namespace http {
                 t.body = &r.body;
                 t.maxBytes = req.maxBytes;
                 t.cancel = req.cancel;
+                t.handle = c;
+                t.sink = req.sink ? &req.sink : nullptr;
                 char errbuf[CURL_ERROR_SIZE] = {0};
                 // redirect hops share the request's time budget
                 long left = req.totalTimeoutMs - (long) ((clockx::monotonic() - started) * 1000.0);
@@ -173,6 +204,14 @@ namespace http {
                     break;
                 }
                 curl_easy_setopt(c, CURLOPT_URL, url.c_str());
+                if (req.maxBytesPerSecond > 0) {
+                    curl_easy_setopt(c, CURLOPT_MAX_RECV_SPEED_LARGE, (curl_off_t) req.maxBytesPerSecond);
+                }
+                if (req.post) {
+                    curl_easy_setopt(c, CURLOPT_POST, 1L);
+                    curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE, (long) req.body.size());
+                    curl_easy_setopt(c, CURLOPT_POSTFIELDS, req.body.c_str());
+                }
                 curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
                 // only http / https, also for anything a server redirects to (http_policy.h)
                 curl_easy_setopt(c, CURLOPT_PROTOCOLS, (long) (CURLPROTO_HTTP | CURLPROTO_HTTPS));
@@ -210,8 +249,9 @@ namespace http {
                 if (curl_easy_getinfo(c, CURLINFO_CONTENT_TYPE, &ct) == CURLE_OK && ct) {
                     r.contentType = ct;
                 }
+                r.streamed += t.streamed;
                 if (rc != CURLE_OK) {
-                    r.error = mapCurl(rc, t.tooLarge);
+                    r.error = t.stopped ? Error::Stopped : mapCurl(rc, t.tooLarge);
                     r.detail = std::string(curl_easy_strerror(rc)) + (errbuf[0] ? std::string(": ") + errbuf : "");
                     break;
                 }
@@ -222,6 +262,11 @@ namespace http {
                     break;
                 }
                 std::string next = location;
+                if (req.post) {
+                    r.error = Error::Redirect;
+                    r.detail = "a POST is not redirected: " + originOf(url) + " -> " + originOf(next);
+                    break;
+                }
                 if (hop >= httppolicy::MAX_REDIRECTS) {
                     r.error = Error::Redirect;
                     r.detail = "more than " + std::to_string(httppolicy::MAX_REDIRECTS) + " redirects";
@@ -240,6 +285,7 @@ namespace http {
                 url = next;
             }
             curl_slist_free_all(headers);
+            r.finalUrl = url;
             r.redirectedToHttps = req.url.compare(0, 8, "https://") != 0 && url.compare(0, 8, "https://") == 0;
             return r;
         }
@@ -289,6 +335,9 @@ namespace http {
             r.attempts = retry + 1;
             double elapsed = clockx::monotonic() - started;
             r.seconds = elapsed;
+            if (r.streamed > 0) {
+                break;   // the sink has part of the data: another attempt would repeat it
+            }
             if (!httppolicy::shouldRetry(failureOf(r.error), r.status, elapsed, req.totalTimeoutMs, retry, maxRetries,
                                          canceled(req))) {
                 break;

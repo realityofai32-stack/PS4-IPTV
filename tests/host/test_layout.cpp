@@ -1,4 +1,4 @@
-// The V7 IPTV v2 layout (src/ui/layout.h, docs/v7-ui-v2-layouts.md): everything inside the TV-safe area, no
+// The V7 Player v2 layout (src/ui/layout.h, docs/v7-ui-v2-layouts.md): everything inside the TV-safe area, no
 // overlapping blocks, grids and rails that add up to their widths, the row counts the layout promises, and room
 // for the focus scale. These are the geometric facts that can be checked without the PS4 renderer; how the
 // screens look is checked on hardware (docs/checkpoint-v7-ui-2.txt).

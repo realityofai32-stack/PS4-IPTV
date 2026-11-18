@@ -3,6 +3,10 @@
 // first. A file plays in the movie player (same backend, tracks, subtitles, subtitle style, aspect / crop / zoom,
 // Options panel), outside every source: nothing goes to history, Continue Watching, favorites or search.
 //
+// An optical disc the app can read (localmedia::probeDiscs; whether a data disc is visible to an app at all is up to
+// the console) is listed after the USB drives and browsed the same way; a protected Blu-ray movie is not opened (it
+// plays only in the console's own Blu-ray player).
+//
 // Cross opens a folder / plays a file, Circle goes one folder up (from the storage list: back), Triangle reads the
 // folder again (a USB drive plugged in meanwhile appears in the storage list). When no USB drive can be opened, the
 // storage list says whether nothing is mounted or a drive is there but not readable (Cross on that row scans again);
@@ -127,7 +131,8 @@ namespace {
         };
 
         std::string rootName(const localmedia::Root &r) const {
-            return r.usb ? tr("localmedia.usb", {std::to_string(r.number)}) : tr("localmedia.internal");
+            return r.usb ? tr("localmedia.usb", {std::to_string(r.number)})
+                         : r.disc ? tr("localmedia.disc") : tr("localmedia.internal");
         }
 
         void showRoots() {
@@ -138,9 +143,14 @@ namespace {
             rows.clear();
             std::vector<localmedia::Probe> probes = localmedia::probeRoots();
             roots = localmedia::rootsFrom(probes);
+            std::vector<localmedia::Probe> discProbes = localmedia::probeDiscs();
+            for (const auto &d: localmedia::discsFrom(discProbes)) {
+                roots.push_back(d);   // after the USB drives (the USB detection itself is unchanged)
+            }
             for (size_t i = 0; i < roots.size(); i++) {
                 Item it;
-                it.kind = roots[i].usb ? "USB" : tr("localmedia.kind_storage");   // i18n-exempt: USB is a proper name
+                it.kind = roots[i].usb ? "USB" : roots[i].disc ? tr("localmedia.kind_disc")   // i18n-exempt: USB is a proper name
+                                                               : tr("localmedia.kind_storage");
                 it.name = rootName(roots[i]);
                 it.meta = roots[i].path;
                 it.path = roots[i].path;
@@ -160,8 +170,8 @@ namespace {
                 rows.push_back(it);
             }
             // what the app sees: "missing" (nothing mounted there / not visible) vs "denied" (no permission)
-            LOG_I("localmedia", "%d storage location(s) available; %s", (int) roots.size(),
-                  localmedia::probeSummary(probes).c_str());
+            LOG_I("localmedia", "%d storage location(s) available; %s; %s", (int) roots.size(),
+                  localmedia::probeSummary(probes).c_str(), localmedia::probeSummary(discProbes).c_str());
             if (hint != localmedia::UsbHint::None) {
                 LOG_I("localmedia", "%s; %s; %s", localmedia::mountSummary(localmedia::mountPoints("", "/")).c_str(),
                       localmedia::mountSummary(localmedia::mountPoints("", "/mnt")).c_str(),
@@ -233,6 +243,11 @@ namespace {
                 if (it.root < 0 || it.root >= (int) roots.size()) {
                     showRoots();   // the "no USB drive" row: look again
                     list->setSelected(i);
+                    return;
+                }
+                if (roots[(size_t) it.root].disc && localmedia::protectedBluray(roots[(size_t) it.root])) {
+                    LOG_I("localmedia", "protected Blu-ray movie disc: not opened");
+                    app.toast(tr("localmedia.disc_protected"), ToastKind::Error);
                     return;
                 }
                 rootIndex = it.root;

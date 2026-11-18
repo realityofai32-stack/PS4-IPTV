@@ -1,4 +1,4 @@
-// V7 IPTV UI v2 layout: the measured 1920 x 1080 geometry of every reconstructed screen in one place.
+// V7 Player UI v2 layout: the measured 1920 x 1080 geometry of every reconstructed screen in one place.
 //
 // docs/v7-ui-v2-layouts.md explains each block; tests/host/test_layout.cpp checks the invariants (inside the
 // TV-safe area, no overlaps, the grids and rails add up to their widths, four episode rows fit). Screens read these
@@ -288,6 +288,40 @@ namespace layout {
         constexpr float NEXT_BUTTON_H = 44;
         constexpr float NEXT_SLIDE = 24;                       // px the card slides in from the right
         constexpr double NEXT_SLIDE_SECONDS = 0.22;
+    }
+
+    // ---------------------------------------------------------------- Live player: channel list, groups, guide
+    // Panels over the playing video (the picture goes on behind them): the channel list on the left edge (the group
+    // list opens to its left, the channels move right), the guide on the right edge like the movie player's Playback
+    // Options. Ten rows of 76 px, the hints at the panel's bottom; a soft fade where a panel meets the picture.
+    namespace liveov {
+        constexpr float PAD = 48;                              // after a panel's last column
+        constexpr float EDGE_W = 80;
+        constexpr float TITLE_Y = 70;
+        constexpr float CONTEXT_Y = 126;                       // the count under a column title
+        constexpr float LIST_Y = 180;
+        constexpr float LIST_H = 780;                          // 180..960
+        constexpr float ROW_H = 76;
+        constexpr float ROW_GAP = 2;
+        constexpr float GROUPS_X = SAFE_X;                     // 96..516
+        constexpr float GROUPS_W = 420;
+        constexpr float COL_GAP = 28;
+        constexpr float CH_W = 700;
+        constexpr float CH_X = SAFE_X;                         // alone: 96..796
+        constexpr float CH_X_WITH_GROUPS = GROUPS_X + GROUPS_W + COL_GAP;      // 544..1244
+        constexpr float DRAWER_W = CH_X + CH_W + PAD;                           // 844
+        constexpr float DRAWER_W_WITH_GROUPS = CH_X_WITH_GROUPS + CH_W + PAD;   // 1292: 628 px of picture stay
+        constexpr float NUM_W = 60;                            // channel number, right-aligned
+        constexpr float LOGO_X = 76;
+        constexpr float LOGO_W = 84;
+        constexpr float LOGO_H = 50;
+        constexpr float NAME_X = LOGO_X + LOGO_W + 20;         // 180
+        constexpr float MARK_W = 64;                           // the playing mark and the favorite star
+        constexpr float GUIDE_W = 680;
+        constexpr float GUIDE_X = SCREEN_W - GUIDE_W;          // 1240
+        constexpr float GUIDE_PAD = 48;
+        constexpr float GUIDE_TEXT_W = GUIDE_W - GUIDE_PAD - SAFE_X;   // 536: ends at the safe edge
+        constexpr float GUIDE_BAR_H = 6;
     }
 }
 
